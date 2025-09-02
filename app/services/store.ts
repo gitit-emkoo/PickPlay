@@ -398,7 +398,19 @@ async function updateLocalVoteCount(questionId: string, optionIndex: number) {
 
 export async function aggregate(questionId: string) {
   try {
-    // Firestore에서 집계 우선 계산
+    // 1) 로컬 집계 우선 (즉시 반영)
+    const voteCountKey = `vote_count_${questionId}`;
+    const localCount = await AsyncStorage.getItem(voteCountKey);
+    if (localCount) {
+      const voteCount = JSON.parse(localCount);
+      const totalLocal = voteCount.c0 + voteCount.c1;
+      const pctLocal = (n: number) => totalLocal ? Math.round((n / totalLocal) * 100) : 0;
+      const localResult = { total: totalLocal, c0: voteCount.c0, c1: voteCount.c1, p0: pctLocal(voteCount.c0), p1: pctLocal(voteCount.c1) };
+      console.log('📊 로컬 집계 결과(우선):', { questionId, ...localResult });
+      return localResult;
+    }
+
+    // 2) 로컬이 없으면 Firestore 집계
     const snap = await getDocs(
       query(
         collection(db, 'votes'),
@@ -413,28 +425,13 @@ export async function aggregate(questionId: string) {
       if (d.optionIndex === 1) c1 += 1;
     });
 
-  const total = c0 + c1;
+    const total = c0 + c1;
     const pct = (n: number) => total ? Math.round((n / total) * 100) : 0;
     const result = { total, c0, c1, p0: pct(c0), p1: pct(c1) };
     console.log('📊 Firestore 집계 결과:', { questionId, ...result, count: snap.size });
     return result;
   } catch (error) {
     console.error('❌ 집계 실패:', error);
-    // 실패 시 로컬 데이터로 폴백
-    try {
-      const voteCountKey = `vote_count_${questionId}`;
-      const localCount = await AsyncStorage.getItem(voteCountKey);
-      if (localCount) {
-        const voteCount = JSON.parse(localCount);
-        const total = voteCount.c0 + voteCount.c1;
-        const pct = (n: number) => total ? Math.round((n / total) * 100) : 0;
-        const result = { total, c0: voteCount.c0, c1: voteCount.c1, p0: pct(voteCount.c0), p1: pct(voteCount.c1) };
-        console.log('📊 폴백 로컬 집계 결과:', { questionId, ...result });
-        return result;
-      }
-    } catch (fallbackError) {
-      console.error('폴백 로컬 집계 실패:', fallbackError);
-    }
     return { total: 0, c0: 0, c1: 0, p0: 0, p1: 0 };
   }
 }

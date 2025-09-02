@@ -738,6 +738,7 @@ export default function App(){
         {userChoice !== null && showRewardButton && (
           <TouchableOpacity 
             onPress={() => {
+              if (rewardCompleted) return; // 재진입 가드
               addDebugLog('🎁 보상 버튼 클릭!');
               setShowAdInfoModal(true);
             }}
@@ -1041,6 +1042,14 @@ export default function App(){
             elevation: 8,
             marginHorizontal: 40
           }}>
+            <View style={{ width: 120, height: 120, marginBottom: 12 }}>
+              <LottieView
+                source={{ uri: 'https://lottie.host/951ea34e-ef87-45ee-90f2-ac796963312f/NUCSZs3eid.lottie' }}
+                autoPlay
+                loop={false}
+                style={{ width: 120, height: 120 }}
+              />
+            </View>
             <Text style={{
               fontSize: 18,
               fontWeight: '700',
@@ -1048,7 +1057,7 @@ export default function App(){
               textAlign: 'center',
               marginBottom: 16
             }}>
-              적립이 완료되었습니다!
+              적립이 완료되었습니다🎉
             </Text>
             <TouchableOpacity onPress={() => setShowRewardDoneModal(false)} style={{
               backgroundColor: colors.primary,
