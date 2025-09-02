@@ -1,0 +1,114 @@
+[
+  {
+    "title": "치킨 먹을 때",
+    "options": ["양념", "후라이드"],
+    "dayIndex": 1,
+    "slot": "A",
+    "active": true,
+    "locked": false
+  },
+  {
+    "title": "삼겹살 찍어먹는",
+    "options": ["쌈장", "소금"],
+    "dayIndex": 1,
+    "slot": "B",
+    "active": true,
+    "locked": false
+  },
+  {
+    "title": "라면에 넣는 계란",
+    "options": ["풀어서", "통째로"],
+    "dayIndex": 2,
+    "slot": "A",
+    "active": true,
+    "locked": false
+  },
+  {
+    "title": "커피 마실 때",
+    "options": ["아이스", "핫"],
+    "dayIndex": 2,
+    "slot": "B",
+    "active": true,
+    "locked": false
+  },
+  {
+    "title": "택배 받을 때",
+    "options": ["문 앞 두기", "직접 받기"],
+    "dayIndex": 3,
+    "slot": "A",
+    "active": true,
+    "locked": false
+  },
+  {
+    "title": "장볼 때",
+    "options": ["대형마트", "동네마트/편의점"],
+    "dayIndex": 3,
+    "slot": "B",
+    "active": true,
+    "locked": false
+  },
+  {
+    "title": "현금영수증",
+    "options": ["항상 발급", "필요할 때만"],
+    "dayIndex": 4,
+    "slot": "A",
+    "active": true,
+    "locked": false
+  },
+  {
+    "title": "지하철",
+    "options": ["앉아서 천천히", "서도 빨리"],
+    "dayIndex": 4,
+    "slot": "B",
+    "active": true,
+    "locked": false
+  },
+  {
+    "title": "출근길",
+    "options": ["대중교통", "자차"],
+    "dayIndex": 5,
+    "slot": "A",
+    "active": true,
+    "locked": false
+  },
+  {
+    "title": "점심",
+    "options": ["혼밥 선호", "동료랑 같이"],
+    "dayIndex": 5,
+    "slot": "B",
+    "active": true,
+    "locked": false
+  },
+  {
+    "title": "회사 문화",
+    "options": ["칼퇴 확정", "야근수당 보장"],
+    "dayIndex": 6,
+    "slot": "A",
+    "active": true,
+    "locked": false
+  },
+  {
+    "title": "알림 확인",
+    "options": ["즉시 확인", "몰아서 확인"],
+    "dayIndex": 6,
+    "slot": "B",
+    "active": true,
+    "locked": false
+  },
+  {
+    "title": "사진 보관",
+    "options": ["휴대폰 원본", "클라우드"],
+    "dayIndex": 0,
+    "slot": "A",
+    "active": true,
+    "locked": false
+  },
+  {
+    "title": "샤워",
+    "options": ["아침 샤워", "밤 샤워"],
+    "dayIndex": 0,
+    "slot": "B",
+    "active": true,
+    "locked": false
+  }
+]

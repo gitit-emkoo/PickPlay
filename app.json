@@ -1,0 +1,92 @@
+{
+  "expo": {
+    "name": "PickPlay",
+    "slug": "today-balance",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "pickplay",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.pickplay.app",
+      "infoPlist": {
+        "UIBackgroundModes": ["remote-notification"]
+      },
+      "config": {
+        "googleMobileAdsAppId": "ca-app-pub-2555567440328829~5483134579"
+      }
+    },
+    "android": {
+      "package": "com.pickplay.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.VIBRATE",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.WAKE_LOCK",
+        "android.permission.FOREGROUND_SERVICE"
+      ],
+      "config": {
+        "googleMobileAdsAppId": "ca-app-pub-2555567440328829~4208779024"
+      },
+      "manifest": {
+        "application": {
+          "meta-data": [
+            {
+              "name": "com.google.android.gms.ads.APPLICATION_ID",
+              "value": "ca-app-pub-2555567440328829~4208779024",
+              "tools:replace": "android:value"
+            },
+            {
+              "name": "com.google.android.gms.ads.DELAY_APP_MEASUREMENT_INIT",
+              "value": "false",
+              "tools:replace": "android:value"
+            }
+          ],
+          "tools:replace": "android:allowBackup,android:label,android:icon,android:theme"
+        }
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#ffffff",
+          "sounds": ["./assets/sounds/notification.mp3"],
+          "mode": "production"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "14d1ecb2-a3c0-4425-ac97-0ec33b289905"
+      }
+    }
+  }
+}

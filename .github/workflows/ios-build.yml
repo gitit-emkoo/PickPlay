@@ -1,0 +1,106 @@
+name: iOS Build & Deploy
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deploy environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+
+env:
+  EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+  APPLE_ID: ${{ secrets.APPLE_ID }}
+  APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+  APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+  APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
+  APP_STORE_CONNECT_API_KEY_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY_KEY }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Setup Expo CLI
+      uses: expo/expo-github-action@v8
+      with:
+        expo-version: latest
+        token: ${{ env.EXPO_TOKEN }}
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Setup EAS CLI
+      uses: expo/expo-github-action@v8
+      with:
+        eas-version: latest
+        token: ${{ env.EXPO_TOKEN }}
+
+    - name: Configure EAS
+      run: |
+        eas build:configure
+
+    - name: Build iOS
+      run: |
+        eas build --platform ios --non-interactive
+      env:
+        EXPO_TOKEN: ${{ env.EXPO_TOKEN }}
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ios-build
+        path: |
+          .expo-shared/
+          .easignore
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Setup EAS CLI
+      uses: expo/expo-github-action@v8
+      with:
+        eas-version: latest
+        token: ${{ env.EXPO_TOKEN }}
+
+    - name: Submit to App Store
+      run: |
+        eas submit --platform ios --non-interactive
+      env:
+        EXPO_TOKEN: ${{ env.EXPO_TOKEN }}
+        APPLE_ID: ${{ env.APPLE_ID }}
+        APPLE_APP_SPECIFIC_PASSWORD: ${{ env.APPLE_APP_SPECIFIC_PASSWORD }}
+        APP_STORE_CONNECT_API_KEY_ID: ${{ env.APP_STORE_CONNECT_API_KEY_ID }}
+        APP_STORE_CONNECT_API_KEY_ISSUER_ID: ${{ env.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
+        APP_STORE_CONNECT_API_KEY_KEY: ${{ env.APP_STORE_CONNECT_API_KEY_KEY }}
+

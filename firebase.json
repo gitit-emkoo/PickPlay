@@ -1,0 +1,8 @@
+{
+  "firestore": {
+    "database": "today-balance-fa0a5",
+    "location": "asia-northeast3",
+    "rules": "firestore.rules",
+    "indexes": "n"
+  }
+}

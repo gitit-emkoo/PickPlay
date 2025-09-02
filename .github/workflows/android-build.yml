@@ -1,0 +1,104 @@
+name: Android Build & Deploy
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deploy environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+
+env:
+  EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+  GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+  GOOGLE_PLAY_TRACK: ${{ secrets.GOOGLE_PLAY_TRACK }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Setup Expo CLI
+      uses: expo/expo-github-action@v8
+      with:
+        expo-version: latest
+        token: ${{ env.EXPO_TOKEN }}
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Setup EAS CLI
+      uses: expo/expo-github-action@v8
+      with:
+        eas-version: latest
+        token: ${{ env.EXPO_TOKEN }}
+
+    - name: Configure EAS
+      run: |
+        eas build:configure
+
+    - name: Build Android
+      run: |
+        eas build --platform android --non-interactive
+      env:
+        EXPO_TOKEN: ${{ env.EXPO_TOKEN }}
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-build
+        path: |
+          .expo-shared/
+          .easignore
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Setup EAS CLI
+      uses: expo/expo-github-action@v8
+      with:
+        eas-version: latest
+        token: ${{ env.EXPO_TOKEN }}
+
+    - name: Setup Google Play Service Account
+      run: |
+        echo '${{ env.GOOGLE_SERVICE_ACCOUNT_JSON }}' > google-service-account.json
+
+    - name: Submit to Play Store
+      run: |
+        eas submit --platform android --non-interactive
+      env:
+        EXPO_TOKEN: ${{ env.EXPO_TOKEN }}
+        GOOGLE_SERVICE_ACCOUNT_JSON: ${{ env.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        GOOGLE_PLAY_TRACK: ${{ env.GOOGLE_PLAY_TRACK }}
+
