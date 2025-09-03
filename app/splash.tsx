@@ -9,7 +9,7 @@ export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
   const textOpacity = useRef(new Animated.Value(0)).current;
   const logoScale = useRef(new Animated.Value(0)).current;
   
-  const fullText = "매일 30초, 나와 마주하는 선택\nPickPlay는 그 순간 보상합니다";
+  const fullText = "매일 30초, PickPlay는\n선택 기반 성향 분류와 캐릭터 진화를 결합한\n 심리 기반 루틴 보상 플랫폼입니다.";
 
   useEffect(() => {
     // 로고 팝 효과
@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   tipText: {
-    fontSize: 40,
+    fontSize: 30,
     color: colors.primary,
     textAlign: 'center',
     lineHeight: 48,

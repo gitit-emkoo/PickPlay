@@ -1,15 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-    addDoc, collection,
-    doc, getDoc,
-    getDocs,
-    onSnapshot,
-    query,
-    setDoc,
-    where
-} from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, where } from 'firebase/firestore';
+
 import { generateRandomNickname } from '../utils/nickname';
 import { db } from './firebase';
+
 
 export async function ensureUser(uid: string) {
   try {
@@ -88,11 +82,6 @@ export async function saveTodayQuestion(uid: string, questionId: string) {
     const today = new Date().toISOString().slice(0, 10);
     const todayQuestionKey = `today_question_${uid}_${today}`;
     await AsyncStorage.setItem(todayQuestionKey, questionId);
-    console.log('📅 오늘 질문 저장:', { uid, questionId, date: today, key: todayQuestionKey });
-    
-    // 저장 확인
-    const saved = await AsyncStorage.getItem(todayQuestionKey);
-    console.log('📅 저장 확인:', { key: todayQuestionKey, saved });
   } catch (error) {
     console.error('오늘 질문 저장 에러:', error);
   }
@@ -103,15 +92,7 @@ export async function getTodayQuestion(uid: string): Promise<string | null> {
   try {
     const today = new Date().toISOString().slice(0, 10);
     const todayQuestionKey = `today_question_${uid}_${today}`;
-    const questionId = await AsyncStorage.getItem(todayQuestionKey);
-    console.log('📅 오늘 질문 조회:', { uid, questionId, date: today, key: todayQuestionKey });
-    
-    // AsyncStorage 전체 키 확인 (디버깅용)
-    const allKeys = await AsyncStorage.getAllKeys();
-    const todayKeys = allKeys.filter(key => key.includes('today_question'));
-    console.log('📅 전체 오늘 질문 키들:', todayKeys);
-    
-    return questionId;
+    return await AsyncStorage.getItem(todayQuestionKey);
   } catch (error) {
     console.error('오늘 질문 조회 에러:', error);
     return null;
@@ -119,53 +100,7 @@ export async function getTodayQuestion(uid: string): Promise<string | null> {
 }
 
 // UID 변경 시 기존 데이터를 새 UID로 복사
-export async function migrateUserData(oldUID: string, newUID: string) {
-  try {
-    console.log('🔄 사용자 데이터 마이그레이션 시작:', { oldUID, newUID });
-    
-    // 1. 기존 사용자 데이터 복사
-    const oldUserRef = doc(db, 'users', oldUID);
-    const oldUserSnap = await getDoc(oldUserRef);
-    
-    if (oldUserSnap.exists()) {
-      const oldUserData = oldUserSnap.data();
-      const newUserRef = doc(db, 'users', newUID);
-      await setDoc(newUserRef, oldUserData);
-      console.log('✅ 사용자 데이터 복사 완료');
-    }
-    
-    // 2. 기존 투표 데이터 복사
-    const oldVotes = await getDocs(
-      query(collection(db, 'votes'), where('uid', '==', oldUID))
-    );
-    
-    for (const voteDoc of oldVotes.docs) {
-      const voteData = voteDoc.data();
-      await addDoc(collection(db, 'votes'), {
-        ...voteData,
-        uid: newUID
-      });
-    }
-    console.log('✅ 투표 데이터 복사 완료:', oldVotes.size, '개');
-    
-    // 3. AsyncStorage 데이터 복사
-    const allKeys = await AsyncStorage.getAllKeys();
-    const oldUIDKeys = allKeys.filter(key => key.includes(oldUID));
-    
-    for (const key of oldUIDKeys) {
-      const value = await AsyncStorage.getItem(key);
-      if (value) {
-        const newKey = key.replace(oldUID, newUID);
-        await AsyncStorage.setItem(newKey, value);
-        console.log('✅ AsyncStorage 키 복사:', key, '->', newKey);
-      }
-    }
-    
-    console.log('🔄 사용자 데이터 마이그레이션 완료');
-  } catch (error) {
-    console.error('❌ 사용자 데이터 마이그레이션 실패:', error);
-  }
-}
+// 사용하지 않는 마이그레이션 유틸 제거
 
 import { Question } from '../types';
 import { pickSlot } from '../utils/abtest';
@@ -174,10 +109,12 @@ import { dayIndex } from '../utils/date';
 export async function getQuestionBy(dayIndex: number, slot: string): Promise<Question | null> {
   try {
   const ref = collection(db,'questions');
+
     
   const snap = await getDocs(
     query(ref, where('dayIndex','==',dayIndex), where('slot','==',slot), where('active','==',true))
   );
+
     
     if (!snap.empty) { 
       const d = snap.docs[0]; 
@@ -186,6 +123,7 @@ export async function getQuestionBy(dayIndex: number, slot: string): Promise<Que
     }
     
   const any = await getDocs(ref);
+
     
     if (!any.empty) { 
       const d = any.docs[0]; 
@@ -300,6 +238,7 @@ async function computeAndMaybeSetWinner(dIndex: number, qa: Question | null, qb:
   return null;
 }
 
+
 // 오늘 질문 배정(이미 배정된 경우 복원). 신규 유저는 승자 가중치 반영
 export async function getOrAssignTodayQuestion(uid: string): Promise<Question | null> {
   try {
@@ -329,10 +268,9 @@ export async function getOrAssignTodayQuestion(uid: string): Promise<Question | 
       const pickId = r < weight ? winnerId : loserId;
       chosen = pickId === A.id ? A : B;
     } else {
-      // 아직 승자 미결정 → 50/50 대신 기존 사용자 고정 로직 활용
+      // 원래 로직 복원: 사용자 고정 A/B 분기
       const slot = pickSlot(uid);
       chosen = slot === 'A' ? A : B;
-      // 임계 충족 시 승자를 계산해 설정(하루에 최초 몇 번 중 하나가 설정)
       await computeAndMaybeSetWinner(dIndex, A, B);
     }
 
@@ -425,7 +363,8 @@ export async function aggregate(questionId: string) {
       if (d.optionIndex === 1) c1 += 1;
     });
 
-    const total = c0 + c1;
+  const total = c0 + c1;
+
     const pct = (n: number) => total ? Math.round((n / total) * 100) : 0;
     const result = { total, c0, c1, p0: pct(c0), p1: pct(c1) };
     console.log('📊 Firestore 집계 결과:', { questionId, ...result, count: snap.size });
@@ -447,11 +386,14 @@ export async function rewardWithMajority(uid: string, questionId: string, myOpti
     return myOptionIndex === majorityIndex;
   })();
 
+
   // 기본 보상(소수 10 / 다수 5) - 소수가 더 많이 받도록 변경
   let base = myIsMajority ? 5 : 10;
 
+
   // 연속 참여 배수 보상 계산
   const today = new Date().toISOString().slice(0,10);
+
   
   // 로컬 사용자 데이터 업데이트
   const userDataKey = `userData_${uid}`;
@@ -459,6 +401,7 @@ export async function rewardWithMajority(uid: string, questionId: string, myOpti
   let userData = existingUserData ? JSON.parse(existingUserData) : { points: 0, streakCount: 0, lastAnswerDate: '', nickname: '익명사용자😊' };
 
   let next = 1;
+
   if (userData.lastAnswerDate) {
     const diffDays = Math.floor((new Date(today).getTime() - new Date(userData.lastAnswerDate).getTime())/(1000*60*60*24));
     console.log('📅 출석 계산:', { 
@@ -499,6 +442,7 @@ export async function rewardWithMajority(uid: string, questionId: string, myOpti
     points: ((userData.points as number)||0) + base,
     streakCount: next,
     lastAnswerDate: today,
+
     nickname: userData.nickname, // 닉네임 유지
   };
 
@@ -509,26 +453,12 @@ export async function rewardWithMajority(uid: string, questionId: string, myOpti
   return { base, myIsMajority, next, agg };
 }
 
+
 // 현재 사용자 데이터 확인 및 수정 함수
 // (삭제됨) 테스트용 출석 보정 유틸 제거
 
 // 닉네임 설정 함수
-export async function setUserNickname(uid: string, nickname: string) {
-  try {
-    const userDataKey = `userData_${uid}`;
-    const existingUserData = await AsyncStorage.getItem(userDataKey);
-    let userData = existingUserData ? JSON.parse(existingUserData) : { points: 0, streakCount: 0, lastAnswerDate: '', nickname: '익명사용자😊' };
-    
-    userData.nickname = nickname;
-    await AsyncStorage.setItem(userDataKey, JSON.stringify(userData));
-    console.log('✅ 닉네임 설정 완료:', { uid, nickname });
-    
-    return userData;
-  } catch (error) {
-    console.error('❌ 닉네임 설정 실패:', error);
-    throw error;
-  }
-}
+// 사용하지 않는 닉네임 설정 유틸 제거
 
 // 실시간 집계 구독
 export function watchAggregation(

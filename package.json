@@ -1,5 +1,5 @@
 {
-  "name": "today-balance",
+  "name": "pickplay",
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
@@ -36,7 +36,6 @@
     "expo-system-ui": "~5.0.11",
     "expo-web-browser": "~14.2.0",
     "firebase": "^12.2.1",
-    "firebase-admin": "^13.5.0",
     "lottie-react-native": "^7.3.3",
     "react": "19.0.0",
     "react-dom": "19.0.0",

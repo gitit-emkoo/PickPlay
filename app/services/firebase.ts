@@ -76,23 +76,27 @@ async function saveUserData(data: { points: number; streakCount: number; lastAns
   }
 }
 
-// 기기별 고정 사용자 생성
-async function createDeviceUser(): Promise<{ uid: string }> {
-  const deviceUID = await getDeviceUID();
-  console.log('📱 기기별 고정 사용자 생성:', deviceUID);
-  return { uid: deviceUID };
-}
-
-// 익명 로그인 감시 (기기별 고정 UID 사용)
+// Firebase 익명 로그인 감시 (실제 Firebase UID 사용)
 export function watchAuth(callback: (user: { uid: string } | null) => void) {
-  // Firebase Auth 대신 기기별 고정 UID 사용
-  createDeviceUser().then(deviceUser => {
-    saveUID(deviceUser.uid);
-    callback(deviceUser);
-  }).catch(error => {
-    console.error('기기별 사용자 생성 실패:', error);
-    callback(null);
+  const a = getAuth(app);
+  const unsub = a.onAuthStateChanged(async (u) => {
+    try {
+      if (u) {
+        await saveUID(u.uid);
+        callback({ uid: u.uid });
+        return;
+      }
+      // 미로그인 시 익명 로그인 수행
+      const result = await signInAnonymously(a);
+      const uid = result.user.uid;
+      await saveUID(uid);
+      callback({ uid });
+    } catch (error) {
+      console.error('익명 로그인 실패:', error);
+      callback(null);
+    }
   });
+  return unsub;
 }
 
 // 앱 시작 시 익명 인증 강제 실행

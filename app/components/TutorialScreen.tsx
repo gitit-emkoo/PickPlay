@@ -1,3 +1,4 @@
+import LottieView from 'lottie-react-native';
 import React, { useState } from 'react';
 import { Dimensions, Image, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import colors from '../styles/colors';
@@ -24,7 +25,15 @@ export default function TutorialScreen({ onFinish }: TutorialScreenProps) {
       subtitle: "PickPlay는 정답을 묻지 않고, 선택 자체를 존중합니다",
       description: "직감이든 취향이든 당신의 선택을 가치로 바꿔드립니다.",
       image: require('../../assets/images/img_stamp.png'),
-      backgroundColor: colors.accent
+      backgroundColor: colors.primary
+    },
+    {
+      title: "애니마코드(AnimaCode)?",
+      subtitle: "당신의 선택을 통해 태어난 성향 캐릭터",
+      description: "MBTI처럼 성향 분류 체계이지만, 선택이 이어질수록 계속 진화하는 내면을 시각화한 루틴형 세계예요",
+      isLottie: true,
+      lottieSource: "https://lottie.host/df96f2a7-284f-4197-ba3c-5b8388c46299/ykDKnFMp3l.lottie",
+      backgroundColor: colors.primary
     },
     {
       title: "PickPlay 세계관",
@@ -37,8 +46,9 @@ export default function TutorialScreen({ onFinish }: TutorialScreenProps) {
       title: "100%를 위한 의미있는 도전",
       subtitle: "PickPlay 30초면 누구나 쉽게 참여하고 보상받을 수 있지만 꾸준하게 해내는 건 단 1%입니다.",
       description: "당신은 1%일까요? 오늘부터 성취감을 위한 여정을 시작해 볼까요?\n첫 번째 선택이 기다리고 있어요.",
-      image: require('../../assets/images/logo_pickplay.png'),
-      backgroundColor: colors.accent
+      isLottie: true,
+      lottieSource: "https://lottie.host/951ea34e-ef87-45ee-90f2-ac796963312f/NUCSZs3eid.lottie",
+      backgroundColor: colors.primary
     }
   ];
 
@@ -82,14 +92,27 @@ export default function TutorialScreen({ onFinish }: TutorialScreenProps) {
               }}>
                 {/* 이미지 */}
                 <View style={{ marginBottom: 32 }}>
-                  <Image
-                    source={card.image}
-                    style={{
-                      width: 120,
-                      height: 120,
-                      resizeMode: 'contain'
-                    }}
-                  />
+                  {card.isLottie ? (
+                    <LottieView
+                      source={{ uri: card.lottieSource }}
+                      loop={true}
+                      autoPlay={true}
+                      speed={1}
+                      style={{
+                        width: 120,
+                        height: 120
+                      }}
+                    />
+                  ) : (
+                    <Image
+                      source={card.image}
+                      style={{
+                        width: 120,
+                        height: 120,
+                        resizeMode: 'contain'
+                      }}
+                    />
+                  )}
                 </View>
 
                 {/* 제목 */}

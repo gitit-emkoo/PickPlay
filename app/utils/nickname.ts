@@ -15,7 +15,7 @@ const NOUNS = [
   '시인', '철학자', '사상가', '지도자', '멘토', '코치', '트레이너', '가이드'
 ];
 
-const EMOJIS = ['😊', '😄', '😎', '🤩', '🥳', '😍', '🤗', '😌', '😇', '🤠', '👑', '⭐', '🌟', '💫', '✨', '🔥', '💎', '🏆', '🎯', '🎪', '🎨', '🎭', '🎪', '🎸', '🎹', '🎤', '🎬', '📚', '🎮', '⚡', '🌈', '🌺', '🌸', '🌻', '🍀', '🌙', '☀️', '⭐', '🌟'];
+const EMOJIS = ['🥚'];
 
 export function generateRandomNickname(): string {
   const adjective = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];

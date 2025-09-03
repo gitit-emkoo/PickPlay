@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import LottieView from 'lottie-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Dimensions, Image, ScrollView, Share, Text, TouchableOpacity, View } from 'react-native';
+import { Image, ScrollView, Share, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ErrorScreen from './components/ErrorScreen';
 import LoadingScreen from './components/LoadingScreen';
@@ -16,9 +16,6 @@ import { aggregate, ensureUser, getOrAssignTodayQuestion, hasUserVoted, rewardWi
 import SplashScreen from './splash';
 import colors from './styles/colors';
 import { Aggregation, Question } from './types';
-
-
-const { width } = Dimensions.get('window');
 
 export default function App(){
   const [showSplash, setShowSplash] = useState(true);
@@ -118,6 +115,7 @@ export default function App(){
         setUserData(null);
       }
     });
+    
     initAds();
     const detach = attachRewardedInterstitial(rewarded,{
       onLoaded:()=>{
@@ -723,7 +721,7 @@ export default function App(){
         {/* 투표 완료 후 보상 버튼 */}
         {userChoice !== null && showRewardButton && (
           <TouchableOpacity 
-            onPress={() => {
+            onPress={async () => {
               if (rewardCompleted) return; // 재진입 가드
               addDebugLog('🎁 보상 버튼 클릭!');
               setShowAdInfoModal(true);

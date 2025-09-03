@@ -13,14 +13,14 @@
 - **전국 결과**: 실시간으로 전체 참여자 결과 확인
 
 ### 🏆 보상 시스템
-- **승패 보상**: 특별획득 5P!
-- **출석 보너스**: 연속 3일 +30P, 연속 7일 +100P
-- **광고 시청**: 보상 획득을 위한 리워드 광고 시청
+- **다수/소수 보상**: 다수 5P / 소수 10P (동률은 5P)
+- **연속 참여 배수**: 10일째부터 2배, 20일째부터 3배 적용
+- **광고 시청**: 보상 적립을 위해 리워드 전면광고 시청
 
 ### 🔐 사용자 관리
-- **익명 인증**: Firebase Anonymous Auth로 사용자 식별
+- **기기 고정 UID**: 디바이스별 UID로 사용자 식별(익명 로그인 대체)
 - **포인트 적립**: 게임 참여로 포인트 적립 및 관리
-- **연속 출석**: 연속 참여 일수 추적
+- **연속 참여**: 하루라도 건너뛰면 1일부터 리셋
 
 ## 🛠 기술 스택
 
@@ -63,9 +63,9 @@ npx expo run:android
 5. `app/services/firebase.ts`에 설정값 입력
 
 ### 광고 설정
-1. Google AdMob 계정 생성
-2. 리워드 광고 단위 ID 발급
-3. `app/(tabs)/index.tsx`의 `REWARDED_AD_UNIT` 값 교체
+1. Google AdMob 계정 생성 및 앱 등록
+2. 광고 단위 ID 발급(보상형 전면) 후 `app/services/ads.native.ts`의 AD_UNITS 교체
+3. `app.json`의 `googleMobileAdsAppId` 확인(ios/android 모두)
 
 ## 📊 데이터 구조
 
@@ -130,33 +130,16 @@ GitHub 저장소의 Settings → Secrets and variables → Actions에서 다음 
 - `.github/workflows/android-build.yml`: Android 빌드 및 Play Store 배포
 - `.github/workflows/test.yml`: 코드 품질 검사 및 테스트
 
-### EAS 설정
+### EAS 설정 요약
+- Android: `simple` 프로필로 APK 테스트 빌드, `production` 프로필로 배포 빌드
+- iOS: `production` 프로필 사용, `autoIncrement: true`, `appVersionSource: remote`
 
-`eas.json` 파일에서 빌드 및 배포 설정을 관리합니다:
+## 🔮 상태 및 향후 계획
 
-```json
-{
-  "build": {
-    "production": {
-      "autoIncrement": "buildNumber"
-    }
-  },
-  "submit": {
-    "production": {
-      "ios": { ... },
-      "android": { ... }
-    }
-  }
-}
-```
-
-## 🔮 향후 계획
-
-- [ ] 푸시 알림 (일일 질문 알림)
+- [x] 푸시 알림: 20:15 일일 알림(중복 방지), 3/10일 축하 알림
+- [x] 승자 가중 라우팅: 샘플 임계치 도달 시 인기 질문 우선 배정
 - [ ] 리더보드 (포인트 순위)
-- [ ] 테마 커스터마이징
 - [ ] 다국어 지원
-- [ ] 소셜 로그인 (Google, Apple)
 
 ## 📝 라이선스
 
