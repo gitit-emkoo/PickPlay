@@ -1,6 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, where } from 'firebase/firestore';
-
 import { generateRandomNickname } from '../utils/nickname';
 import { db } from './firebase';
 
@@ -79,8 +78,9 @@ export async function hasUserVoted(uid: string, questionId: string): Promise<boo
 // 오늘 투표한 질문 ID를 저장
 export async function saveTodayQuestion(uid: string, questionId: string) {
   try {
-    const today = new Date().toISOString().slice(0, 10);
-    const todayQuestionKey = `today_question_${uid}_${today}`;
+    // 요일 기반으로 저장 (AsyncStorage와 Firestore 일치)
+    const dIndex = dayIndex();
+    const todayQuestionKey = `today_question_${uid}_${dIndex}`;
     await AsyncStorage.setItem(todayQuestionKey, questionId);
   } catch (error) {
     console.error('오늘 질문 저장 에러:', error);
@@ -90,8 +90,9 @@ export async function saveTodayQuestion(uid: string, questionId: string) {
 // 오늘 투표한 질문 ID를 가져오기
 export async function getTodayQuestion(uid: string): Promise<string | null> {
   try {
-    const today = new Date().toISOString().slice(0, 10);
-    const todayQuestionKey = `today_question_${uid}_${today}`;
+    // 요일 기반으로 조회 (AsyncStorage와 Firestore 일치)
+    const dIndex = dayIndex();
+    const todayQuestionKey = `today_question_${uid}_${dIndex}`;
     return await AsyncStorage.getItem(todayQuestionKey);
   } catch (error) {
     console.error('오늘 질문 조회 에러:', error);
@@ -423,10 +424,10 @@ export async function rewardWithMajority(uid: string, questionId: string, myOpti
 
   // 연속 참여 배수 보상 적용
   let multiplier = 1;
-  if (next >= 20) {
+  if (next >= 21) {
     multiplier = 3; // 20일 이상: 3배
     console.log('🎉 20일 연속 참여! 3배 보상 적용');
-  } else if (next >= 10) {
+  } else if (next >= 11) {
     multiplier = 2; // 10일 이상: 2배
     console.log('🎉 10일 연속 참여! 2배 보상 적용');
   }

@@ -92,7 +92,7 @@ export default function App(){
     const init = async () => {
       const cleanup = await initializeNotifications(20, 15);
       addDebugLog('🔔 알림 초기화 완료');
-      return cleanup;
+    return cleanup;
     };
     const maybeCleanup = init();
     return () => {
@@ -164,8 +164,8 @@ export default function App(){
       // 0. 사용자 데이터 로드
       try {
         const userDataFromStore = await ensureUser(user.uid);
-        setUserData(userDataFromStore);
-        console.log('👤 사용자 데이터 로드:', userDataFromStore);
+          setUserData(userDataFromStore);
+          console.log('👤 사용자 데이터 로드:', userDataFromStore);
       } catch (error) {
         console.error('사용자 데이터 로드 실패:', error);
       }
@@ -360,7 +360,7 @@ export default function App(){
 
   return (
     <>
-    
+      
       <SafeAreaView style={{flex:1, backgroundColor: colors.background}}>
         <ScrollView style={{flex:1}} contentContainerStyle={{flexGrow: 1}}>
                       <View style={{flex:1, paddingHorizontal: 24, paddingTop: 5, paddingBottom: 180, justifyContent:'center'}}>
@@ -616,18 +616,18 @@ export default function App(){
 
         {/* 결과 카드 - 투표 후에만 표시 (총합이 0이어도 먼저 노출하고 실시간/원격 집계로 갱신) */}
         {userChoice !== null && (
-        <View style={{
-          backgroundColor: colors.surface,
-          borderRadius: 16,
-          padding: 20,
-          marginBottom: 24,
-          shadowColor: colors.shadow,
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.05,
-          shadowRadius: 8,
-          elevation: 2
-        }}>
-          <Text style={{
+          <View style={{
+            backgroundColor: colors.surface,
+            borderRadius: 16,
+            padding: 20,
+            marginBottom: 24,
+            shadowColor: colors.shadow,
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.05,
+            shadowRadius: 8,
+            elevation: 2
+          }}>
+                      <Text style={{
             fontSize: 18,
             fontWeight: '700',
             color: colors.primary,
@@ -636,7 +636,7 @@ export default function App(){
           }}>
             PickPlay 유니버스 선택결과
           </Text>
-          
+            
                       {/* 단일 프로그레스바 */}
           <View style={{marginBottom: 16}}>
             {/* 선택지 정보 */}
@@ -677,16 +677,16 @@ export default function App(){
               </Text>
             </View>
           </View>
-          
-          <Text style={{
-            fontSize: 14,
-            color: colors.textLight,
-            textAlign: 'center',
-            marginTop: 16
-          }}>
-            총 {agg.total}명 참여
-          </Text>
-        </View>
+            
+            <Text style={{
+              fontSize: 14,
+              color: colors.textLight,
+              textAlign: 'center',
+              marginTop: 16
+            }}>
+              총 {agg.total}명 참여
+            </Text>
+          </View>
         )}
 
         {/* 공유 버튼 */}
@@ -801,8 +801,8 @@ export default function App(){
               textAlign: 'center',
               lineHeight: 24
             }}>
-              {userData.streakCount >= 10 ? 
-                `🎉 ${userData.streakCount >= 20 ? '3배' : '2배'} 보상 적용 중!` :
+              {userData.streakCount >= 11 ? 
+                `🎉 ${userData.streakCount >= 21 ? '3배' : '2배'} 보상 적용 중!` :
                 `내일도 참여하면 ${userData.streakCount + 1}일차!`
               }
             </Text>
@@ -926,8 +926,8 @@ export default function App(){
             version: 1.0.0
           </Text>
         </View>
-      </View>
-    </ScrollView>
+          </View>
+        </ScrollView>
       </SafeAreaView>
 
 
