@@ -1,8 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApps, initializeApp } from 'firebase/app';
-import { signInAnonymously } from 'firebase/auth';
-// @ts-ignore firebase auth react-native persistence types are provided by firebase package
-import { getReactNativePersistence, initializeAuth } from 'firebase/auth/react-native';
+import { getAuth, signInAnonymously } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { Platform } from 'react-native';
 
@@ -29,9 +27,7 @@ const androidConfig = {
 const firebaseConfig = Platform.OS === 'ios' ? iosConfig : androidConfig;
 
 export const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
-export const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage)
-});
+export const auth = getAuth(app);
 export const db = getFirestore(app);
 
 // 기기별 고유 ID 생성 (기기마다 고정)
@@ -97,11 +93,21 @@ export function watchAuth(callback: (user: { uid: string } | null) => void) {
   const unsub = auth.onAuthStateChanged(async (u: any) => {
     try {
       if (u) {
+        // 이미 로그인된 사용자가 있으면 UID 저장하고 콜백 호출
         await saveUID(u.uid);
         callback({ uid: u.uid });
         return;
       }
-      // 미로그인 시 익명 로그인 수행
+      
+      // 저장된 UID가 있는지 확인
+      const savedUID = await getSavedUID();
+      if (savedUID) {
+        // 저장된 UID가 있으면 그대로 사용
+        callback({ uid: savedUID });
+        return;
+      }
+      
+      // 저장된 UID가 없으면 새로운 익명 로그인 수행
       const result = await signInAnonymously(auth);
       const uid = result.user.uid;
       await saveUID(uid);
@@ -118,11 +124,20 @@ export function watchAuth(callback: (user: { uid: string } | null) => void) {
 export async function forceAnonymousAuth() {
   try {
     const currentUser = auth.currentUser;
-    if (!currentUser) {
-      const result = await signInAnonymously(auth);
-      return result.user;
+    if (currentUser) {
+      return currentUser;
     }
-    return currentUser;
+    
+    // 저장된 UID가 있는지 확인
+    const savedUID = await getSavedUID();
+    if (savedUID) {
+      // 저장된 UID가 있으면 그대로 반환 (실제 Firebase 사용자 객체는 아니지만 UID는 유지)
+      return { uid: savedUID } as any;
+    }
+    
+    // 저장된 UID가 없으면 새로운 익명 로그인 수행
+    const result = await signInAnonymously(auth);
+    return result.user;
   } catch (error) {
     console.error('강제 익명 인증 실패:', error);
     return null;
