@@ -336,19 +336,7 @@ async function updateLocalVoteCount(questionId: string, optionIndex: number) {
 
 export async function aggregate(questionId: string) {
   try {
-    // 1) 로컬 집계 우선 (즉시 반영)
-    const voteCountKey = `vote_count_${questionId}`;
-    const localCount = await AsyncStorage.getItem(voteCountKey);
-    if (localCount) {
-      const voteCount = JSON.parse(localCount);
-      const totalLocal = voteCount.c0 + voteCount.c1;
-      const pctLocal = (n: number) => totalLocal ? Math.round((n / totalLocal) * 100) : 0;
-      const localResult = { total: totalLocal, c0: voteCount.c0, c1: voteCount.c1, p0: pctLocal(voteCount.c0), p1: pctLocal(voteCount.c1) };
-      console.log('📊 로컬 집계 결과(우선):', { questionId, ...localResult });
-      return localResult;
-    }
-
-    // 2) 로컬이 없으면 Firestore 집계
+    // 1) Firestore 집계 우선 (실시간 전국 결과)
     const snap = await getDocs(
       query(
         collection(db, 'votes'),
@@ -363,11 +351,19 @@ export async function aggregate(questionId: string) {
       if (d.optionIndex === 1) c1 += 1;
     });
 
-  const total = c0 + c1;
-
+    const total = c0 + c1;
     const pct = (n: number) => total ? Math.round((n / total) * 100) : 0;
     const result = { total, c0, c1, p0: pct(c0), p1: pct(c1) };
-    console.log('📊 Firestore 집계 결과:', { questionId, ...result, count: snap.size });
+    console.log('📊 Firestore 집계 결과(우선):', { questionId, ...result, count: snap.size });
+    
+    // 2) 로컬 집계도 업데이트 (백업용)
+    try {
+      const voteCountKey = `vote_count_${questionId}`;
+      await AsyncStorage.setItem(voteCountKey, JSON.stringify({ c0, c1 }));
+    } catch (localError) {
+      console.error('로컬 집계 업데이트 실패:', localError);
+    }
+    
     return result;
   } catch (error) {
     console.error('❌ 집계 실패:', error);
@@ -471,35 +467,18 @@ export function watchAggregation(
       where('questionId', '==', questionId)
     );
     const unsubscribe = onSnapshot(qRef, (snapshot) => {
-      (async () => {
-        let c0 = 0, c1 = 0;
-        snapshot.forEach(doc => {
-          const d: any = doc.data();
-          if (d.optionIndex === 0) c0 += 1;
-          if (d.optionIndex === 1) c1 += 1;
-        });
+      let c0 = 0, c1 = 0;
+      snapshot.forEach(doc => {
+        const d: any = doc.data();
+        if (d.optionIndex === 0) c0 += 1;
+        if (d.optionIndex === 1) c1 += 1;
+      });
 
-        // 로컬 집계와 병합하여 즉시 반영 보장(원격 지연 보정)
-        try {
-          const voteCountKey = `vote_count_${questionId}`;
-          const localCount = await AsyncStorage.getItem(voteCountKey);
-          if (localCount) {
-            const parsed = JSON.parse(localCount);
-            const lc0 = typeof parsed.c0 === 'number' ? parsed.c0 : 0;
-            const lc1 = typeof parsed.c1 === 'number' ? parsed.c1 : 0;
-            c0 = Math.max(c0, lc0);
-            c1 = Math.max(c1, lc1);
-          }
-        } catch (mergeError) {
-          console.error('로컬 집계 병합 실패:', mergeError);
-        }
-
-        const total = c0 + c1;
-        const pct = (n: number) => total ? Math.round((n / total) * 100) : 0;
-        const result = { total, c0, c1, p0: pct(c0), p1: pct(c1) };
-        console.log('📡 실시간 집계 업데이트(로컬 병합):', { questionId, ...result, size: snapshot.size });
-        onChange(result);
-      })();
+      const total = c0 + c1;
+      const pct = (n: number) => total ? Math.round((n / total) * 100) : 0;
+      const result = { total, c0, c1, p0: pct(c0), p1: pct(c1) };
+      console.log('📡 실시간 집계 업데이트:', { questionId, ...result, size: snapshot.size });
+      onChange(result);
     });
     return unsubscribe;
   } catch (error) {

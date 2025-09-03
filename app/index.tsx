@@ -223,6 +223,24 @@ export default function App(){
                       const voteData = votes.docs[0].data();
                       console.log('🔄 Firestore에서 투표 상태 복원:', voteData);
                       setUserChoice(voteData.optionIndex);
+                      
+                      // 투표 후 보상이 이미 지급되었는지 확인
+                      const rewardKey = `reward_${qq.id}_${user.uid}`;
+                      const rewardStatus = await AsyncStorage.getItem(rewardKey);
+                      if (rewardStatus) {
+                        const rewardData = JSON.parse(rewardStatus);
+                        // 기본 보상 계산 (출석 보너스 제외)
+                        const baseReward = rewardData.myIsMajority ? 5 : 10;
+                        const totalReward = rewardData.base;
+                        
+                        setRewardMessage(baseReward, rewardData.myIsMajority);
+                        setRewardCompleted(true);
+                        // 이미 보상 완료 → 버튼 숨김(중복/혼동 방지)
+                        setShowRewardButton(false);
+                      } else {
+                        // 보상이 지급되지 않았으면 보상 버튼 표시
+                        setShowRewardButton(true);
+                      }
                     }
                   }
                 }
