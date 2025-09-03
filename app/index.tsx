@@ -6,7 +6,6 @@ import { Image, ScrollView, Share, Text, TouchableOpacity, View } from 'react-na
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ErrorScreen from './components/ErrorScreen';
 import LoadingScreen from './components/LoadingScreen';
-import LottieOverlay from './components/LottieOverlay';
 import TutorialScreen from './components/TutorialScreen';
 import UserHeader from './components/UserHeader';
 import { attachRewardedInterstitial, createRewardedInterstitial, initAds } from './services/ads';
@@ -28,7 +27,6 @@ export default function App(){
   const [adReady, setAdReady] = useState(false); // 광고 준비 상태를 false로 초기화
   const [msg, setMsg] = useState('');
   const [userChoice, setUserChoice] = useState<number | null>(null); // 사용자가 선택한 선택지
-  const [showLottie, setShowLottie] = useState(false); // 로티 애니메이션 표시 여부
   const [showRewardButton, setShowRewardButton] = useState(false); // 보상 버튼 표시 여부
   const [adWatched, setAdWatched] = useState(false); // 광고 시청 완료 여부
   const [rewardCompleted, setRewardCompleted] = useState(false); // 보상 적립 완료 여부
@@ -321,11 +319,6 @@ export default function App(){
       await AsyncStorage.setItem(rewardKey, JSON.stringify({ base, myIsMajority, next }));
       addDebugLog('💾 보상 상태 저장 완료');
 
-      // 로티 애니메이션 표시
-      setShowLottie(true);
-      setTimeout(() => setShowLottie(false), 3000);
-      addDebugLog('🎬 로티 애니메이션 표시');
-
       // 사용자 데이터 업데이트
       if (userData && user?.uid) {
         const updatedUserData = {
@@ -367,8 +360,7 @@ export default function App(){
 
   return (
     <>
-      <LottieOverlay visible={showLottie} />
-      
+    
       <SafeAreaView style={{flex:1, backgroundColor: colors.background}}>
         <ScrollView style={{flex:1}} contentContainerStyle={{flexGrow: 1}}>
                       <View style={{flex:1, paddingHorizontal: 24, paddingTop: 5, paddingBottom: 180, justifyContent:'center'}}>

@@ -1,21 +1,37 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApps, initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously } from 'firebase/auth';
+import { signInAnonymously } from 'firebase/auth';
+// @ts-ignore firebase auth react-native persistence types are provided by firebase package
+import { getReactNativePersistence, initializeAuth } from 'firebase/auth/react-native';
 import { getFirestore } from 'firebase/firestore';
+import { Platform } from 'react-native';
 
-// Firebase 콘솔에서 복사한 실제 설정값
-const firebaseConfig = {
-  apiKey: "AIzaSyD_ISTajF7Z8QRauADMAn9EfeCSfQ1z_XM",
+// Firebase 콘솔 설정 (플랫폼 분기)
+const iosConfig = {
+  apiKey: "AIzaSyAfKqr2opuHza9hkXFmofPGg4t_HVOmcpk",
   authDomain: "today-balance-fa0a5.firebaseapp.com",
   projectId: "today-balance-fa0a5",
   storageBucket: "today-balance-fa0a5.firebasestorage.app",
   messagingSenderId: "981215713715",
-  appId: "1:981215713715:web:7fc31c46ceb63fc19c53c6",
-  measurementId: "G-HY604P5WG3"
+  appId: "1:981215713715:ios:9c812d5a30fea59b9c53c6",
+  measurementId: "G-HY604P5WG3",
 };
 
+const androidConfig = {
+  apiKey: "AIzaSyDAyQGN1q5K9GhoNdDmNt65PH37dVL-5xA",
+  authDomain: "today-balance-fa0a5.firebaseapp.com",
+  projectId: "today-balance-fa0a5",
+  storageBucket: "today-balance-fa0a5.firebasestorage.app",
+  messagingSenderId: "981215713715",
+  appId: "1:981215713715:android:820a3f60db5067369c53c6",
+};
+
+const firebaseConfig = Platform.OS === 'ios' ? iosConfig : androidConfig;
+
 export const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
-export const auth = getAuth(app);
+export const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(AsyncStorage)
+});
 export const db = getFirestore(app);
 
 // 기기별 고유 ID 생성 (기기마다 고정)
@@ -78,8 +94,7 @@ async function saveUserData(data: { points: number; streakCount: number; lastAns
 
 // Firebase 익명 로그인 감시 (실제 Firebase UID 사용)
 export function watchAuth(callback: (user: { uid: string } | null) => void) {
-  const a = getAuth(app);
-  const unsub = a.onAuthStateChanged(async (u) => {
+  const unsub = auth.onAuthStateChanged(async (u: any) => {
     try {
       if (u) {
         await saveUID(u.uid);
@@ -87,7 +102,7 @@ export function watchAuth(callback: (user: { uid: string } | null) => void) {
         return;
       }
       // 미로그인 시 익명 로그인 수행
-      const result = await signInAnonymously(a);
+      const result = await signInAnonymously(auth);
       const uid = result.user.uid;
       await saveUID(uid);
       callback({ uid });

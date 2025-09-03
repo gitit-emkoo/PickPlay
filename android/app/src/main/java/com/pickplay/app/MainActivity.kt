@@ -1,4 +1,4 @@
-package com.pickplay.app
+package com.pickplay.kwcc
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

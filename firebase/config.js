@@ -3,7 +3,7 @@ import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
-// Your web app's Firebase configuration
+// Your web app's Firebase configuration (웹 전용 설정)
 const firebaseConfig = {
   apiKey: "AIzaSyD_ISTajF7Z8QRauADMAn9EfeCSfQ1z_XM",
   authDomain: "today-balance-fa0a5.firebaseapp.com",

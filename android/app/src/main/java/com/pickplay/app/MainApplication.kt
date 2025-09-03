@@ -1,4 +1,4 @@
-package com.pickplay.app
+package com.pickplay.kwcc
 
 import android.app.Application
 import android.content.res.Configuration

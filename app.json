@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.pickplay.app",
+      "bundleIdentifier": "com.pickplay.kwcc",
       "infoPlist": {
         "UIBackgroundModes": ["remote-notification"]
       },
@@ -19,7 +19,7 @@
       }
     },
     "android": {
-      "package": "com.pickplay.app",
+      "package": "com.pickplay.kwcc",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"

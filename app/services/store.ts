@@ -351,7 +351,7 @@ export async function aggregate(questionId: string) {
       if (d.optionIndex === 1) c1 += 1;
     });
 
-    const total = c0 + c1;
+  const total = c0 + c1;
     const pct = (n: number) => total ? Math.round((n / total) * 100) : 0;
     const result = { total, c0, c1, p0: pct(c0), p1: pct(c1) };
     console.log('📊 Firestore 집계 결과(우선):', { questionId, ...result, count: snap.size });
