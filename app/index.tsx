@@ -11,7 +11,7 @@ import TutorialScreen from './components/TutorialScreen';
 import UserHeader from './components/UserHeader';
 import { attachRewardedInterstitial, createRewardedInterstitial, initAds } from './services/ads';
 import { db, watchAuth } from './services/firebase';
-import { registerForPushNotificationsAsync, resetDailyNotification, saveFCMToken, scheduleStreakNotification, setupNotificationListener } from './services/notifications';
+import { initializeNotifications, scheduleStreakNotification } from './services/notifications';
 import { aggregate, ensureUser, getOrAssignTodayQuestion, hasUserVoted, rewardWithMajority, saveVote, watchAggregation } from './services/store';
 import SplashScreen from './splash';
 import colors from './styles/colors';
@@ -92,32 +92,20 @@ export default function App(){
     }
   };
 
-  // 푸시 알림 초기화 (Expo Go에서는 제한됨)
+  // 알림 초기화(권한/채널/토큰/리스너/스케줄)
   useEffect(() => {
-    // Expo Go에서는 푸시 알림 기능 제한
-    if (__DEV__) {
-      console.log('⚠️ Expo Go 환경: 푸시 알림 기능 제한됨');
-      addDebugLog('⚠️ Expo Go 환경: 푸시 알림 기능 제한됨');
-      return;
-    }
-    
-    registerForPushNotificationsAsync().then(token => {
-      if (token) {
-        saveFCMToken(token);
-        addDebugLog(`📱 FCM 토큰 획득: ${token.substring(0, 20)}...`);
-      }
-    });
-
-    // 알림 리스너 설정
-    const cleanup = setupNotificationListener();
-    return cleanup;
-  }, []);
-
-  // 일일 알림 스케줄링 (APK/앱스토어용 활성화)
-  useEffect(() => {
-    // 앱 시작 시, 중복 알림을 제거하고 매일 20:15로 재스케줄
-    resetDailyNotification(20, 15);
-    addDebugLog('📅 일일 알림 재스케줄 완료(20:15)');
+    const init = async () => {
+      const cleanup = await initializeNotifications(20, 15);
+      addDebugLog('🔔 알림 초기화 완료');
+      return cleanup;
+    };
+    const maybeCleanup = init();
+    return () => {
+      // cleanup promise 처리
+      Promise.resolve(maybeCleanup).then(fn => {
+        if (typeof fn === 'function') fn();
+      });
+    };
   }, []);
 
   useEffect(()=>{
@@ -137,13 +125,9 @@ export default function App(){
         setAdReady(true);
       },
       onEarned:async()=>{
-        // 광고 시청 완료 → 실제 보상 로직은 버튼 클릭에서 실행되므로 시청완료 플래그만
+        // 광고 시청 완료 → 최신 상태에서 보상 지급하도록 플래그만 세움
         addDebugLog('💰 광고 시청 완료!');
         setAdWatched(true);
-        // 광고 시청 완료 시 보상 지급
-        await grantReward();
-        // 적립 완료 모달 표시
-        setShowRewardDoneModal(true);
       },
       onClosed:()=>{ 
         addDebugLog('❌ 광고 종료, 새 광고 로드 시작');
@@ -153,6 +137,18 @@ export default function App(){
     });
     return ()=>{ if(detach) detach(); };
   },[user?.uid]);
+
+  // 광고 시청 완료 시 최신 상태로 보상 지급 및 UI 업데이트
+  useEffect(() => {
+    if (!adWatched || rewardCompleted) return;
+    (async () => {
+      addDebugLog('🎯 광고 시청 완료 처리 시작');
+      await grantReward();
+      setShowRewardDoneModal(true);
+      // 보상 완료 후 버튼은 숨겨 중복 표시 방지
+      setShowRewardButton(false);
+    })();
+  }, [adWatched]);
 
   // 질문 변경 시 실시간 집계 구독
   useEffect(() => {
@@ -206,6 +202,9 @@ export default function App(){
                        const totalReward = rewardData.base;
                        
                        setRewardMessage(baseReward, rewardData.myIsMajority);
+                       setRewardCompleted(true);
+                       // 이미 보상 완료 → 버튼 숨김(중복/혼동 방지)
+                       setShowRewardButton(false);
                      } else {
                        // 보상이 지급되지 않았으면 보상 버튼 표시
                        setShowRewardButton(true);
@@ -607,8 +606,8 @@ export default function App(){
             
           </View>
 
-        {/* 결과 카드 - 투표 후에만 표시 */}
-        {userChoice !== null && agg.total > 0 && (
+        {/* 결과 카드 - 투표 후에만 표시 (총합이 0이어도 먼저 노출하고 실시간/원격 집계로 갱신) */}
+        {userChoice !== null && (
         <View style={{
           backgroundColor: colors.surface,
           borderRadius: 16,
@@ -642,34 +641,21 @@ export default function App(){
               </Text>
             </View>
             
-            {/* 프로그레스바 */}
+            {/* 프로그레스바 (flex 기반 2분할) */}
             <View style={{
               height: 16,
               backgroundColor: colors.border,
               borderRadius: 8,
               overflow: 'hidden',
-              position: 'relative'
+              flexDirection: 'row'
             }}>
-              {/* 첫 번째 선택지 (왼쪽) */}
               <View style={{
-                position: 'absolute',
-                left: 0,
-                top: 0,
-                width: `${agg.p0}%`,
-                height: '100%',
-                backgroundColor: userChoice === 0 ? colors.secondary : colors.border,
-                borderRadius: 8
+                flex: Math.max(agg.p0, 0),
+                backgroundColor: userChoice === 0 ? colors.secondary : colors.border
               }} />
-              
-              {/* 두 번째 선택지 (오른쪽) */}
               <View style={{
-                position: 'absolute',
-                right: 0,
-                top: 0,
-                width: `${agg.p1}%`,
-                height: '100%',
-                backgroundColor: userChoice === 1 ? colors.secondary : colors.border,
-                borderRadius: 8
+                flex: Math.max(agg.p1, 0),
+                backgroundColor: userChoice === 1 ? colors.secondary : colors.border
               }} />
             </View>
             
@@ -764,7 +750,7 @@ export default function App(){
               fontWeight: '700',
               textAlign: 'center'
             }}>
-              {rewardCompleted ? '적립 완료' : '🎁 보상 받기'}
+              {rewardCompleted ? (msg || '적립 완료') : '🎁 보상 받기'}
             </Text>
           </TouchableOpacity>
         )}
@@ -1044,7 +1030,7 @@ export default function App(){
           }}>
             <View style={{ width: 120, height: 120, marginBottom: 12 }}>
               <LottieView
-                source={{ uri: 'https://lottie.host/951ea34e-ef87-45ee-90f2-ac796963312f/NUCSZs3eid.lottie' }}
+                source={{ uri: 'https://lottie.host/c691c7ab-e2e2-4a77-a50e-cef6c130dce1/GjbXQZOTda.lottie' }}
                 autoPlay
                 loop={false}
                 style={{ width: 120, height: 120 }}

@@ -78,50 +78,26 @@ export async function getFCMToken(): Promise<string | null> {
 }
 
 // 일일 질문 알림 스케줄링
-export async function scheduleDailyNotification() {
-  try {
-    // 이미 스케줄링된 알림이 있는지 확인
-    const scheduledNotifications = await Notifications.getAllScheduledNotificationsAsync();
-    const hasDailyNotification = scheduledNotifications.some(notification => 
-      notification.content.data?.type === 'daily_question'
-    );
-    
-    if (hasDailyNotification) {
-      console.log('✅ 이미 일일 알림이 스케줄링되어 있음');
-      return;
-    }
-    
-    // 매일 저녁 8시 15분에 알림 스케줄링 (최적 시간대)
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: "오늘의 질문이 기다리고 있어요! 🎯",
-        body: "새로운 밸런스 게임에 참여해보세요!",
-        data: { type: 'daily_question' },
-      },
-      trigger: {
-        hour: 20,
-        minute: 15,
-        repeats: true,
-      } as any,
-    });
-    
-    console.log('✅ 일일 알림 스케줄링 완료');
-  } catch (error) {
-    console.error('❌ 일일 알림 스케줄링 실패:', error);
-  }
-}
+// (legacy) scheduleDailyNotification 제거 → ensureDailyNotification만 사용
 
-// 일일 알림을 한 번만 유지하도록 초기화 후 재스케줄
-export async function resetDailyNotification(hour: number = 20, minute: number = 15) {
+// 중복 없이 딱 1개만 유지되도록 보장
+export async function ensureDailyNotification(hour: number = 20, minute: number = 15) {
   try {
     const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-    // 기존 daily_question 모두 제거 (중복/잘못된 트리거 방지)
-    await Promise.all(
-      scheduled
-        .filter(n => n.content?.data?.type === 'daily_question')
-        .map(n => Notifications.cancelScheduledNotificationAsync(n.identifier))
-    );
+    const daily = scheduled.filter(n => n.content?.data?.type === 'daily_question');
 
+    // 중복이면 1개만 남기고 모두 제거
+    if (daily.length > 1) {
+      await Promise.all(
+        daily.slice(1).map(n => Notifications.cancelScheduledNotificationAsync(n.identifier))
+      );
+      return; // 하나는 이미 존재
+    }
+
+    // 1개 있으면 그대로 유지
+    if (daily.length === 1) return;
+
+    // 없으면 새로 스케줄
     await Notifications.scheduleNotificationAsync({
       content: {
         title: "오늘의 질문이 기다리고 있어요! 🎯",
@@ -134,11 +110,13 @@ export async function resetDailyNotification(hour: number = 20, minute: number =
         repeats: true,
       } as any,
     });
-    console.log(`✅ 일일 알림 재스케줄 완료: ${hour}:${minute}`);
+    console.log(`✅ ensureDailyNotification: 스케줄 완료 ${hour}:${minute}`);
   } catch (error) {
-    console.error('❌ 일일 알림 재스케줄 실패:', error);
+    console.error('❌ ensureDailyNotification 실패:', error);
   }
 }
+
+// (legacy) resetDailyNotification 제거 → ensureDailyNotification만 사용
 
 // 연속 참여 축하 알림
 export async function scheduleStreakNotification(streakCount: number) {
@@ -182,4 +160,39 @@ export function setupNotificationListener() {
     subscription.remove();
     responseSubscription.remove();
   };
+}
+
+// 통합 초기화: 권한/토큰/채널/리스너/일일 스케줄을 한 번에 구성
+export async function initializeNotifications(hour: number = 20, minute: number = 15) {
+  try {
+    if (__DEV__) {
+      console.log('🛑 DEV 모드: 알림 초기화 생략');
+      return () => {};
+    }
+
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
+      });
+    }
+
+    const token = await registerForPushNotificationsAsync();
+    if (token) {
+      await saveFCMToken(token);
+      console.log('🔐 토큰 저장 완료(초기화)');
+    }
+
+    const cleanup = setupNotificationListener();
+
+    await ensureDailyNotification(hour, minute);
+    console.log(`📅 일일 알림 단일 스케줄 보장(${hour}:${minute})`);
+
+    return cleanup;
+  } catch (error) {
+    console.error('❌ 알림 초기화 실패:', error);
+    return () => {};
+  }
 }

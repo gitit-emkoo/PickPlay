@@ -1,12 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  addDoc, collection,
-  doc, getDoc,
-  getDocs,
-  onSnapshot,
-  query,
-  setDoc,
-  where
+    addDoc, collection,
+    doc, getDoc,
+    getDocs,
+    onSnapshot,
+    query,
+    setDoc,
+    where
 } from 'firebase/firestore';
 import { generateRandomNickname } from '../utils/nickname';
 import { db } from './firebase';
@@ -541,17 +541,35 @@ export function watchAggregation(
       where('questionId', '==', questionId)
     );
     const unsubscribe = onSnapshot(qRef, (snapshot) => {
-      let c0 = 0, c1 = 0;
-      snapshot.forEach(doc => {
-        const d: any = doc.data();
-        if (d.optionIndex === 0) c0 += 1;
-        if (d.optionIndex === 1) c1 += 1;
-      });
-      const total = c0 + c1;
-      const pct = (n: number) => total ? Math.round((n / total) * 100) : 0;
-      const result = { total, c0, c1, p0: pct(c0), p1: pct(c1) };
-      console.log('📡 실시간 집계 업데이트:', { questionId, ...result, size: snapshot.size });
-      onChange(result);
+      (async () => {
+        let c0 = 0, c1 = 0;
+        snapshot.forEach(doc => {
+          const d: any = doc.data();
+          if (d.optionIndex === 0) c0 += 1;
+          if (d.optionIndex === 1) c1 += 1;
+        });
+
+        // 로컬 집계와 병합하여 즉시 반영 보장(원격 지연 보정)
+        try {
+          const voteCountKey = `vote_count_${questionId}`;
+          const localCount = await AsyncStorage.getItem(voteCountKey);
+          if (localCount) {
+            const parsed = JSON.parse(localCount);
+            const lc0 = typeof parsed.c0 === 'number' ? parsed.c0 : 0;
+            const lc1 = typeof parsed.c1 === 'number' ? parsed.c1 : 0;
+            c0 = Math.max(c0, lc0);
+            c1 = Math.max(c1, lc1);
+          }
+        } catch (mergeError) {
+          console.error('로컬 집계 병합 실패:', mergeError);
+        }
+
+        const total = c0 + c1;
+        const pct = (n: number) => total ? Math.round((n / total) * 100) : 0;
+        const result = { total, c0, c1, p0: pct(c0), p1: pct(c1) };
+        console.log('📡 실시간 집계 업데이트(로컬 병합):', { questionId, ...result, size: snapshot.size });
+        onChange(result);
+      })();
     });
     return unsubscribe;
   } catch (error) {
