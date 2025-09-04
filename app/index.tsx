@@ -392,7 +392,10 @@ export default function App(){
             color: colors.textSecondary,
             textAlign: 'center'
           }}>
-            매일 나의 선택이 가치로 바뀌는 30초 루틴{'\n'}취향? 직감? 
+            매일 나의 선택을 가치로 바꾸는  
+            <Text style={{ 
+            color: colors.primary}}> 30초 루틴</Text>{'\n'}
+            취향? 직감? 
             <Text style={{ 
             color: colors.primary}}> 픽플</Text>
             에서는 모든 선택을 보상합니다.
@@ -803,7 +806,7 @@ export default function App(){
             }}>
               {userData.streakCount >= 11 ? 
                 `🎉 ${userData.streakCount >= 21 ? '3배' : '2배'} 보상 적용 중!` :
-                `내일도 참여하면 ${userData.streakCount + 1}일차!`
+                `내일도 참여하면 ${userData.streakCount + 1}일 연속 달성!`
               }
             </Text>
             
@@ -815,8 +818,8 @@ export default function App(){
                 marginTop: 4
               }}>
                 {userData.streakCount < 9 ? 
-                  `${10 - userData.streakCount}일 더 참여하면 2배 보상!` :
-                  '내일 참여하면 2배 보상!'
+                  `${10 - userData.streakCount}일 더 참여하면 그 이후부터 모든 보상이 2배!` :
+                  '내일 참여하면 2배 보상! 꼭 놓치지 마세요!'
                 }
               </Text>
             )}

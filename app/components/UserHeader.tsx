@@ -154,9 +154,9 @@ export default function UserHeader({ userData }: UserHeaderProps) {
                 textAlign: 'center',
                 lineHeight: 16
               }}>
-                2,000P 부터 자유롭게 사용할 수 있어요{'\n'}
-                연속 참여 등 다양한 이벤트를 통해{'\n'}
-                더 많은 포인트 획득에 도전하세요!
+                2,000P 부터 자유롭게 사용할 수 있고, 
+                연속 달성과 다양한 이벤트를 통해
+                더 많은 포인트를 획득할 수 있어!
               </Text>
             </View>
 
@@ -184,7 +184,7 @@ export default function UserHeader({ userData }: UserHeaderProps) {
                 textAlign: 'center',
                 marginBottom: 8
               }}>
-                {userData.streakCount}일 연속 출석
+                {userData.streakCount}일 연속 달성
               </Text>
               
               {/* 출석 설명 */}
@@ -195,11 +195,8 @@ export default function UserHeader({ userData }: UserHeaderProps) {
                 textAlign: 'center',
                 lineHeight: 16
               }}>
-                30초! 너무 간단해서 어제 한 번,{'\n'}
-                오늘 또 한 번.{'\n'}
-                이건 쉬워 보여도, 계속하는 건{'\n'}
-                아무나 못 해.{'\n'}
-                넌 가능해?
+                30초면 충분해. PickPlay는 99%가 성공할 수 있는 흐름을 만들었고 너는 지금 흐름 안에 있어.
+                
               </Text>
             </View>
           </View>
@@ -228,9 +225,11 @@ export default function UserHeader({ userData }: UserHeaderProps) {
               textAlign: 'center',
               lineHeight: 22
             }}>
-              AnimaCode 위한 30번의 선택이 쌓이면,{'\n'}
-              너와 꼭 닮은 성향의 캐릭터가 탄생하고{'\n'}
-              진짜 이름이 시작돼
+              AnimaCode 생성을 위한 30번의 선택이 쌓이면,
+              너의 내면의 캐릭터가 탄생하고 
+              진짜 이름과 여정이 시작돼! 
+              아직은 알 속, 하지만 곧 깨어날 거야. 기대해!
+              
             </Text>
           </View>
 

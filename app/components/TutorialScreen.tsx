@@ -14,22 +14,22 @@ export default function TutorialScreen({ onFinish }: TutorialScreenProps) {
 
   const tutorialCards = [
     {
-      title: "매일 나와 마주하는 30초",
-      subtitle: "정말 짧은 시간이지만, 자신을 이해하고 돌아보는 소중한 시간으로 쌓아갑니다.",
-      description: "PickPlay는 자기를 사랑할 줄 아는 당신, 그 자체에 보상합니다.",
+      title: "매일 나와 마주하는 30초!",
+      subtitle: "정말 짧은 시간이지만, 나 자신을 이해하고 돌아보는 소중한 시간들로 쌓여갑니다.",
+      description: "PickPlay는 자신을 위한 루틴을 만들어가는 당신의 매일을 보상합니다.",
       image: require('../../assets/images/logo_pickplay.png'),
       backgroundColor: colors.primary
     },
     {
-      title: "특별한 선택",
-      subtitle: "PickPlay는 정답을 묻지 않고, 선택 자체를 존중합니다",
-      description: "직감이든 취향이든 당신의 선택을 가치로 바꿔드립니다.",
+      title: "의미 있고 특별한 선택",
+      subtitle: "PickPlay에 정답은 없습니다. 선택이 AnimaCode가 되고 보상이 됩니다.",
+      description: "직감이든 취향이든 당신의 선택이 가치로 바뀝니다.",
       image: require('../../assets/images/img_stamp.png'),
       backgroundColor: colors.primary
     },
     {
       title: "애니마코드(AnimaCode)?",
-      subtitle: "당신의 선택을 통해 태어난 성향 캐릭터",
+      subtitle: "당신의 선택이 쌓여 탄생한 내면의 캐릭터",
       description: "MBTI처럼 성향 분류 체계이지만, 선택이 이어질수록 계속 진화하는 내면을 시각화한 루틴형 세계예요",
       isLottie: true,
       lottieSource: "https://lottie.host/df96f2a7-284f-4197-ba3c-5b8388c46299/ykDKnFMp3l.lottie",
@@ -38,14 +38,14 @@ export default function TutorialScreen({ onFinish }: TutorialScreenProps) {
     {
       title: "PickPlay 세계관",
       subtitle: "PickPlay 유니버스는 선택으로 만들어 갑니다",
-      description: "다수의 선택은 흐름을 만들고,\n소수의 선택은 새로운 방향을 제시한다고 믿습니다.\n그래서 PickPlay는 소수의 선택에 조금 더 보상합니다.",
+      description: "다수의 선택은 흐름을 만들고, 소수의 선택은 새로운 방향을 제시한다고 믿습니다. 그래서 PickPlay는 소수의 선택에 조금 더 보상합니다.",
       image: require('../../assets/images/logo_pickplay.png'),
       backgroundColor: colors.primary
     },
     {
-      title: "100%를 위한 의미있는 도전",
-      subtitle: "PickPlay 30초면 누구나 쉽게 참여하고 보상받을 수 있지만 꾸준하게 해내는 건 단 1%입니다.",
-      description: "당신은 1%일까요? 오늘부터 성취감을 위한 여정을 시작해 볼까요?\n첫 번째 선택이 기다리고 있어요.",
+      title: "99%의 성공을 위한 도전",
+      subtitle: "대부분의 도전을 끝까지 해내는 건 단 1%뿐!PickPlay는 나머지 99%가 성공할 수 있는 흐름을 만들어 갑니다",
+      description: "오늘부터 성취감을 향해 달려가 볼까요?\n첫 번째 선택이 기다리고 있어요.",
       isLottie: true,
       lottieSource: "https://lottie.host/951ea34e-ef87-45ee-90f2-ac796963312f/NUCSZs3eid.lottie",
       backgroundColor: colors.primary

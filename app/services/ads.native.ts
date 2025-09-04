@@ -10,9 +10,24 @@ function createWebDummyAd() {
   };
 }
 
+// 네이티브 모듈 로드 실패 시 사용할 더미 광고
+function createNativeDummyAd() {
+  return {
+    load: () => console.log('📱 네이티브 모듈 실패: 더미 광고 로드'),
+    show: () => console.log('📱 네이티브 모듈 실패: 더미 광고 표시'),
+    addAdEventListener: () => () => console.log('📱 네이티브 모듈 실패: 더미 이벤트 리스너'),
+    isLoaded: () => false
+  };
+}
+
 // 웹용 더미 리스너
 function createWebDummyListener() {
   return () => console.log('🌐 웹: 더미 리스너 해제');
+}
+
+// 네이티브 모듈 실패 시 더미 리스너
+function createNativeDummyListener() {
+  return () => console.log('📱 네이티브 모듈 실패: 더미 리스너 해제');
 }
 
 // 모바일용 실제 광고 모듈 (웹이 아닐 때만 로드)
@@ -21,6 +36,7 @@ let RewardedAdEventType: any;
 let RewardedInterstitialAd: any;
 let TestIds: any;
 let AdEventType: any;
+let moduleLoaded = false;
 
 if (Platform.OS !== 'web') {
   try {
@@ -30,8 +46,12 @@ if (Platform.OS !== 'web') {
     RewardedInterstitialAd = adsModule.RewardedInterstitialAd;
     TestIds = adsModule.TestIds;
     AdEventType = adsModule.AdEventType;
+    moduleLoaded = true;
+    console.log('✅ 광고 모듈 로드 성공');
   } catch (error) {
-    console.error('광고 모듈 로드 실패:', error);
+    console.error('❌ 광고 모듈 로드 실패:', error);
+    console.log('📱 네이티브 모듈 실패로 더미 광고 사용');
+    moduleLoaded = false;
   }
 }
 
@@ -47,8 +67,8 @@ export async function initAds() {
     return;
   }
   
-  if (!MobileAds) {
-    console.log('📱 광고 모듈이 로드되지 않음');
+  if (!moduleLoaded || !MobileAds) {
+    console.log('📱 광고 모듈이 로드되지 않음 - 더미 모드로 실행');
     return;
   }
   
@@ -58,6 +78,7 @@ export async function initAds() {
     console.log('✅ Google AdMob 초기화 완료');
   } catch (error) {
     console.error('❌ Google AdMob 초기화 실패:', error);
+    console.log('📱 초기화 실패로 더미 모드로 실행');
   }
 }
 
@@ -67,17 +88,24 @@ export function createRewardedInterstitial() {
     return createWebDummyAd();
   }
   
-  if (!RewardedInterstitialAd) {
-    console.log('📱 광고 모듈이 로드되지 않음');
-    return createWebDummyAd();
+  if (!moduleLoaded || !RewardedInterstitialAd) {
+    console.log('📱 광고 모듈이 로드되지 않음 - 더미 광고 사용');
+    return createNativeDummyAd();
   }
   
-  const adUnitId = Platform.select(AD_UNITS) || TestIds.REWARDED_INTERSTITIAL;
+  const adUnitId = Platform.select(AD_UNITS) || TestIds?.REWARDED_INTERSTITIAL;
   console.log('📱 광고 단위 ID:', adUnitId);
   console.log('📱 플랫폼:', Platform.OS);
-  const ad = RewardedInterstitialAd.createForAdRequest(adUnitId);
-  console.log('🎯 보상형 전면광고 객체 생성 완료');
-  return ad;
+  
+  try {
+    const ad = RewardedInterstitialAd.createForAdRequest(adUnitId);
+    console.log('🎯 보상형 전면광고 객체 생성 완료');
+    return ad;
+  } catch (error) {
+    console.error('❌ 광고 객체 생성 실패:', error);
+    console.log('📱 더미 광고로 대체');
+    return createNativeDummyAd();
+  }
 }
 
 export function attachRewardedInterstitial(ad: any, { 
@@ -94,25 +122,40 @@ export function attachRewardedInterstitial(ad: any, {
     return createWebDummyListener();
   }
   
-  if (!RewardedAdEventType || !AdEventType) {
-    console.log('📱 광고 모듈이 로드되지 않음');
-    return createWebDummyListener();
+  if (!moduleLoaded || !RewardedAdEventType || !AdEventType) {
+    console.log('📱 광고 모듈이 로드되지 않음 - 더미 리스너 사용');
+    // 더미 광고에서 즉시 보상 지급 (테스트용)
+    setTimeout(() => {
+      console.log('📱 더미 광고: 즉시 보상 지급');
+      onLoaded();
+      setTimeout(() => {
+        onEarned();
+        onClosed();
+      }, 100);
+    }, 500);
+    return createNativeDummyListener();
   }
   
   console.log('🔗 실제 광고 이벤트 리스너 연결 중...');
   
-  const unsubscribeLoaded = ad.addAdEventListener(RewardedAdEventType.LOADED, onLoaded);
-  const unsubscribeEarned = ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, onEarned);
-  const unsubscribeClosed = ad.addAdEventListener(AdEventType.CLOSED, onClosed);
+  try {
+    const unsubscribeLoaded = ad.addAdEventListener(RewardedAdEventType.LOADED, onLoaded);
+    const unsubscribeEarned = ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, onEarned);
+    const unsubscribeClosed = ad.addAdEventListener(AdEventType.CLOSED, onClosed);
 
-  // 광고 로드 시작
-  ad.load();
-  console.log('📦 광고 로드 시작...');
+    // 광고 로드 시작
+    ad.load();
+    console.log('📦 광고 로드 시작...');
 
-  return () => {
-    console.log('🔗 광고 이벤트 리스너 해제');
-    unsubscribeLoaded();
-    unsubscribeEarned();
-    unsubscribeClosed();
-  };
+    return () => {
+      console.log('🔗 광고 이벤트 리스너 해제');
+      unsubscribeLoaded();
+      unsubscribeEarned();
+      unsubscribeClosed();
+    };
+  } catch (error) {
+    console.error('❌ 광고 리스너 설정 실패:', error);
+    console.log('📱 더미 리스너로 대체');
+    return createNativeDummyListener();
+  }
 }

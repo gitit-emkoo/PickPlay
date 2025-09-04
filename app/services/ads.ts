@@ -1,19 +1,91 @@
+import { Platform } from 'react-native';
 
-// 웹용 더미 광고 서비스
-// react-native-google-mobile-ads 모듈을 전혀 import하지 않음
+// Expo Go 환경 감지 (더 안정적인 방법)
+const isExpoGo = () => {
+  try {
+    return typeof (global as any).Expo !== 'undefined' && 
+           (global as any).Expo.Constants?.appOwnership === 'expo';
+  } catch {
+    return false;
+  }
+};
+
+// 플랫폼별 실제 광고 단위 ID
+const AD_UNITS = {
+  android: 'ca-app-pub-2555567440328829/7893158578',
+  ios: 'ca-app-pub-2555567440328829/9198215970'
+};
+
+// 더미 광고 객체 (Expo Go용)
+function createExpoGoDummyAd() {
+  let isLoaded = false;
+  
+  return {
+    load: () => {
+      console.log('📱 Expo Go: 더미 광고 로드 시작');
+      setTimeout(() => {
+        isLoaded = true;
+        console.log('📱 Expo Go: 더미 광고 로드 완료');
+      }, 1000);
+    },
+    show: () => {
+      console.log('📱 Expo Go: 더미 광고 표시');
+      if (!isLoaded) {
+        console.log('📱 Expo Go: 광고가 아직 로드되지 않음');
+        return;
+      }
+    },
+    addAdEventListener: (eventType: string, callback: () => void) => {
+      console.log(`📱 Expo Go: 이벤트 리스너 등록 - ${eventType}`);
+      return () => console.log(`📱 Expo Go: 이벤트 리스너 해제 - ${eventType}`);
+    },
+    isLoaded: () => isLoaded
+  };
+}
+
+// 더미 리스너 (Expo Go용)
+function createExpoGoDummyListener() {
+  return () => console.log('📱 Expo Go: 더미 리스너 해제');
+}
 
 export async function initAds() {
-  console.log('🌐 웹 환경: 광고 초기화 건너뛰기');
+  if (isExpoGo()) {
+    console.log('📱 Expo Go 환경: 광고 초기화 건너뛰기');
+    return;
+  }
+  console.log('🎯 AdMob 초기화 시작');
 }
 
 export function createRewardedInterstitial() {
-  console.log('🌐 웹 환경: 더미 광고 객체 생성');
-  return {
-    load: () => console.log('🌐 웹: 더미 광고 로드'),
-    show: () => console.log('🌐 웹: 더미 광고 표시'),
-    addAdEventListener: () => () => console.log('🌐 웹: 더미 이벤트 리스너'),
-    isLoaded: () => false
-  };
+  // Expo Go에서는 더미 광고 사용
+  if (isExpoGo()) {
+    console.log('📱 Expo Go 환경: 더미 광고 객체 생성');
+    return createExpoGoDummyAd();
+  }
+
+  // 실제 빌드에서만 네이티브 모듈 사용
+  try {
+    const { RewardedInterstitialAd, TestIds } = require('react-native-google-mobile-ads');
+    
+    // 플랫폼별 광고 단위 ID 선택
+    const platformAdUnitId = Platform.OS === 'ios' ? AD_UNITS.ios : AD_UNITS.android;
+    const adUnitId = __DEV__ ? TestIds.REWARDED_INTERSTITIAL : platformAdUnitId;
+      
+    console.log(`🎯 보상형 전면 광고 생성: ${adUnitId}`);
+    console.log(`🔧 모드: ${__DEV__ ? '개발 (테스트 광고)' : '프로덕션 (실제 광고)'}`);
+    console.log(`📱 플랫폼: ${Platform.OS}`);
+    
+    const rewarded = RewardedInterstitialAd.createForAdRequest(adUnitId, {
+      requestNonPersonalizedAdsOnly: true,
+      keywords: ['game', 'reward', 'daily'],
+    });
+
+    return rewarded;
+  } catch (error) {
+    console.error('❌ 네이티브 모듈 로드 실패:', error);
+    console.log('📱 더미 광고로 대체');
+    return createExpoGoDummyAd();
+  }
 }
 
 export function attachRewardedInterstitial(ad: any, { 
@@ -25,6 +97,70 @@ export function attachRewardedInterstitial(ad: any, {
   onEarned: () => void;
   onClosed: () => void;
 }) {
-  console.log('🌐 웹 환경: 더미 광고 리스너 설정');
-  return () => console.log('�� 웹: 더미 리스너 해제');
+  // Expo Go에서는 더미 리스너 사용
+  if (isExpoGo()) {
+    console.log('📱 Expo Go 환경: 더미 광고 리스너 설정');
+    
+    // 실제 광고 플로우를 시뮬레이션
+    const unsubscribeLoaded = ad.addAdEventListener('loaded', () => {
+      console.log('📱 Expo Go: 광고 로드 완료');
+      onLoaded();
+    });
+    
+    const unsubscribeEarned = ad.addAdEventListener('earned_reward', () => {
+      console.log('📱 Expo Go: 보상 획득');
+      onEarned();
+    });
+    
+    const unsubscribeClosed = ad.addAdEventListener('closed', () => {
+      console.log('📱 Expo Go: 광고 종료');
+      onClosed();
+    });
+    
+    // 광고 로드 시작
+    ad.load();
+    
+    // 더미 광고에서 실제 플로우 시뮬레이션 (사용자가 광고를 보는 것처럼)
+    setTimeout(() => {
+      console.log('📱 Expo Go: 더미 광고 시청 시작 (3초 후 보상 지급)');
+      setTimeout(() => {
+        console.log('📱 Expo Go: 더미 광고 시청 완료, 보상 지급');
+        onEarned();
+        setTimeout(() => {
+          console.log('📱 Expo Go: 더미 광고 종료');
+          onClosed();
+        }, 500);
+      }, 3000); // 3초 후 보상 지급 (실제 광고 시청 시간 시뮬레이션)
+    }, 1000);
+    
+    return () => {
+      unsubscribeLoaded();
+      unsubscribeEarned();
+      unsubscribeClosed();
+    };
+  }
+
+  // 실제 빌드에서만 네이티브 모듈 사용
+  try {
+    const { RewardedAdEventType, AdEventType } = require('react-native-google-mobile-ads');
+    
+    console.log('🎯 광고 이벤트 리스너 설정');
+    
+    const unsubscribeLoaded = ad.addAdEventListener(RewardedAdEventType.LOADED, onLoaded);
+    const unsubscribeEarned = ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, onEarned);
+    const unsubscribeClosed = ad.addAdEventListener(AdEventType.CLOSED, onClosed);
+
+    // 광고 로드 시작
+    ad.load();
+
+    return () => {
+      unsubscribeLoaded();
+      unsubscribeEarned();
+      unsubscribeClosed();
+    };
+  } catch (error) {
+    console.error('❌ 네이티브 모듈 로드 실패:', error);
+    console.log('📱 더미 리스너로 대체');
+    return createExpoGoDummyListener();
+  }
 }
