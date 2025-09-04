@@ -33,6 +33,7 @@ export default function App(){
   const [, setDebugLogs] = useState<string[]>([]);
   const [showAdInfoModal, setShowAdInfoModal] = useState(false); // 광고 안내 모달
   const [showRewardDoneModal, setShowRewardDoneModal] = useState(false); // 적립 완료 모달
+  const [showAdRetryModal, setShowAdRetryModal] = useState(false); // 광고 재시도 모달
 
   // 보상 메시지 설정 함수
   const setRewardMessage = (totalReward: number, myIsMajority: boolean) => {
@@ -44,7 +45,11 @@ export default function App(){
   const [showTomorrowModal, setShowTomorrowModal] = useState(false); // 내일 다시 만나요 모달
 
 
-  const rewarded = useMemo(()=>createRewardedInterstitial(),[]);
+  const rewarded = useMemo(()=>{
+    // 광고 초기화를 먼저 실행
+    initAds();
+    return createRewardedInterstitial();
+  },[]);
 
   // 디버그 로그 추가 함수
   const addDebugLog = (message: string) => {
@@ -114,7 +119,7 @@ export default function App(){
       }
     });
     
-    initAds();
+    // 광고 초기화는 이미 useMemo에서 실행됨
     const detach = attachRewardedInterstitial(rewarded,{
       onLoaded:()=>{
         addDebugLog('🎯 광고 준비 완료!');
@@ -128,7 +133,10 @@ export default function App(){
       onClosed:()=>{ 
         addDebugLog('❌ 광고 종료, 새 광고 로드 시작');
         setAdReady(false); 
-        rewarded.load(); 
+        // 새 광고 로드 시작 (로드 완료는 onLoaded에서 처리됨)
+        setTimeout(() => {
+          rewarded.load();
+        }, 1000); // 1초 후 새 광고 로드
       }
     });
     return ()=>{ if(detach) detach(); };
@@ -978,13 +986,54 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
               광고 시청 후, 포인트를 적립하세요.
             </Text>
             <TouchableOpacity
-              onPress={() => {
+              onPress={async () => {
                 setShowAdInfoModal(false);
                 if (adReady) {
                   addDebugLog('📣 광고 표시(안내 모달 확인)');
                   rewarded.show();
                 } else {
-                  addDebugLog('⏳ 광고가 아직 준비되지 않음');
+                  addDebugLog('⏳ 광고가 아직 준비되지 않음, 재시도 시작');
+                  setMsg('광고를 준비 중입니다. 잠시만 기다려주세요...');
+                  
+                  // 광고 재로드 시도
+                  try {
+                    rewarded.load();
+                    
+                    // 광고 로드 완료를 기다리는 함수
+                    const waitForAdReady = () => {
+                      return new Promise<boolean>((resolve) => {
+                        const checkInterval = setInterval(() => {
+                          // 광고 객체의 실제 로드 상태 확인
+                          if (rewarded.isLoaded && rewarded.isLoaded()) {
+                            clearInterval(checkInterval);
+                            resolve(true);
+                          }
+                        }, 100);
+                        
+                        // 10초 후 타임아웃
+                        setTimeout(() => {
+                          clearInterval(checkInterval);
+                          resolve(false);
+                        }, 10000);
+                      });
+                    };
+                    
+                    // 광고 로드 완료 대기
+                    const isReady = await waitForAdReady();
+                    
+                    if (isReady) {
+                      addDebugLog('📣 광고 재로드 후 표시');
+                      rewarded.show();
+                    } else {
+                      addDebugLog('❌ 광고 로드 타임아웃');
+                      setMsg('광고 로드에 실패했습니다. 잠시 후 다시 시도해주세요.');
+                      setShowAdRetryModal(true); // 재시도 모달 표시
+                    }
+                  } catch (error) {
+                    addDebugLog(`❌ 광고 재로드 실패: ${error}`);
+                    setMsg('광고 로드에 실패했습니다. 잠시 후 다시 시도해주세요.');
+                    setShowAdRetryModal(true); // 재시도 모달 표시
+                  }
                 }
               }}
               style={{
@@ -1008,6 +1057,94 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
                 확인
               </Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* 광고 재시도 모달 */}
+      {showAdRetryModal && (
+        <View style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1100
+        }}>
+          <View style={{
+            backgroundColor: 'white',
+            borderRadius: 20,
+            padding: 24,
+            alignItems: 'center',
+            shadowColor: colors.shadow,
+            shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: 0.3,
+            shadowRadius: 16,
+            elevation: 8,
+            marginHorizontal: 40
+          }}>
+            <Text style={{
+              fontSize: 18,
+              fontWeight: '700',
+              color: colors.primary,
+              textAlign: 'center',
+              marginBottom: 8
+            }}>
+              광고 로드에 실패했습니다
+            </Text>
+            <Text style={{
+              fontSize: 14,
+              color: colors.textSecondary,
+              textAlign: 'center',
+              lineHeight: 22,
+              marginBottom: 20
+            }}>
+              네트워크 상태를 확인하고 다시 시도해주세요.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <TouchableOpacity
+                onPress={() => setShowAdRetryModal(false)}
+                style={{
+                  backgroundColor: colors.border,
+                  borderRadius: 12,
+                  paddingVertical: 12,
+                  paddingHorizontal: 24
+                }}
+              >
+                <Text style={{
+                  fontSize: 16,
+                  color: colors.text,
+                  fontWeight: '600',
+                  textAlign: 'center'
+                }}>
+                  취소
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={async () => {
+                  setShowAdRetryModal(false);
+                  setShowAdInfoModal(true);
+                }}
+                style={{
+                  backgroundColor: colors.primary,
+                  borderRadius: 12,
+                  paddingVertical: 12,
+                  paddingHorizontal: 24
+                }}
+              >
+                <Text style={{
+                  fontSize: 16,
+                  color: 'white',
+                  fontWeight: '600',
+                  textAlign: 'center'
+                }}>
+                  다시 시도
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       )}

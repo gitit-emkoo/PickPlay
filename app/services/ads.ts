@@ -19,6 +19,9 @@ const AD_UNITS = {
 // 더미 광고 객체 (Expo Go용)
 function createExpoGoDummyAd() {
   let isLoaded = false;
+  let isShowing = false;
+  let earnedCallback: (() => void) | null = null;
+  let closedCallback: (() => void) | null = null;
   
   return {
     load: () => {
@@ -29,14 +32,46 @@ function createExpoGoDummyAd() {
       }, 1000);
     },
     show: () => {
-      console.log('📱 Expo Go: 더미 광고 표시');
+      console.log('📱 Expo Go: 더미 광고 표시 시작');
       if (!isLoaded) {
         console.log('📱 Expo Go: 광고가 아직 로드되지 않음');
         return;
       }
+      
+      isShowing = true;
+      console.log('📱 Expo Go: 더미 광고 표시 중...');
+      
+      // 실제 광고 플로우 시뮬레이션 (3초 후 보상 지급)
+      setTimeout(() => {
+        console.log('📱 Expo Go: 더미 광고 시청 완료, 보상 지급');
+        isShowing = false;
+        // 보상 이벤트 트리거
+        if (earnedCallback) {
+          earnedCallback();
+        }
+        
+        // 광고 종료 이벤트 트리거 (0.5초 후)
+        setTimeout(() => {
+          console.log('📱 Expo Go: 더미 광고 종료');
+          if (closedCallback) {
+            closedCallback();
+          }
+        }, 500);
+      }, 3000);
     },
     addAdEventListener: (eventType: string, callback: () => void) => {
       console.log(`📱 Expo Go: 이벤트 리스너 등록 - ${eventType}`);
+      
+      // earned_reward 이벤트 콜백 저장
+      if (eventType === 'earned_reward') {
+        earnedCallback = callback;
+      }
+      
+      // closed 이벤트 콜백 저장
+      if (eventType === 'closed') {
+        closedCallback = callback;
+      }
+      
       return () => console.log(`📱 Expo Go: 이벤트 리스너 해제 - ${eventType}`);
     },
     isLoaded: () => isLoaded
@@ -119,19 +154,6 @@ export function attachRewardedInterstitial(ad: any, {
     
     // 광고 로드 시작
     ad.load();
-    
-    // 더미 광고에서 실제 플로우 시뮬레이션 (사용자가 광고를 보는 것처럼)
-    setTimeout(() => {
-      console.log('📱 Expo Go: 더미 광고 시청 시작 (3초 후 보상 지급)');
-      setTimeout(() => {
-        console.log('📱 Expo Go: 더미 광고 시청 완료, 보상 지급');
-        onEarned();
-        setTimeout(() => {
-          console.log('📱 Expo Go: 더미 광고 종료');
-          onClosed();
-        }, 500);
-      }, 3000); // 3초 후 보상 지급 (실제 광고 시청 시간 시뮬레이션)
-    }, 1000);
     
     return () => {
       unsubscribeLoaded();

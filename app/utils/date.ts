@@ -1,7 +1,10 @@
 // Date utility file
 export const dayIndex = () => {
-  // 한국시간 기준으로 요일 반환 (0=일요일, 1=월요일, ..., 6=토요일)
+  // 한국시간 기준으로 날짜 반환 (YYYYMMDD 형식)
   const now = new Date();
   const koreaTime = new Date(now.getTime() + (9 * 60 * 60 * 1000)); // UTC+9
-  return koreaTime.getDay();
+  const year = koreaTime.getFullYear();
+  const month = String(koreaTime.getMonth() + 1).padStart(2, '0');
+  const day = String(koreaTime.getDate()).padStart(2, '0');
+  return parseInt(`${year}${month}${day}`);
 };
