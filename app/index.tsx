@@ -286,7 +286,7 @@ export default function App(){
 
 매일 나를 마주하는 꾸준한 30초!
 오늘부터 긍정 루틴을 달성해 보세요👇
-(앱 다운로드 링크 준비중)` 
+https://play.google.com/store/apps/details?id=com.pickplay.kwcc` 
     });
   };
 
