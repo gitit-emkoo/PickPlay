@@ -4,11 +4,13 @@ import LottieView from 'lottie-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Image, ScrollView, Share, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import BannerAdComponent from './components/BannerAdComponent';
 import ErrorScreen from './components/ErrorScreen';
 import LoadingScreen from './components/LoadingScreen';
 import TutorialScreen from './components/TutorialScreen';
 import UserHeader from './components/UserHeader';
 import { attachRewardedInterstitial, createRewardedInterstitial, initAds } from './services/ads';
+import { initBannerAds } from './services/banner-ads';
 import { db, watchAuth } from './services/firebase';
 import { initializeNotifications, scheduleStreakNotification } from './services/notifications';
 import { aggregate, ensureUser, getOrAssignTodayQuestion, hasUserVoted, rewardWithMajority, saveVote, watchAggregation } from './services/store';
@@ -48,6 +50,7 @@ export default function App(){
   const rewarded = useMemo(()=>{
     // 광고 초기화를 먼저 실행
     initAds();
+    initBannerAds(); // 배너 광고 초기화
     return createRewardedInterstitial();
   },[]);
 
@@ -371,7 +374,7 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
       
       <SafeAreaView style={{flex:1, backgroundColor: colors.background}}>
         <ScrollView style={{flex:1}} contentContainerStyle={{flexGrow: 1}}>
-                      <View style={{flex:1, paddingHorizontal: 24, paddingTop: 5, paddingBottom: 180, justifyContent:'center'}}>
+                      <View style={{flex:1, paddingHorizontal: 24, paddingTop: 5, paddingBottom: 20, justifyContent:'center'}}>
         
                 {userData && <UserHeader userData={userData} />}
         
@@ -907,39 +910,40 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
               </TouchableOpacity>
             </View>
           </View>
-        )}
+                 )}
 
-        {/* 개발자 정보 */}
-        <View style={{
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          backgroundColor: colors.background,
-          paddingVertical: 12,
-          paddingHorizontal: 24,
-          borderTopWidth: 1,
-          borderTopColor: colors.border,
-          alignItems: 'center'
-        }}>
-          <Text style={{
-            fontSize: 12,
-            color: colors.textLight,
-            textAlign: 'center',
-            lineHeight: 16
-          }}>
-            © 2025 PickPlay{'\n'}
-            KWCC Co., Ltd. | Emkoo{'\n'}
-            907, Dongtan-daero 646-2{'\n'}
-            Hwaseong-si, Gyeonggi-do, Republic of Korea{'\n'}
-            e-mail: cokwcc@gmail.com{'\n'}
-            tel: +82-10-4857-4876{'\n'}
-            version: 1.0.0
-          </Text>
-        </View>
-          </View>
-        </ScrollView>
-      </SafeAreaView>
+         {/* 📺 배너 광고 */}
+         <BannerAdComponent />
+         
+         {/* 🏢 사업자 정보 (푸터) */}
+         <View style={{
+           backgroundColor: colors.background,
+           paddingVertical: 12,
+           paddingHorizontal: 24,
+           borderTopWidth: 1,
+           borderTopColor: colors.border,
+           alignItems: 'center',
+           marginTop: 20
+         }}>
+           <Text style={{
+             fontSize: 12,
+             color: colors.textLight,
+             textAlign: 'center',
+             lineHeight: 16
+           }}>
+             © 2025 PickPlay{'\n'}
+             KWCC Co., Ltd. | Emkoo{'\n'}
+             907, Dongtan-daero 646-2{'\n'}
+             Hwaseong-si, Gyeonggi-do, Republic of Korea{'\n'}
+             e-mail: cokwcc@gmail.com{'\n'}
+             tel: +82-10-4857-4876{'\n'}
+             version: 1.0.0
+           </Text>
+         </View>
+
+           </View>
+         </ScrollView>
+       </SafeAreaView>
 
 
       {/* 광고 안내 모달 */}

@@ -22,6 +22,7 @@ function createExpoGoDummyAd() {
   let isShowing = false;
   let earnedCallback: (() => void) | null = null;
   let closedCallback: (() => void) | null = null;
+  let loadedCallback: (() => void) | null = null;
   
   return {
     load: () => {
@@ -29,6 +30,9 @@ function createExpoGoDummyAd() {
       setTimeout(() => {
         isLoaded = true;
         console.log('📱 Expo Go: 더미 광고 로드 완료');
+        if (loadedCallback) {
+          loadedCallback();
+        }
       }, 1000);
     },
     show: () => {
@@ -61,6 +65,11 @@ function createExpoGoDummyAd() {
     },
     addAdEventListener: (eventType: string, callback: () => void) => {
       console.log(`📱 Expo Go: 이벤트 리스너 등록 - ${eventType}`);
+      
+      // loaded 이벤트 콜백 저장
+      if (eventType === 'loaded') {
+        loadedCallback = callback;
+      }
       
       // earned_reward 이벤트 콜백 저장
       if (eventType === 'earned_reward') {
@@ -152,8 +161,8 @@ export function attachRewardedInterstitial(ad: any, {
       onClosed();
     });
     
-    // 광고 로드 시작
-    ad.load();
+    // 광고 로드 시작 (자동 로드 제거)
+    // ad.load(); // ← 이 줄을 제거하여 자동 로드 방지
     
     return () => {
       unsubscribeLoaded();
