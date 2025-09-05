@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { attachBannerAd, createBannerAd } from '../services/banner-ads';
+import { getBannerAdUnitId, isExpoGo } from '../services/banner-ads';
 import colors from '../styles/colors';
 
 interface BannerAdComponentProps {
@@ -8,93 +8,74 @@ interface BannerAdComponentProps {
 }
 
 export default function BannerAdComponent({ style }: BannerAdComponentProps) {
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [isAdLoaded, setAdLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
-  const [bannerAd, setBannerAd] = useState<any>(null);
 
-  useEffect(() => {
-    const ad = createBannerAd();
-    setBannerAd(ad);
+  const adUnitId = useMemo(() => getBannerAdUnitId(), []);
 
-    const cleanup = attachBannerAd(ad, {
-      onLoaded: () => {
-        console.log('🎯 배너 광고 로드 완료');
-        setIsLoaded(true);
-        setHasError(false);
-      },
-      onError: () => {
-        console.log('❌ 배너 광고 로드 실패');
-        setHasError(true);
-        setIsLoaded(false);
-        
-        // 재시도 로직 (최대 3회)
-        if (retryCount < 3) {
-          setTimeout(() => {
-            console.log(`🔄 배너 광고 재시도 ${retryCount + 1}/3`);
-            setRetryCount(prev => prev + 1);
-            if ('load' in ad) {
-              ad.load();
-            }
-          }, 2000);
-        }
-      }
-    });
-
-    return cleanup;
-  }, [retryCount]);
-
-  // 로딩 중
-  if (!isLoaded && !hasError) {
+  // Expo Go 또는 네이티브 모듈 로드 실패 시 더미 UI 렌더링
+  if (isExpoGo() || !adUnitId) {
     return (
-      <View style={[styles.container, styles.loadingContainer, style]}>
-        <ActivityIndicator size="small" color={colors.primary} />
-        <Text style={styles.loadingText}>광고 로딩 중...</Text>
+      <View style={[styles.container, styles.dummyContainer, style]}>
+        <Text style={styles.dummyText}>📱 Expo Go: 배너 광고 영역</Text>
+        <Text style={styles.dummySubText}>실제 빌드에서는 광고가 표시됩니다</Text>
       </View>
     );
   }
 
-  // 에러 상태 (재시도 횟수 초과)
-  if (hasError && retryCount >= 3) {
+  // 실제 광고 렌더링
+  try {
+    const { BannerAd } = require('react-native-google-mobile-ads');
+    
+    return (
+      <View style={[styles.container, style]}>
+        {/* 로딩 인디케이터: 광고가 로드되지 않았고 에러가 없을 때만 표시 */}
+        {!isAdLoaded && !hasError && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={styles.loadingText}>광고 로딩 중...</Text>
+          </View>
+        )}
+
+        {/* 에러 메시지 */}
+        {hasError && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>광고를 불러올 수 없습니다</Text>
+          </View>
+        )}
+
+        {/* 
+          배너 광고 컴포넌트
+          - 로딩이 완료되면 기존 로딩 UI 위에 렌더링됩니다.
+          - 로딩 실패 시에는 보이지 않습니다.
+        */}
+        <BannerAd
+          unitId={adUnitId}
+          size="BANNER"
+          requestOptions={{
+            requestNonPersonalizedAdsOnly: true,
+          }}
+          onAdLoaded={() => {
+            console.log('🎯 배너 광고 로드 완료');
+            setAdLoaded(true);
+            setHasError(false);
+          }}
+          onAdFailedToLoad={(error) => {
+            console.error('❌ 배너 광고 로드 실패:', error);
+            setHasError(true);
+            setAdLoaded(false);
+          }}
+        />
+      </View>
+    );
+  } catch (error) {
+    console.error('❌ 배너 광고 컴포넌트 렌더링 실패:', error);
     return (
       <View style={[styles.container, styles.errorContainer, style]}>
-        <Text style={styles.errorText}>광고를 불러올 수 없습니다</Text>
+        <Text style={styles.errorText}>광고를 표시할 수 없습니다</Text>
       </View>
     );
   }
-
-  // 실제 배너 광고 (React Native Google Mobile Ads)
-  if (isLoaded && bannerAd && bannerAd.adUnitId) {
-    try {
-      const { BannerAd } = require('react-native-google-mobile-ads');
-      return (
-        <View style={[styles.container, style]}>
-          <BannerAd
-            unitId={bannerAd.adUnitId}
-            size="BANNER"
-            requestOptions={{
-              requestNonPersonalizedAdsOnly: true,
-            }}
-          />
-        </View>
-      );
-    } catch (error) {
-      console.error('❌ 배너 광고 렌더링 실패:', error);
-      return (
-        <View style={[styles.container, styles.errorContainer, style]}>
-          <Text style={styles.errorText}>광고를 표시할 수 없습니다</Text>
-        </View>
-      );
-    }
-  }
-
-  // Expo Go용 더미 배너
-  return (
-    <View style={[styles.container, styles.dummyContainer, style]}>
-      <Text style={styles.dummyText}>📱 Expo Go: 배너 광고 영역</Text>
-      <Text style={styles.dummySubText}>실제 빌드에서는 광고가 표시됩니다</Text>
-    </View>
-  );
 }
 
 const styles = StyleSheet.create({
@@ -102,10 +83,11 @@ const styles = StyleSheet.create({
     height: 50,
     justifyContent: 'center',
     alignItems: 'center',
-  
   },
   loadingContainer: {
+    position: 'absolute',
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
   loadingText: {
@@ -113,15 +95,23 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   errorContainer: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: '#fff3cd',
-    borderTopColor: '#ffeaa7',
   },
   errorText: {
     fontSize: 12,
     color: '#856404',
   },
   dummyContainer: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: '#e3f2fd',
+    borderTopWidth: 1,
     borderTopColor: '#bbdefb',
   },
   dummyText: {

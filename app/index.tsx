@@ -10,7 +10,6 @@ import LoadingScreen from './components/LoadingScreen';
 import TutorialScreen from './components/TutorialScreen';
 import UserHeader from './components/UserHeader';
 import { attachRewardedInterstitial, createRewardedInterstitial, initAds } from './services/ads';
-import { initBannerAds } from './services/banner-ads';
 import { db, watchAuth } from './services/firebase';
 import { initializeNotifications, scheduleStreakNotification } from './services/notifications';
 import { aggregate, ensureUser, getOrAssignTodayQuestion, hasUserVoted, rewardWithMajority, saveVote, watchAggregation } from './services/store';
@@ -50,7 +49,6 @@ export default function App(){
   const rewarded = useMemo(()=>{
     // 광고 초기화를 먼저 실행
     initAds();
-    initBannerAds(); // 배너 광고 초기화
     return createRewardedInterstitial();
   },[]);
 
