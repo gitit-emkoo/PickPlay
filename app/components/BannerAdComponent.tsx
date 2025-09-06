@@ -60,7 +60,7 @@ export default function BannerAdComponent({ style }: BannerAdComponentProps) {
             setAdLoaded(true);
             setHasError(false);
           }}
-          onAdFailedToLoad={(error) => {
+          onAdFailedToLoad={(error:Error) => {
             console.error('❌ 배너 광고 로드 실패:', error);
             setHasError(true);
             setAdLoaded(false);
@@ -99,11 +99,11 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff3cd',
+    backgroundColor: colors.surface,
   },
   errorText: {
     fontSize: 12,
-    color: '#856404',
+    color: colors.textLight,
   },
   dummyContainer: {
     width: '100%',

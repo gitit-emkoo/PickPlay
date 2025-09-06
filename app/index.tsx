@@ -628,18 +628,18 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
 
         {/* 결과 카드 - 투표 후에만 표시 (총합이 0이어도 먼저 노출하고 실시간/원격 집계로 갱신) */}
         {userChoice !== null && (
-          <View style={{
-            backgroundColor: colors.surface,
-            borderRadius: 16,
-            padding: 20,
-            marginBottom: 24,
-            shadowColor: colors.shadow,
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.05,
-            shadowRadius: 8,
-            elevation: 2
-          }}>
-                      <Text style={{
+        <View style={{
+          backgroundColor: colors.surface,
+          borderRadius: 16,
+          padding: 20,
+          marginBottom: 24,
+          shadowColor: colors.shadow,
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.05,
+          shadowRadius: 8,
+          elevation: 2
+        }}>
+          <Text style={{
             fontSize: 18,
             fontWeight: '700',
             color: colors.primary,
@@ -648,7 +648,7 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
           }}>
             PickPlay 유니버스 선택결과
           </Text>
-            
+          
                       {/* 단일 프로그레스바 */}
           <View style={{marginBottom: 16}}>
             {/* 선택지 정보 */}
@@ -689,16 +689,16 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
               </Text>
             </View>
           </View>
-            
-            <Text style={{
-              fontSize: 14,
-              color: colors.textLight,
-              textAlign: 'center',
-              marginTop: 16
-            }}>
-              총 {agg.total}명 참여
-            </Text>
-          </View>
+          
+          <Text style={{
+            fontSize: 14,
+            color: colors.textLight,
+            textAlign: 'center',
+            marginTop: 16
+          }}>
+            총 {agg.total}명 참여
+          </Text>
+        </View>
         )}
 
         {/* 공유 버튼 */}
@@ -939,8 +939,8 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
            </Text>
          </View>
 
-           </View>
-         </ScrollView>
+      </View>
+    </ScrollView>
        </SafeAreaView>
 
 

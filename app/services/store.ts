@@ -75,12 +75,12 @@ export async function hasUserVoted(uid: string, questionId: string): Promise<boo
   }
 }
 
-// 오늘 투표한 질문 ID를 저장
-export async function saveTodayQuestion(uid: string, questionId: string) {
+// 오늘 투표한 질문 ID를 저장하기
+export async function saveTodayQuestion(uid: string, questionId: string): Promise<void> {
   try {
-    // 요일 기반으로 저장 (AsyncStorage와 Firestore 일치)
-    const dIndex = dayIndex();
-    const todayQuestionKey = `today_question_${uid}_${dIndex}`;
+    // 참여 여부 기록은 '날짜' 기준으로 저장
+    const dateKey = currentDateKey();
+    const todayQuestionKey = `today_question_${uid}_${dateKey}`;
     await AsyncStorage.setItem(todayQuestionKey, questionId);
   } catch (error) {
     console.error('오늘 질문 저장 에러:', error);
@@ -90,9 +90,9 @@ export async function saveTodayQuestion(uid: string, questionId: string) {
 // 오늘 투표한 질문 ID를 가져오기
 export async function getTodayQuestion(uid: string): Promise<string | null> {
   try {
-    // 요일 기반으로 조회 (AsyncStorage와 Firestore 일치)
-    const dIndex = dayIndex();
-    const todayQuestionKey = `today_question_${uid}_${dIndex}`;
+    // 참여 여부 조회는 '날짜' 기준으로 수행
+    const dateKey = currentDateKey();
+    const todayQuestionKey = `today_question_${uid}_${dateKey}`;
     return await AsyncStorage.getItem(todayQuestionKey);
   } catch (error) {
     console.error('오늘 질문 조회 에러:', error);
@@ -100,12 +100,13 @@ export async function getTodayQuestion(uid: string): Promise<string | null> {
   }
 }
 
+
 // UID 변경 시 기존 데이터를 새 UID로 복사
 // 사용하지 않는 마이그레이션 유틸 제거
 
 import { Question } from '../types';
 import { pickSlot } from '../utils/abtest';
-import { dayIndex } from '../utils/date';
+import { currentDateKey, dayIndex } from '../utils/date';
 
 export async function getQuestionBy(dayIndex: number, slot: string): Promise<Question | null> {
   try {
