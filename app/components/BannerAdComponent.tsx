@@ -46,26 +46,28 @@ export default function BannerAdComponent({ style }: BannerAdComponentProps) {
 
         {/* 
           배너 광고 컴포넌트
-          - 로딩이 완료되면 기존 로딩 UI 위에 렌더링됩니다.
-          - 로딩 실패 시에는 보이지 않습니다.
+          - 에러가 없을 때만 렌더링합니다.
+          - 에러가 있으면 렌더링하지 않아서 중복 표시를 방지합니다.
         */}
-        <BannerAd
-          unitId={adUnitId}
-          size="BANNER"
-          requestOptions={{
-            requestNonPersonalizedAdsOnly: true,
-          }}
-          onAdLoaded={() => {
-            console.log('🎯 배너 광고 로드 완료');
-            setAdLoaded(true);
-            setHasError(false);
-          }}
-          onAdFailedToLoad={(error:Error) => {
-            console.error('❌ 배너 광고 로드 실패:', error);
-            setHasError(true);
-            setAdLoaded(false);
-          }}
-        />
+        {!hasError && (
+          <BannerAd
+            unitId={adUnitId}
+            size="BANNER"
+            requestOptions={{
+              requestNonPersonalizedAdsOnly: true,
+            }}
+            onAdLoaded={() => {
+              console.log('🎯 배너 광고 로드 완료');
+              setAdLoaded(true);
+              setHasError(false);
+            }}
+            onAdFailedToLoad={(error:Error) => {
+              console.error('❌ 배너 광고 로드 실패:', error);
+              setHasError(true);
+              setAdLoaded(false);
+            }}
+          />
+        )}
       </View>
     );
   } catch (error) {

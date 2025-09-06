@@ -751,11 +751,11 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
             style={{
               marginTop: 20,
               alignSelf: 'center',
-              backgroundColor: rewardCompleted ? '#A3A3A3' : '#6C63FF',
+              backgroundColor: rewardCompleted ? '#A3A3A3' : colors.primary,
               borderRadius: 12,
               paddingVertical: 16,
               paddingHorizontal: 32,
-              shadowColor: '#6C63FF',
+              shadowColor: colors.primary,
               shadowOffset: { width: 0, height: 4 },
               shadowOpacity: 0.3,
               shadowRadius: 8,
