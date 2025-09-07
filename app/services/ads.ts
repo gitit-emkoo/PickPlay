@@ -92,7 +92,7 @@ function createExpoGoDummyListener() {
   return () => console.log('📱 Expo Go: 더미 리스너 해제');
 }
 
-export async function initAds() {
+export async function initAds() { 
   if (isExpoGo()) {
     console.log('📱 Expo Go 환경: 광고 초기화 건너뛰기');
     return;
@@ -176,19 +176,19 @@ export function attachRewardedInterstitial(ad: any, {
     const { RewardedAdEventType, AdEventType } = require('react-native-google-mobile-ads');
     
     console.log('🎯 광고 이벤트 리스너 설정');
-    
-    const unsubscribeLoaded = ad.addAdEventListener(RewardedAdEventType.LOADED, onLoaded);
-    const unsubscribeEarned = ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, onEarned);
-    const unsubscribeClosed = ad.addAdEventListener(AdEventType.CLOSED, onClosed);
+  
+  const unsubscribeLoaded = ad.addAdEventListener(RewardedAdEventType.LOADED, onLoaded);
+  const unsubscribeEarned = ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, onEarned);
+  const unsubscribeClosed = ad.addAdEventListener(AdEventType.CLOSED, onClosed);
 
-    // 광고 로드 시작
-    ad.load();
+  // 광고 로드 시작
+  ad.load();
 
-    return () => {
-      unsubscribeLoaded();
-      unsubscribeEarned();
-      unsubscribeClosed();
-    };
+  return () => {
+    unsubscribeLoaded();
+    unsubscribeEarned();
+    unsubscribeClosed();
+  };
   } catch (error) {
     console.error('❌ 네이티브 모듈 로드 실패:', error);
     console.log('📱 더미 리스너로 대체');

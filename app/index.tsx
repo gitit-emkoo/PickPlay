@@ -136,7 +136,7 @@ export default function App(){
         setAdReady(false); 
         // 새 광고 로드 시작 (로드 완료는 onLoaded에서 처리됨)
         setTimeout(() => {
-          rewarded.load();
+        rewarded.load(); 
         }, 1000); // 1초 후 새 광고 로드
       }
     });
@@ -628,18 +628,18 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
 
         {/* 결과 카드 - 투표 후에만 표시 (총합이 0이어도 먼저 노출하고 실시간/원격 집계로 갱신) */}
         {userChoice !== null && (
-        <View style={{
-          backgroundColor: colors.surface,
-          borderRadius: 16,
-          padding: 20,
-          marginBottom: 24,
-          shadowColor: colors.shadow,
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.05,
-          shadowRadius: 8,
-          elevation: 2
-        }}>
-          <Text style={{
+          <View style={{
+            backgroundColor: colors.surface,
+            borderRadius: 16,
+            padding: 20,
+            marginBottom: 24,
+            shadowColor: colors.shadow,
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.05,
+            shadowRadius: 8,
+            elevation: 2
+          }}>
+                      <Text style={{
             fontSize: 18,
             fontWeight: '700',
             color: colors.primary,
@@ -648,7 +648,7 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
           }}>
             PickPlay 유니버스 선택결과
           </Text>
-          
+            
                       {/* 단일 프로그레스바 */}
           <View style={{marginBottom: 16}}>
             {/* 선택지 정보 */}
@@ -689,16 +689,16 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
               </Text>
             </View>
           </View>
-          
-          <Text style={{
-            fontSize: 14,
-            color: colors.textLight,
-            textAlign: 'center',
-            marginTop: 16
-          }}>
-            총 {agg.total}명 참여
-          </Text>
-        </View>
+            
+            <Text style={{
+              fontSize: 14,
+              color: colors.textLight,
+              textAlign: 'center',
+              marginTop: 16
+            }}>
+              총 {agg.total}명 참여
+            </Text>
+          </View>
         )}
 
         {/* 공유 버튼 */}
@@ -908,40 +908,40 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
               </TouchableOpacity>
             </View>
           </View>
-                 )}
+        )}
 
          {/* 📺 배너 광고 */}
          <BannerAdComponent />
          
          {/* 🏢 사업자 정보 (푸터) */}
-         <View style={{
-           backgroundColor: colors.background,
-           paddingVertical: 12,
-           paddingHorizontal: 24,
-           borderTopWidth: 1,
-           borderTopColor: colors.border,
+        <View style={{
+          backgroundColor: colors.background,
+          paddingVertical: 12,
+          paddingHorizontal: 24,
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
            alignItems: 'center',
            marginTop: 20
-         }}>
-           <Text style={{
-             fontSize: 12,
-             color: colors.textLight,
-             textAlign: 'center',
-             lineHeight: 16
-           }}>
-             © 2025 PickPlay{'\n'}
-             KWCC Co., Ltd. | Emkoo{'\n'}
-             907, Dongtan-daero 646-2{'\n'}
-             Hwaseong-si, Gyeonggi-do, Republic of Korea{'\n'}
-             e-mail: cokwcc@gmail.com{'\n'}
-             tel: +82-10-4857-4876{'\n'}
-             version: 1.0.0
-           </Text>
-         </View>
+        }}>
+          <Text style={{
+            fontSize: 12,
+            color: colors.textLight,
+            textAlign: 'center',
+            lineHeight: 16
+          }}>
+            © 2025 PickPlay{'\n'}
+            KWCC Co., Ltd. | Emkoo{'\n'}
+            907, Dongtan-daero 646-2{'\n'}
+            Hwaseong-si, Gyeonggi-do, Republic of Korea{'\n'}
+            e-mail: cokwcc@gmail.com{'\n'}
+            tel: +82-10-4857-4876{'\n'}
+            version: 1.0.0
+          </Text>
+        </View>
 
-      </View>
-    </ScrollView>
-       </SafeAreaView>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
 
 
       {/* 광고 안내 모달 */}
@@ -1081,17 +1081,17 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
             borderRadius: 20,
             padding: 24,
             alignItems: 'center',
-            shadowColor: colors.shadow,
+          shadowColor: colors.shadow,
             shadowOffset: { width: 0, height: 8 },
             shadowOpacity: 0.3,
             shadowRadius: 16,
             elevation: 8,
             marginHorizontal: 40
-          }}>
-            <Text style={{
+        }}>
+          <Text style={{
               fontSize: 18,
-              fontWeight: '700',
-              color: colors.primary,
+            fontWeight: '700',
+            color: colors.primary,
               textAlign: 'center',
               marginBottom: 8
             }}>
@@ -1145,7 +1145,7 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
                 }}>
                   다시 시도
                 </Text>
-              </TouchableOpacity>
+          </TouchableOpacity>
             </View>
           </View>
         </View>

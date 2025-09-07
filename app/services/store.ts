@@ -43,35 +43,41 @@ export async function ensureUser(uid: string) {
   }
 }
 
-// 사용자가 이미 해당 질문에 투표했는지 확인
+// 사용자가 오늘 이미 해당 질문에 투표했는지 확인 (날짜 기준)
 export async function hasUserVoted(uid: string, questionId: string): Promise<boolean> {
   try {
-    console.log('🔍 투표 확인 시작:', { uid, questionId });
+    const dateKey = currentDateKey();
+    const voteKey = `vote_${questionId}_${dateKey}`;
     
-    // 먼저 AsyncStorage에서 확인
-    const savedVote = await AsyncStorage.getItem(`vote_${questionId}`);
+    // 1. AsyncStorage에서 오늘 날짜의 투표 기록 확인
+    const savedVote = await AsyncStorage.getItem(voteKey);
     if (savedVote) {
       const voteData = JSON.parse(savedVote);
       if (voteData.uid === uid) {
-        console.log('🔍 AsyncStorage에서 투표 기록 발견:', voteData);
         return true;
       }
     }
-    
-    // Firestore에서 확인
+
+    // 2. Firestore에서 오늘 날짜의 투표 기록 확인 (백업용)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // 오늘 날짜의 시작
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1); // 내일 날짜의 시작
+
     const snap = await getDocs(
       query(
         collection(db, 'votes'), 
         where('uid', '==', uid), 
-        where('questionId', '==', questionId)
+        where('questionId', '==', questionId),
+        where('timestamp', '>=', today.toISOString()),
+        where('timestamp', '<', tomorrow.toISOString())
       )
     );
-    const hasVoted = !snap.empty;
-    console.log('🔍 Firestore 투표 확인 결과:', { uid, questionId, hasVoted, count: snap.size });
-    return hasVoted;
+    
+    return !snap.empty;
   } catch (error) {
     console.error('투표 확인 에러:', error);
-    return false;
+    return false; // 에러 발생 시 투표를 막지 않도록 false 반환
   }
 }
 
@@ -288,9 +294,9 @@ export async function getOrAssignTodayQuestion(uid: string): Promise<Question | 
 
 export async function saveVote(uid: string, questionId: string, optionIndex: number) {
   try {
-    // 중복 투표 확인
+    // 중복 투표 확인 (오늘 날짜 기준)
     if (await hasUserVoted(uid, questionId)) {
-      throw new Error('이미 투표한 질문입니다.');
+      throw new Error('오늘 이미 투표한 질문입니다.');
     }
     
     // 투표 기록 저장 (Firestore + 로컬)
@@ -304,8 +310,10 @@ export async function saveVote(uid: string, questionId: string, optionIndex: num
       console.error('❌ Firestore 투표 저장 실패, 로컬로만 저장합니다:', fireError);
     }
 
-    // 로컬 백업 저장
-    await AsyncStorage.setItem(`vote_${questionId}`, JSON.stringify(voteRecord));
+    // 로컬 백업 저장 (날짜 포함 키 사용)
+    const dateKey = currentDateKey();
+    const voteKey = `vote_${questionId}_${dateKey}`;
+    await AsyncStorage.setItem(voteKey, JSON.stringify(voteRecord));
     console.log('✅ AsyncStorage 투표 기록 저장:', voteRecord);
     
     // 오늘 질문으로 저장 (하루 종일 이 질문을 보여주기 위해)
