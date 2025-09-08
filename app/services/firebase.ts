@@ -88,26 +88,16 @@ async function saveUserData(data: { points: number; streakCount: number; lastAns
   }
 }
 
-// Firebase 익명 로그인 감시 (실제 Firebase UID 사용)
+// Firebase 익명 로그인 감시 (실제 Firebase UID 사용 보장)
 export function watchAuth(callback: (user: { uid: string } | null) => void) {
   const unsub = auth.onAuthStateChanged(async (u: any) => {
     try {
       if (u) {
-        // 이미 로그인된 사용자가 있으면 UID 저장하고 콜백 호출
         await saveUID(u.uid);
         callback({ uid: u.uid });
         return;
       }
-      
-      // 저장된 UID가 있는지 확인
-      const savedUID = await getSavedUID();
-      if (savedUID) {
-        // 저장된 UID가 있으면 그대로 사용
-        callback({ uid: savedUID });
-        return;
-      }
-      
-      // 저장된 UID가 없으면 새로운 익명 로그인 수행
+      // 로그인 사용자가 없으면 반드시 익명 로그인 실행
       const result = await signInAnonymously(auth);
       const uid = result.user.uid;
       await saveUID(uid);
@@ -120,22 +110,13 @@ export function watchAuth(callback: (user: { uid: string } | null) => void) {
   return unsub;
 }
 
-// 앱 시작 시 익명 인증 강제 실행
+// 앱 시작/중요 동작 전 익명 인증 강제 실행 (항상 실제 사용자 확보)
 export async function forceAnonymousAuth() {
   try {
     const currentUser = auth.currentUser;
     if (currentUser) {
       return currentUser;
     }
-    
-    // 저장된 UID가 있는지 확인
-    const savedUID = await getSavedUID();
-    if (savedUID) {
-      // 저장된 UID가 있으면 그대로 반환 (실제 Firebase 사용자 객체는 아니지만 UID는 유지)
-      return { uid: savedUID } as any;
-    }
-    
-    // 저장된 UID가 없으면 새로운 익명 로그인 수행
     const result = await signInAnonymously(auth);
     return result.user;
   } catch (error) {

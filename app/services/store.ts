@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, where } from 'firebase/firestore';
 import { generateRandomNickname } from '../utils/nickname';
-import { db } from './firebase';
+import { db, forceAnonymousAuth } from './firebase';
 
 
 export async function ensureUser(uid: string) {
@@ -312,22 +312,30 @@ export async function getOrAssignTodayQuestion(uid: string): Promise<Question | 
 
 export async function saveVote(uid: string, questionId: string, optionIndex: number) {
   try {
+    // 실제 인증 보장
+    try {
+      const authed = await forceAnonymousAuth();
+      console.log('auth ensured uid:', (authed as any)?.uid, 'param uid:', uid);
+    } catch (e) {
+      console.error('auth ensure failed:', e);
+    }
+
     // 중복 투표 확인 (오늘 날짜 기준)
     if (await hasUserVoted(uid, questionId)) {
       throw new Error('오늘 이미 투표한 질문입니다.');
     }
     
     // 투표 기록 저장 (Firestore + 로컬)
-    const voteRecord = { uid, questionId, optionIndex, timestamp: new Date().toISOString() };
+    const voteRecord = { uid, questionId, optionIndex: Number(optionIndex), timestamp: new Date().toISOString() };
 
     // Firestore 저장
     try {
       await addDoc(collection(db, 'votes'), voteRecord);
       console.log('✅ Firestore 투표 기록 저장:', voteRecord);
-    } catch (fireError) {
-      console.error('❌ Firestore 투표 저장 실패:', fireError);
+    } catch (fireError: any) {
+      console.error('❌ Firestore 투표 저장 실패:', fireError?.code || fireError);
       // 실패 시 함수를 즉시 중단시키고 에러를 던짐
-      throw new Error('서버에 투표를 기록하지 못했습니다.');
+      throw new Error(fireError?.code === 'permission-denied' ? '인증이 필요합니다. 다시 시도해주세요.' : '서버에 투표를 기록하지 못했습니다.');
     }
 
     // Firestore 저장이 성공했을 때만 아래 로컬 저장 로직이 실행됨
