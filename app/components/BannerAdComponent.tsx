@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, AppState, StyleSheet, Text, View } from 'react-native';
 import { getBannerAdUnitId, isExpoGo } from '../services/banner-ads';
 import colors from '../styles/colors';
 
@@ -10,6 +10,10 @@ interface BannerAdComponentProps {
 export default function BannerAdComponent({ style }: BannerAdComponentProps) {
   const [isAdLoaded, setAdLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const retryTimerRef = useRef<any>(null);
+  const retryAttemptRef = useRef(0);
 
   const adUnitId = useMemo(() => getBannerAdUnitId(), []);
 
@@ -23,9 +27,35 @@ export default function BannerAdComponent({ style }: BannerAdComponentProps) {
     );
   }
 
+  // AppState 복귀 시 재로드
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        // 포그라운드 복귀 시 즉시 재시도
+        retryAttemptRef.current = 0;
+        setHasError(false);
+        setReloadKey((v) => v + 1);
+      }
+    });
+    return () => {
+      sub.remove();
+    };
+  }, []);
+
+  // 재시도 스케줄링
+  const scheduleRetry = () => {
+    if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    const delay = Math.min(60000, 5000 * Math.pow(2, retryAttemptRef.current)); // 5s → 10s → 20s ... 최대 60s
+    retryAttemptRef.current += 1;
+    retryTimerRef.current = setTimeout(() => {
+      setHasError(false);
+      setReloadKey((v) => v + 1); // Banner 리마운트
+    }, delay);
+  };
+
   // 실제 광고 렌더링
   try {
-    const { BannerAd } = require('react-native-google-mobile-ads');
+    const { BannerAd, BannerAdSize } = require('react-native-google-mobile-ads');
     
     return (
       <View style={[styles.container, style]}>
@@ -37,36 +67,32 @@ export default function BannerAdComponent({ style }: BannerAdComponentProps) {
           </View>
         )}
 
-        {/* 에러 메시지 */}
-        {hasError && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>광고를 불러올 수 없습니다</Text>
-          </View>
-        )}
+        {/* 배너 광고는 항상 마운트하여 자동 재시도가 가능하도록 유지 */}
+        <BannerAd
+          key={reloadKey}
+          unitId={adUnitId}
+          size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+          requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+          onAdLoaded={() => {
+            console.log('🎯 배너 광고 로드 완료');
+            if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+            retryAttemptRef.current = 0;
+            setAdLoaded(true);
+            setHasError(false);
+          }}
+          onAdFailedToLoad={(error: any) => {
+            console.error('❌ 배너 광고 로드 실패:', error?.code || error);
+            setHasError(true);
+            setAdLoaded(false);
+            scheduleRetry();
+          }}
+        />
 
-        {/* 
-          배너 광고 컴포넌트
-          - 에러가 없을 때만 렌더링합니다.
-          - 에러가 있으면 렌더링하지 않아서 중복 표시를 방지합니다.
-        */}
-        {!hasError && (
-          <BannerAd
-            unitId={adUnitId}
-            size="BANNER"
-            requestOptions={{
-              requestNonPersonalizedAdsOnly: true,
-            }}
-            onAdLoaded={() => {
-              console.log('🎯 배너 광고 로드 완료');
-              setAdLoaded(true);
-              setHasError(false);
-            }}
-            onAdFailedToLoad={(error:Error) => {
-              console.error('❌ 배너 광고 로드 실패:', error);
-              setHasError(true);
-              setAdLoaded(false);
-            }}
-          />
+        {/* 에러 오버레이(공간 유지 + 사용자 안내). 재시도는 백그라운드에서 진행 */}
+        {hasError && (
+          <View style={styles.errorOverlay} pointerEvents="none">
+            <Text style={styles.errorText}>광고를 불러오지 못했습니다. 잠시 후 다시 시도합니다…</Text>
+          </View>
         )}
       </View>
     );
@@ -103,13 +129,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.surface,
   },
+  errorOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    top: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
   errorText: {
     fontSize: 12,
     color: colors.textLight,
   },
   dummyContainer: {
     width: '100%',
-    height: '100%',
+    height: 50,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#e3f2fd',

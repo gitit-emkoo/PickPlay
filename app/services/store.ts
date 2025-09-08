@@ -19,26 +19,44 @@ export async function ensureUser(uid: string) {
         userData.nickname = autoNickname;
         await AsyncStorage.setItem(userDataKey, JSON.stringify(userData));
       }
+
+      // 총 참여 누계 필드가 없으면 최초 1회 보정
+      if (userData.totalSelections === undefined) {
+        try {
+          const snap = await getDocs(
+            query(
+              collection(db, 'votes'),
+              where('uid', '==', uid)
+            )
+          );
+          userData.totalSelections = snap.size || 0;
+          await AsyncStorage.setItem(userDataKey, JSON.stringify(userData));
+        } catch (e) {
+          // 카운트 실패 시 0으로 초기화
+          userData.totalSelections = 0;
+          await AsyncStorage.setItem(userDataKey, JSON.stringify(userData));
+        }
+      }
       
       return userData;
     } else {
       // 새 사용자 데이터 생성 (자동 랜덤닉네임 할당)
       try {
         const autoNickname = generateRandomNickname();
-        const newUserData = { points: 0, streakCount: 0, lastAnswerDate: '', nickname: autoNickname };
+        const newUserData = { points: 0, streakCount: 0, lastAnswerDate: '', nickname: autoNickname, totalSelections: 0 };
         await AsyncStorage.setItem(userDataKey, JSON.stringify(newUserData));
         return newUserData;
       } catch (nicknameError) {
         console.error('닉네임 생성 실패:', nicknameError);
         const fallbackNickname = '익명사용자😊';
-        const newUserData = { points: 0, streakCount: 0, lastAnswerDate: '', nickname: fallbackNickname };
+        const newUserData = { points: 0, streakCount: 0, lastAnswerDate: '', nickname: fallbackNickname, totalSelections: 0 };
         await AsyncStorage.setItem(userDataKey, JSON.stringify(newUserData));
         return newUserData;
       }
     }
   } catch (error) {
     console.error('사용자 데이터 로드 실패:', error);
-    const defaultData = { points: 0, streakCount: 0, lastAnswerDate: '', nickname: '익명사용자😊' };
+    const defaultData = { points: 0, streakCount: 0, lastAnswerDate: '', nickname: '익명사용자😊', totalSelections: 0 };
     return defaultData;
   }
 }
@@ -307,9 +325,12 @@ export async function saveVote(uid: string, questionId: string, optionIndex: num
       await addDoc(collection(db, 'votes'), voteRecord);
       console.log('✅ Firestore 투표 기록 저장:', voteRecord);
     } catch (fireError) {
-      console.error('❌ Firestore 투표 저장 실패, 로컬로만 저장합니다:', fireError);
+      console.error('❌ Firestore 투표 저장 실패:', fireError);
+      // 실패 시 함수를 즉시 중단시키고 에러를 던짐
+      throw new Error('서버에 투표를 기록하지 못했습니다.');
     }
 
+    // Firestore 저장이 성공했을 때만 아래 로컬 저장 로직이 실행됨
     // 로컬 백업 저장 (날짜 포함 키 사용)
     const dateKey = currentDateKey();
     const voteKey = `vote_${questionId}_${dateKey}`;
@@ -321,10 +342,53 @@ export async function saveVote(uid: string, questionId: string, optionIndex: num
     
     // 로컬 투표 집계 업데이트
     await updateLocalVoteCount(questionId, optionIndex);
+
+    // 선택 완료 시점에 연속 참여일수 업데이트
+    await _updateStreakOnVote(uid);
   } catch (error) {
     console.error('❌ 투표 저장 실패:', error);
     throw error;
   }
+}
+
+/** [내부함수] 선택 시점에 연속 참여일수 업데이트 */
+async function _updateStreakOnVote(uid: string) {
+  const today = new Date().toISOString().slice(0, 10);
+  const userDataKey = `userData_${uid}`;
+  const existingUserData = await AsyncStorage.getItem(userDataKey);
+  let userData = existingUserData ? JSON.parse(existingUserData) : { points: 0, streakCount: 0, lastAnswerDate: '', nickname: '익명사용자😊', totalSelections: 0 };
+
+  let next = 1;
+  if (userData.lastAnswerDate) {
+    const diffDays = Math.floor((new Date(today).getTime() - new Date(userData.lastAnswerDate).getTime()) / (1000 * 60 * 60 * 24));
+    console.log('📅 출석 계산:', {
+      lastAnswerDate: userData.lastAnswerDate,
+      today,
+      diffDays,
+      currentStreak: userData.streakCount
+    });
+
+    if (diffDays === 0) {
+      // 오늘 이미 투표했으면 현재 streak 유지
+      next = userData.streakCount || 1;
+    } else if (diffDays === 1) {
+      // 어제 투표했으면 연속 참여
+      next = (userData.streakCount || 0) + 1;
+    } else {
+      // 하루라도 건너뛰었으면 1일차로 리셋
+      next = 1;
+    }
+  }
+
+  const updatedUserData = {
+    ...userData,
+    streakCount: next,
+    lastAnswerDate: today,
+    totalSelections: ((userData.totalSelections as number) || 0) + 1, // 총 참여 누계 +1
+  };
+
+  await AsyncStorage.setItem(userDataKey, JSON.stringify(updatedUserData));
+  console.log('✅ [투표 시점] 연속 참여일수/총 참여수 업데이트:', updatedUserData);
 }
 
 // 로컬 투표 집계 업데이트
@@ -397,46 +461,19 @@ export async function rewardWithMajority(uid: string, questionId: string, myOpti
   let base = myIsMajority ? 5 : 10;
 
 
-  // 연속 참여 배수 보상 계산
-  const today = new Date().toISOString().slice(0,10);
-
-  
-  // 로컬 사용자 데이터 업데이트
+  // 로컬 사용자 데이터 읽기 (이미 streakCount는 투표 시점에 업데이트 된 상태)
   const userDataKey = `userData_${uid}`;
   const existingUserData = await AsyncStorage.getItem(userDataKey);
   let userData = existingUserData ? JSON.parse(existingUserData) : { points: 0, streakCount: 0, lastAnswerDate: '', nickname: '익명사용자😊' };
-
-  let next = 1;
-
-  if (userData.lastAnswerDate) {
-    const diffDays = Math.floor((new Date(today).getTime() - new Date(userData.lastAnswerDate).getTime())/(1000*60*60*24));
-    console.log('📅 출석 계산:', { 
-      lastAnswerDate: userData.lastAnswerDate, 
-      today, 
-      diffDays, 
-      currentStreak: userData.streakCount 
-    });
-    
-    if (diffDays === 0) {
-      // 오늘 이미 투표했으면 현재 streak 유지
-      next = userData.streakCount || 1;
-    } else if (diffDays === 1) {
-      // 어제 투표했으면 연속 참여
-      next = (userData.streakCount || 0) + 1;
-    } else {
-      // 하루라도 건너뛰었으면 1일차로 리셋
-      next = 1;
-    }
-    
-    console.log('📅 계산된 next:', next);
-  }
+  
+  const currentStreak = userData.streakCount || 0;
 
   // 연속 참여 배수 보상 적용
   let multiplier = 1;
-  if (next >= 21) {
+  if (currentStreak >= 21) {
     multiplier = 3; // 20일 이상: 3배
     console.log('🎉 20일 연속 참여! 3배 보상 적용');
-  } else if (next >= 11) {
+  } else if (currentStreak >= 11) {
     multiplier = 2; // 10일 이상: 2배
     console.log('🎉 10일 연속 참여! 2배 보상 적용');
   }
@@ -445,18 +482,15 @@ export async function rewardWithMajority(uid: string, questionId: string, myOpti
   base = base * multiplier;
 
   const updatedData = {
+    ...userData, // streakCount, lastAnswerDate, nickname 등은 유지
     points: ((userData.points as number)||0) + base,
-    streakCount: next,
-    lastAnswerDate: today,
-
-    nickname: userData.nickname, // 닉네임 유지
   };
 
-  // 로컬에 사용자 데이터 저장
+  // 로컬에 사용자 데이터 저장 (포인트만 업데이트)
   await AsyncStorage.setItem(userDataKey, JSON.stringify(updatedData));
-  console.log('✅ 로컬 사용자 데이터 업데이트:', updatedData);
+  console.log('✅ [보상 시점] 포인트 업데이트:', updatedData);
 
-  return { base, myIsMajority, next, agg };
+  return { base, myIsMajority, next: currentStreak, agg };
 }
 
 

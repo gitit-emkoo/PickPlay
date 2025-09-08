@@ -8,11 +8,14 @@ interface UserHeaderProps {
     points: number;
     streakCount: number;
     nickname: string;
+    totalSelections?: number;
   };
 }
 
 export default function UserHeader({ userData }: UserHeaderProps) {
   const [showModal, setShowModal] = useState(false);
+
+  const remainingForAnima = Math.max(0, 30 - ((userData.totalSelections ?? 0)));
 
   return (
     <View style={{
@@ -225,7 +228,7 @@ export default function UserHeader({ userData }: UserHeaderProps) {
               textAlign: 'center',
               lineHeight: 22
             }}>
-              AnimaCode 생성을 위한 30번의 선택이 쌓이면,
+              AnimaCode 생성을 위한 {remainingForAnima}번의 선택이 쌓이면,
               너의 내면의 캐릭터가 탄생하고 
               진짜 이름과 여정이 시작돼! 
               아직은 알 속, 하지만 곧 깨어날 거야. 기대해!
