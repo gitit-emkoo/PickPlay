@@ -31,7 +31,7 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 
 // 기기별 고유 ID 생성 (기기마다 고정)
-async function getDeviceUID(): Promise<string> {
+export async function getDeviceUID(): Promise<string> {
   try {
     let deviceUID = await AsyncStorage.getItem('deviceUID');
     

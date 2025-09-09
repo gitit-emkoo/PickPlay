@@ -1,13 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, where } from 'firebase/firestore';
 import { generateRandomNickname } from '../utils/nickname';
-import { db, forceAnonymousAuth } from './firebase';
+import { db, forceAnonymousAuth, getDeviceUID } from './firebase';
 
 
 export async function ensureUser(uid: string) {
   try {
-    // 로컬 사용자 데이터 사용
-    const userDataKey = `userData_${uid}`;
+    // 로컬 사용자 데이터는 deviceUID 기준으로 저장
+    const deviceUID = await getDeviceUID();
+    const userDataKey = `userData_${deviceUID}`;
     const savedData = await AsyncStorage.getItem(userDataKey);
     
     if (savedData) {
@@ -76,19 +77,23 @@ export async function hasUserVoted(uid: string, questionId: string): Promise<boo
       }
     }
 
-    // 2. Firestore에서 오늘 날짜의 투표 기록 확인 (백업용)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); // 오늘 날짜의 시작
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1); // 내일 날짜의 시작
+    // 2. Firestore에서 오늘(KST) 날짜의 투표 기록 확인
+    // KST 00:00의 UTC 시각 = Date.UTC(y, m-1, d, -9)
+    const y = Math.floor(dateKey / 10000);
+    const m = Math.floor((dateKey % 10000) / 100);
+    const d = dateKey % 100;
+    const kstStartUtcMs = Date.UTC(y, m - 1, d, -9, 0, 0, 0);
+    const kstEndUtcMs = kstStartUtcMs + 24 * 60 * 60 * 1000;
+    const startIso = new Date(kstStartUtcMs).toISOString();
+    const endIso = new Date(kstEndUtcMs).toISOString();
 
     const snap = await getDocs(
       query(
         collection(db, 'votes'), 
         where('uid', '==', uid), 
         where('questionId', '==', questionId),
-        where('timestamp', '>=', today.toISOString()),
-        where('timestamp', '<', tomorrow.toISOString())
+        where('timestamp', '>=', startIso),
+        where('timestamp', '<', endIso)
       )
     );
     
@@ -102,9 +107,10 @@ export async function hasUserVoted(uid: string, questionId: string): Promise<boo
 // 오늘 투표한 질문 ID를 저장하기
 export async function saveTodayQuestion(uid: string, questionId: string): Promise<void> {
   try {
+    const deviceUID = await getDeviceUID();
     // 참여 여부 기록은 '날짜' 기준으로 저장
     const dateKey = currentDateKey();
-    const todayQuestionKey = `today_question_${uid}_${dateKey}`;
+    const todayQuestionKey = `today_question_${deviceUID}_${dateKey}`;
     await AsyncStorage.setItem(todayQuestionKey, questionId);
   } catch (error) {
     console.error('오늘 질문 저장 에러:', error);
@@ -114,9 +120,10 @@ export async function saveTodayQuestion(uid: string, questionId: string): Promis
 // 오늘 투표한 질문 ID를 가져오기
 export async function getTodayQuestion(uid: string): Promise<string | null> {
   try {
+    const deviceUID = await getDeviceUID();
     // 참여 여부 조회는 '날짜' 기준으로 수행
     const dateKey = currentDateKey();
-    const todayQuestionKey = `today_question_${uid}_${dateKey}`;
+    const todayQuestionKey = `today_question_${deviceUID}_${dateKey}`;
     return await AsyncStorage.getItem(todayQuestionKey);
   } catch (error) {
     console.error('오늘 질문 조회 에러:', error);
@@ -361,8 +368,10 @@ export async function saveVote(uid: string, questionId: string, optionIndex: num
 
 /** [내부함수] 선택 시점에 연속 참여일수 업데이트 */
 async function _updateStreakOnVote(uid: string) {
-  const today = new Date().toISOString().slice(0, 10);
-  const userDataKey = `userData_${uid}`;
+  const kstKey = String(currentDateKey());
+  const today = `${kstKey.slice(0,4)}-${kstKey.slice(4,6)}-${kstKey.slice(6,8)}`;
+  const deviceUID = await getDeviceUID();
+  const userDataKey = `userData_${deviceUID}`;
   const existingUserData = await AsyncStorage.getItem(userDataKey);
   let userData = existingUserData ? JSON.parse(existingUserData) : { points: 0, streakCount: 0, lastAnswerDate: '', nickname: '익명사용자😊', totalSelections: 0 };
 
@@ -414,6 +423,21 @@ async function updateLocalVoteCount(questionId: string, optionIndex: number) {
   } catch (error) {
     console.error('로컬 투표 집계 업데이트 실패:', error);
   }
+}
+
+// 로컬 사용자 데이터 읽기 유틸(보상 시점)
+async function readLocalUserDataForReward(uid: string) {
+  const deviceUID = await getDeviceUID();
+  const userDataKey = `userData_${deviceUID}`;
+  const existingUserData = await AsyncStorage.getItem(userDataKey);
+  return existingUserData ? JSON.parse(existingUserData) : { points: 0, streakCount: 0, lastAnswerDate: '', nickname: '익명사용자😊', totalSelections: 0 };
+}
+
+// 로컬 사용자 데이터 저장 유틸(보상 시점)
+async function writeLocalUserDataForReward(uid: string, updated: any) {
+  const deviceUID = await getDeviceUID();
+  const userDataKey = `userData_${deviceUID}`;
+  await AsyncStorage.setItem(userDataKey, JSON.stringify(updated));
 }
 
 export async function aggregate(questionId: string) {
@@ -470,9 +494,7 @@ export async function rewardWithMajority(uid: string, questionId: string, myOpti
 
 
   // 로컬 사용자 데이터 읽기 (이미 streakCount는 투표 시점에 업데이트 된 상태)
-  const userDataKey = `userData_${uid}`;
-  const existingUserData = await AsyncStorage.getItem(userDataKey);
-  let userData = existingUserData ? JSON.parse(existingUserData) : { points: 0, streakCount: 0, lastAnswerDate: '', nickname: '익명사용자😊' };
+  const userData = await readLocalUserDataForReward(uid);
   
   const currentStreak = userData.streakCount || 0;
 
@@ -495,7 +517,7 @@ export async function rewardWithMajority(uid: string, questionId: string, myOpti
   };
 
   // 로컬에 사용자 데이터 저장 (포인트만 업데이트)
-  await AsyncStorage.setItem(userDataKey, JSON.stringify(updatedData));
+  await writeLocalUserDataForReward(uid, updatedData);
   console.log('✅ [보상 시점] 포인트 업데이트:', updatedData);
 
   return { base, myIsMajority, next: currentStreak, agg };

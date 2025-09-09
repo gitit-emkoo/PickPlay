@@ -190,7 +190,8 @@ export default function App(){
                       // 사용자가 이미 투표했는지 확인
               try {
                 // AsyncStorage에서 먼저 확인
-                const savedVote = await AsyncStorage.getItem(`vote_${qq.id}`);
+                const todayKey = new Date().toISOString().slice(0,10).replace(/-/g,'');
+                const savedVote = await AsyncStorage.getItem(`vote_${qq.id}_${todayKey}`);
                 if (savedVote) {
                   const voteData = JSON.parse(savedVote);
                   if (voteData.uid === user.uid) {
