@@ -10,12 +10,13 @@ import LoadingScreen from './components/LoadingScreen';
 import TutorialScreen from './components/TutorialScreen';
 import UserHeader from './components/UserHeader';
 import { attachRewardedInterstitial, createRewardedInterstitial, initAds } from './services/ads';
-import { db, watchAuth } from './services/firebase';
+import { db, watchAuth, getDeviceUID } from './services/firebase';
 import { initializeNotifications, scheduleStreakNotification } from './services/notifications';
 import { aggregate, ensureUser, getOrAssignTodayQuestion, hasUserVoted, rewardWithMajority, saveVote, watchAggregation } from './services/store';
 import SplashScreen from './splash';
 import colors from './styles/colors';
 import { Aggregation, Question } from './types';
+import { currentDateKey } from './utils/date';
 
 export default function App(){
   const [showSplash, setShowSplash] = useState(true);
@@ -189,35 +190,29 @@ export default function App(){
         
                       // 사용자가 이미 투표했는지 확인
               try {
-                // AsyncStorage에서 먼저 확인
-                const todayKey = new Date().toISOString().slice(0,10).replace(/-/g,'');
-                const savedVote = await AsyncStorage.getItem(`vote_${qq.id}_${todayKey}`);
+                // AsyncStorage에서 먼저 확인 (KST 기준 키)
+                const kstKey = String(currentDateKey());
+                const savedVote = await AsyncStorage.getItem(`vote_${qq.id}_${kstKey}`);
                 if (savedVote) {
                   const voteData = JSON.parse(savedVote);
-                  if (voteData.uid === user.uid) {
-                    console.log('🔄 AsyncStorage에서 투표 상태 복원:', voteData);
-                    setUserChoice(voteData.optionIndex);
-                    
-                                         // 투표 후 보상이 이미 지급되었는지 확인
-                     const rewardKey = `reward_${qq.id}_${user.uid}`;
-                     const rewardStatus = await AsyncStorage.getItem(rewardKey);
-                     if (rewardStatus) {
-                       const rewardData = JSON.parse(rewardStatus);
-                       // 기본 보상 계산 (출석 보너스 제외)
-                       const baseReward = rewardData.myIsMajority ? 5 : 10;
-                       const totalReward = rewardData.base;
-                       
-                       setRewardMessage(baseReward, rewardData.myIsMajority);
-                       setRewardCompleted(true);
-                       // 이미 보상 완료 → 버튼 숨김(중복/혼동 방지)
-                       setShowRewardButton(false);
-                     } else {
-                       // 보상이 지급되지 않았으면 보상 버튼 표시
-                       setShowRewardButton(true);
-                     }
+                  setUserChoice(voteData.optionIndex);
+                  
+                  // 투표 후 보상이 이미 지급되었는지 확인(기기 기준 키)
+                  const deviceUID = await getDeviceUID();
+                  const rewardKey = `reward_${qq.id}_${deviceUID}`;
+                  const rewardStatus = await AsyncStorage.getItem(rewardKey);
+                  if (rewardStatus) {
+                    const rewardData = JSON.parse(rewardStatus);
+                    const baseReward = rewardData.myIsMajority ? 5 : 10;
+                    setRewardMessage(baseReward, rewardData.myIsMajority);
+                    setRewardCompleted(true);
+                    setShowRewardButton(false);
+                  } else {
+                    setRewardCompleted(false);
+                    setShowRewardButton(true);
                   }
                 } else {
-                  // Firestore에서 확인
+                  // Firestore 확인(보조)
                   const hasVoted = await hasUserVoted(user.uid, qq.id);
                   if (hasVoted) {
                     const votes = await getDocs(
@@ -229,31 +224,24 @@ export default function App(){
                     );
                     if (!votes.empty) {
                       const voteData = votes.docs[0].data();
-                      console.log('🔄 Firestore에서 투표 상태 복원:', voteData);
                       setUserChoice(voteData.optionIndex);
-                      
-                      // 투표 후 보상이 이미 지급되었는지 확인
-                      const rewardKey = `reward_${qq.id}_${user.uid}`;
+                      const deviceUID = await getDeviceUID();
+                      const rewardKey = `reward_${qq.id}_${deviceUID}`;
                       const rewardStatus = await AsyncStorage.getItem(rewardKey);
                       if (rewardStatus) {
                         const rewardData = JSON.parse(rewardStatus);
-                        // 기본 보상 계산 (출석 보너스 제외)
                         const baseReward = rewardData.myIsMajority ? 5 : 10;
-                        const totalReward = rewardData.base;
-                        
                         setRewardMessage(baseReward, rewardData.myIsMajority);
                         setRewardCompleted(true);
-                        // 이미 보상 완료 → 버튼 숨김(중복/혼동 방지)
                         setShowRewardButton(false);
                       } else {
-                        // 보상이 지급되지 않았으면 보상 버튼 표시
+                        setRewardCompleted(false);
                         setShowRewardButton(true);
                       }
                     }
                   }
                 }
               } catch (error) {
-                console.error('투표 확인 에러:', error);
               }
       }
       setLoading(false);
@@ -277,8 +265,22 @@ export default function App(){
       // 보상 버튼 노출 (광고/모달은 보상 버튼 클릭 시)
       setShowRewardButton(true);
       setRewardCompleted(false);
+
+      // 선택 직후 최신 userData 동기화(연속참여/남은 선택 즉시 반영)
+      try {
+        const deviceUID = await getDeviceUID();
+        const userDataKey = `userData_${deviceUID}`;
+        const json = await AsyncStorage.getItem(userDataKey);
+        if (json) {
+          const latest = JSON.parse(json);
+          setUserData(latest);
+        } else {
+        }
+      } catch(syncErr) {
+      }
       
     } catch (error) {
+      console.log('[DEBUG][vote] failed:', error);
       addDebugLog(`❌ 투표 실패: ${error}`);
       if (error instanceof Error) {
         setMsg(error.message); // 중복 투표 등의 에러 메시지 표시
@@ -316,6 +318,7 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
       const { base, myIsMajority, next } = await rewardWithMajority(
         user.uid, q.id, userChoice
       );
+      console.log('[DEBUG][reward] result base=', base, 'myIsMajority=', myIsMajority, 'next(streak)=', next);
 
       const baseReward = myIsMajority ? 5 : 10;
       const totalReward = base;
@@ -324,8 +327,10 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
       // 메시지에는 기본 보상만 표시, 실제 지급은 전체 금액
       setRewardMessage(baseReward, myIsMajority);
 
-      // 보상 지급 상태 저장
-      const rewardKey = `reward_${q.id}_${user.uid}`;
+      // 보상 지급 상태 저장 (기기 기준)
+      const deviceUID = await getDeviceUID();
+      const rewardKey = `reward_${q.id}_${deviceUID}`;
+      console.log('[DEBUG][reward] save rewardKey=', rewardKey, 'data=', { base, myIsMajority, next });
       await AsyncStorage.setItem(rewardKey, JSON.stringify({ base, myIsMajority, next }));
       addDebugLog('💾 보상 상태 저장 완료');
 

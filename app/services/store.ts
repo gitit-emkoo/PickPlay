@@ -68,13 +68,10 @@ export async function hasUserVoted(uid: string, questionId: string): Promise<boo
     const dateKey = currentDateKey();
     const voteKey = `vote_${questionId}_${dateKey}`;
     
-    // 1. AsyncStorage에서 오늘 날짜의 투표 기록 확인
+    // 1. AsyncStorage에서 오늘 날짜의 투표 기록 확인 (기기 단위 1일 1회 보장)
     const savedVote = await AsyncStorage.getItem(voteKey);
     if (savedVote) {
-      const voteData = JSON.parse(savedVote);
-      if (voteData.uid === uid) {
-        return true;
-      }
+      return true;
     }
 
     // 2. Firestore에서 오늘(KST) 날짜의 투표 기록 확인
@@ -325,6 +322,16 @@ export async function saveVote(uid: string, questionId: string, optionIndex: num
       console.log('auth ensured uid:', (authed as any)?.uid, 'param uid:', uid);
     } catch (e) {
       console.error('auth ensure failed:', e);
+    }
+
+    // 기기 단위 오늘 투표 재차단(로컬 키 확인)
+    {
+      const dateKey = currentDateKey();
+      const voteKey = `vote_${questionId}_${dateKey}`;
+      const already = await AsyncStorage.getItem(voteKey);
+      if (already) {
+        throw new Error('오늘 이미 투표한 질문입니다.');
+      }
     }
 
     // 중복 투표 확인 (오늘 날짜 기준)
