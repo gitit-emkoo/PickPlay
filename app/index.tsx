@@ -1034,12 +1034,12 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
                       rewarded.show();
                     } else {
                       addDebugLog('❌ 광고 로드 타임아웃');
-                      setMsg('광고 로드에 실패했습니다. 잠시 후 다시 시도해주세요.');
+                      setMsg('포인트 적립에 실패했습니다. 잠시 후 다시 시도해주세요.');
                       setShowAdRetryModal(true); // 재시도 모달 표시
                     }
                   } catch (error) {
                     addDebugLog(`❌ 광고 재로드 실패: ${error}`);
-                    setMsg('광고 로드에 실패했습니다. 잠시 후 다시 시도해주세요.');
+                    setMsg('포인트 적립에 실패했습니다. 잠시 후 다시 시도해주세요.');
                     setShowAdRetryModal(true); // 재시도 모달 표시
                   }
                 }
@@ -1101,7 +1101,7 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
               textAlign: 'center',
               marginBottom: 8
             }}>
-              광고 로드에 실패했습니다
+              포인트 적립에 실패했습니다
             </Text>
             <Text style={{
               fontSize: 14,

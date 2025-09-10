@@ -1,7 +1,8 @@
 import { Platform } from 'react-native';
 
 const BANNER_AD_UNIT_IDS = {
-  android: 'ca-app-pub-2555567440328829/6607319419',
+  android: 'ca-app-pub-3940256099942544/6300978111', // 테스트 광고
+  // android: 'ca-app-pub-2555567440328829/6607319419', // 실제 광고 (한달 후 복구)
   ios: 'ca-app-pub-2555567440328829/7449627792'
 };
 
