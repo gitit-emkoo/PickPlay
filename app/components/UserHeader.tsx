@@ -183,7 +183,7 @@ export default function UserHeader({ userData }: UserHeaderProps) {
               <Text style={{
                 fontSize: 16,
                 fontWeight: '700',
-                color: colors.textSecondary,
+                color: colors.primary,
                 textAlign: 'center',
                 marginBottom: 8
               }}>
@@ -228,7 +228,12 @@ export default function UserHeader({ userData }: UserHeaderProps) {
               textAlign: 'center',
               lineHeight: 22
             }}>
-              AnimaCode 생성을 위한 {remainingForAnima}번의 선택이 쌓이면,
+              AnimaCode 생성을 위한 
+              <Text style={{
+              color: colors.text,
+            }}>
+              {remainingForAnima}번의 선택
+              </Text>이 쌓이면,
               너의 내면의 캐릭터가 탄생하고 
               진짜 이름과 여정이 시작돼! 
               아직은 알 속, 하지만 곧 깨어날 거야. 기대해!
