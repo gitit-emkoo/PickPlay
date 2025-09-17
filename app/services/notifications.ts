@@ -2,6 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import { db, forceAnonymousAuth } from './firebase';
+import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 
 // 알림 핸들러 설정
 Notifications.setNotificationHandler({
@@ -55,6 +57,28 @@ export async function registerForPushNotificationsAsync() {
   }
 
   return token;
+}
+
+// Expo 푸시 토큰 Firestore 저장
+type PlatformType = 'ios' | 'android';
+async function saveExpoPushTokenToFirestore(uid: string, token: string, platformType: PlatformType) {
+  try {
+    const ref = doc(db, 'user_push_tokens', uid);
+    await setDoc(
+      ref,
+      {
+        expo: {
+          token,
+          platform: platformType,
+          updatedAt: serverTimestamp(),
+        },
+      },
+      { merge: true }
+    );
+    console.log('💾 Expo 푸시 토큰 Firestore 저장 완료');
+  } catch (error) {
+    console.error('❌ Expo 푸시 토큰 Firestore 저장 실패:', error);
+  }
 }
 
 // FCM 토큰 저장
@@ -165,9 +189,9 @@ export function setupNotificationListener() {
 // 통합 초기화: 권한/토큰/채널/리스너/일일 스케줄을 한 번에 구성
 export async function initializeNotifications(hour: number = 20, minute: number = 15) {
   try {
-    if (__DEV__) {
-      console.log('🛑 DEV 모드: 알림 초기화 생략');
-      return () => {};
+    const isDev = __DEV__;
+    if (isDev) {
+      console.log('🧪 DEV 모드: 알림 초기화(로컬 스케줄 제외) 진행');
     }
 
     if (Platform.OS === 'android') {
@@ -179,16 +203,29 @@ export async function initializeNotifications(hour: number = 20, minute: number 
       });
     }
 
+    // 권한 요청 및 토큰 획득
+    await Notifications.requestPermissionsAsync();
     const token = await registerForPushNotificationsAsync();
     if (token) {
+      try {
+        const user = await forceAnonymousAuth();
+        const uid = user?.uid;
+        if (uid) {
+          await saveExpoPushTokenToFirestore(uid, token, Platform.OS === 'ios' ? 'ios' : 'android');
+        }
+      } catch (e) {
+        console.error('❌ 사용자 UID 확인/저장 중 오류:', e);
+      }
+
       await saveFCMToken(token);
       console.log('🔐 토큰 저장 완료(초기화)');
     }
 
     const cleanup = setupNotificationListener();
 
-    await ensureDailyNotification(hour, minute);
-    console.log(`📅 일일 알림 단일 스케줄 보장(${hour}:${minute})`);
+    // 서버(Expo Push + 스케줄러) 전환으로 로컬 일일 스케줄은 비활성화
+    // await ensureDailyNotification(hour, minute);
+    // console.log(`📅 일일 알림 단일 스케줄 보장(${hour}:${minute})`);
 
     return cleanup;
   } catch (error) {

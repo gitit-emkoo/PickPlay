@@ -18,5 +18,11 @@ service cloud.firestore {
       allow read: if true;
       allow update, delete: if false;
     }
+
+    // Expo 푸시 토큰 저장 컬렉션
+    // 앱 클라이언트가 자신의 문서만 읽기/쓰기 가능
+    match /user_push_tokens/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
   }
 }

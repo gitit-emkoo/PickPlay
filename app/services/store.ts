@@ -44,14 +44,40 @@ export async function ensureUser(uid: string) {
       // 새 사용자 데이터 생성 (자동 랜덤닉네임 할당)
       try {
         const autoNickname = generateRandomNickname();
-        const newUserData = { points: 0, streakCount: 0, lastAnswerDate: '', nickname: autoNickname, totalSelections: 0 };
+        const newUserData = { 
+          points: 0, 
+          streakCount: 0, 
+          lastAnswerDate: '', 
+          nickname: autoNickname, 
+          totalSelections: 0,
+          createdAt: new Date().toISOString()
+        };
+        
+        // AsyncStorage에 저장
         await AsyncStorage.setItem(userDataKey, JSON.stringify(newUserData));
+        
+        // Firestore에도 저장
+        await saveUserToFirestore(uid, newUserData);
+        
         return newUserData;
       } catch (nicknameError) {
         console.error('닉네임 생성 실패:', nicknameError);
         const fallbackNickname = '익명사용자😊';
-        const newUserData = { points: 0, streakCount: 0, lastAnswerDate: '', nickname: fallbackNickname, totalSelections: 0 };
+        const newUserData = { 
+          points: 0, 
+          streakCount: 0, 
+          lastAnswerDate: '', 
+          nickname: fallbackNickname, 
+          totalSelections: 0,
+          createdAt: new Date().toISOString()
+        };
+        
+        // AsyncStorage에 저장
         await AsyncStorage.setItem(userDataKey, JSON.stringify(newUserData));
+        
+        // Firestore에도 저장
+        await saveUserToFirestore(uid, newUserData);
+        
         return newUserData;
       }
     }
@@ -412,6 +438,10 @@ async function _updateStreakOnVote(uid: string) {
   };
 
   await AsyncStorage.setItem(userDataKey, JSON.stringify(updatedUserData));
+  
+  // Firestore에도 동기화
+  await updateUserInFirestore(uid, updatedUserData);
+  
   console.log('✅ [투표 시점] 연속 참여일수/총 참여수 업데이트:', updatedUserData);
 }
 
@@ -565,5 +595,66 @@ export function watchAggregation(
   } catch (error) {
     console.error('❌ 실시간 집계 구독 실패:', error);
     return () => {};
+  }
+}
+
+// Firestore에 유저 데이터 저장
+async function saveUserToFirestore(uid: string, userData: any) {
+  try {
+    const userRef = doc(db, 'users', uid);
+    await setDoc(userRef, {
+      ...userData,
+      uid,
+      createdAt: userData.createdAt || new Date().toISOString(),
+      lastUpdated: new Date().toISOString()
+    });
+    console.log('✅ Firestore에 유저 데이터 저장 완료:', uid);
+  } catch (error) {
+    console.error('❌ Firestore 유저 저장 실패:', error);
+  }
+}
+
+// Firestore 유저 데이터 업데이트
+async function updateUserInFirestore(uid: string, userData: any) {
+  try {
+    const userRef = doc(db, 'users', uid);
+    await setDoc(userRef, {
+      ...userData,
+      uid,
+      lastUpdated: new Date().toISOString()
+    }, { merge: true });
+    console.log('✅ Firestore 유저 데이터 업데이트 완료:', uid);
+  } catch (error) {
+    console.error('❌ Firestore 유저 업데이트 실패:', error);
+  }
+}
+
+// 기존 유저 데이터를 Firestore에 마이그레이션 (한 번만 실행)
+export async function migrateUserToFirestore(uid: string) {
+  try {
+    const deviceUID = await getDeviceUID();
+    const userDataKey = `userData_${deviceUID}`;
+    const savedData = await AsyncStorage.getItem(userDataKey);
+    
+    if (savedData) {
+      const userData = JSON.parse(savedData);
+      
+      // Firestore에 이미 존재하는지 확인
+      const userRef = doc(db, 'users', uid);
+      const userSnap = await getDoc(userRef);
+      
+      if (!userSnap.exists()) {
+        // Firestore에 저장
+        await saveUserToFirestore(uid, {
+          ...userData,
+          createdAt: new Date().toISOString()
+        });
+        console.log('✅ 기존 유저 데이터 Firestore 마이그레이션 완료:', uid);
+      } else {
+        console.log('ℹ️ 유저 데이터가 이미 Firestore에 존재:', uid);
+      }
+    }
+  } catch (error) {
+    console.error('❌ 유저 마이그레이션 실패:', error);
   }
 }

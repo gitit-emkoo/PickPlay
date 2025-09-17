@@ -12,10 +12,11 @@ import UserHeader from './components/UserHeader';
 import { attachRewardedInterstitial, createRewardedInterstitial, initAds } from './services/ads';
 import { db, watchAuth, getDeviceUID } from './services/firebase';
 import { initializeNotifications, scheduleStreakNotification } from './services/notifications';
-import { aggregate, ensureUser, getOrAssignTodayQuestion, hasUserVoted, rewardWithMajority, saveVote, watchAggregation } from './services/store';
+import { aggregate, ensureUser, getOrAssignTodayQuestion, hasUserVoted, rewardWithMajority, saveVote, watchAggregation, migrateUserToFirestore } from './services/store';
 import SplashScreen from './splash';
 import colors from './styles/colors';
 import { Aggregation, Question } from './types';
+import * as WebBrowser from 'expo-web-browser';
 import { currentDateKey } from './utils/date';
 
 export default function App(){
@@ -43,6 +44,13 @@ export default function App(){
       `${totalReward}P 획득완료! 💎` :
       `${totalReward}P +(소수보상 5P) 획득완료! 💎`
     );
+  };
+  const openLink = async (url: string) => {
+    try {
+      await WebBrowser.openBrowserAsync(url, {
+        enableBarCollapsing: true,
+      });
+    } catch {}
   };
   const [showTomorrowModal, setShowTomorrowModal] = useState(false); // 내일 다시 만나요 모달
 
@@ -116,6 +124,9 @@ export default function App(){
       if(u?.uid) {
         const userDataResult = await ensureUser(u.uid);
         setUserData(userDataResult);
+        
+        // 기존 유저 데이터를 Firestore에 마이그레이션
+        await migrateUserToFirestore(u.uid);
       } else {
         setUserData(null);
       }
@@ -943,6 +954,17 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
             tel: +82-10-4857-4876{'\n'}
             version: 1.0.0
           </Text>
+          <View style={{ marginTop: 12, flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+            <TouchableOpacity onPress={() => openLink('https://pickplay.waveon.me/pages/1757994427672')} activeOpacity={0.7}>
+              <Text style={{ fontSize: 12, color: colors.primary }}>개인정보처리방침</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => openLink('https://pickplay.waveon.me/pages/1757994808102')} activeOpacity={0.7}>
+              <Text style={{ fontSize: 12, color: colors.primary }}>이용약관</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => openLink('https://pickplay.waveon.me/pages/1757817752093')} activeOpacity={0.7}>
+              <Text style={{ fontSize: 12, color: colors.primary }}>고객센터</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
           </View>
