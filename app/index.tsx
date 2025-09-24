@@ -37,13 +37,13 @@ export default function App(){
   const [showAdInfoModal, setShowAdInfoModal] = useState(false); // 광고 안내 모달
   const [showRewardDoneModal, setShowRewardDoneModal] = useState(false); // 적립 완료 모달
   const [showAdRetryModal, setShowAdRetryModal] = useState(false); // 광고 재시도 모달
+  
 
-  // 보상 메시지 설정 함수
-  const setRewardMessage = (totalReward: number, myIsMajority: boolean) => {
-    setMsg(myIsMajority ? 
-      `${totalReward}P 획득완료! 💎` :
-      `${totalReward}P +(소수보상 5P) 획득완료! 💎`
-    );
+  // 보상 메시지 설정 함수 (배수 반영)
+  const setRewardMessage = (finalPoints: number, myIsMajority: boolean, multiplier: number) => {
+    const majorityText = myIsMajority ? '' : ' (소수보상)';
+    const multiplierText = multiplier > 1 ? ` X${multiplier}배` : '';
+    setMsg(`${finalPoints}P${majorityText}${multiplierText} 획득완료! 💎`);
   };
   const openLink = async (url: string) => {
     try {
@@ -55,9 +55,14 @@ export default function App(){
   const [showTomorrowModal, setShowTomorrowModal] = useState(false); // 내일 다시 만나요 모달
 
 
+  // 배수 계산 유틸
+  const getStreakMultiplier = (streak?: number) => {
+    if (!streak) return 1;
+    return streak >= 31 ? 3 : streak >= 11 ? 2 : 1;
+  };
+
   const rewarded = useMemo(()=>{
-    // 광고 초기화를 먼저 실행
-    initAds();
+    // 광고 초기화는 _layout.tsx에서 수행
     return createRewardedInterstitial();
   },[]);
 
@@ -162,8 +167,8 @@ export default function App(){
       addDebugLog('🎯 광고 시청 완료 처리 시작');
       await grantReward();
       setShowRewardDoneModal(true);
-      // 보상 완료 후 버튼은 숨겨 중복 표시 방지
-      setShowRewardButton(false);
+      // 보상 완료 후에도 버튼을 비활성 상태로 유지하여 색상 일관성 유지
+      setShowRewardButton(true);
     })();
   }, [adWatched]);
 
@@ -215,7 +220,9 @@ export default function App(){
                   if (rewardStatus) {
                     const rewardData = JSON.parse(rewardStatus);
                     const baseReward = rewardData.myIsMajority ? 5 : 10;
-                    setRewardMessage(baseReward, rewardData.myIsMajority);
+                    const m = getStreakMultiplier(typeof rewardData.next === 'number' ? rewardData.next : userData?.streakCount);
+                    const total = typeof rewardData.base === 'number' ? rewardData.base : baseReward;
+                    setRewardMessage(total, rewardData.myIsMajority, m);
                     setRewardCompleted(true);
                     setShowRewardButton(false);
                   } else {
@@ -242,7 +249,9 @@ export default function App(){
                       if (rewardStatus) {
                         const rewardData = JSON.parse(rewardStatus);
                         const baseReward = rewardData.myIsMajority ? 5 : 10;
-                        setRewardMessage(baseReward, rewardData.myIsMajority);
+                        const m = getStreakMultiplier(typeof rewardData.next === 'number' ? rewardData.next : userData?.streakCount);
+                        const total = typeof rewardData.base === 'number' ? rewardData.base : baseReward;
+                        setRewardMessage(total, rewardData.myIsMajority, m);
                         setRewardCompleted(true);
                         setShowRewardButton(false);
                       } else {
@@ -331,12 +340,12 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
       );
       console.log('[DEBUG][reward] result base=', base, 'myIsMajority=', myIsMajority, 'next(streak)=', next);
 
-      const baseReward = myIsMajority ? 5 : 10;
       const totalReward = base;
-      addDebugLog(`💎 보상 계산 완료: baseReward=${baseReward}, totalReward=${totalReward}, myIsMajority=${myIsMajority}, next=${next}`);
+      addDebugLog(`💎 보상 계산 완료: totalReward=${totalReward}, myIsMajority=${myIsMajority}, next=${next}`);
 
-      // 메시지에는 기본 보상만 표시, 실제 지급은 전체 금액
-      setRewardMessage(baseReward, myIsMajority);
+      // 메시지에는 배수도 표시
+      const multiplier = getStreakMultiplier(next);
+      setRewardMessage(totalReward, myIsMajority, multiplier);
 
       // 보상 지급 상태 저장 (기기 기준)
       const deviceUID = await getDeviceUID();
@@ -635,7 +644,7 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
                   color: colors.text,
                   lineHeight: 20
                 }}>
-                  10일 연속 참여 부터 보상 2배로 UP!{'\n'}20일 연속 참여 부터 보상 3배로 UP!
+                  11일 연속 참여 부터 보상 2배로 UP!{'\n'}31일 연속 참여 부터 보상 3배로 UP!
                 </Text>
               </View>
             </View>
@@ -737,28 +746,8 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
           </Text>
         </TouchableOpacity>
 
-        {/* 보상 메시지 */}
-        {!!msg && (
-          <View style={{
-            backgroundColor: colors.primary,
-            borderRadius: 12,
-            padding: 16,
-            marginTop: 20,
-            alignItems: 'center'
-          }}>
-            <Text style={{ 
-              fontSize: 18, 
-              color: 'white',
-              fontWeight: '700',
-              textAlign: 'center' 
-            }}>
-              {msg}
-            </Text>
-          </View>
-        )}
-
-        {/* 투표 완료 후 보상 버튼 */}
-        {userChoice !== null && showRewardButton && (
+        {/* 보상 버튼 또는 보상 완료 메시지 */}
+        {userChoice !== null && !rewardCompleted && showRewardButton && (
           <TouchableOpacity 
             onPress={async () => {
               if (rewardCompleted) return; // 재진입 가드
@@ -768,7 +757,10 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
             style={{
               marginTop: 20,
               alignSelf: 'center',
-              backgroundColor: rewardCompleted ? '#A3A3A3' : colors.primary,
+              backgroundColor: (() => {
+                const m = getStreakMultiplier(userData?.streakCount);
+                return m === 3 ? '#8B5CF6' : m === 2 ? '#059669' : colors.primary;
+              })(),
               borderRadius: 12,
               paddingVertical: 16,
               paddingHorizontal: 32,
@@ -787,10 +779,37 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
               fontWeight: '700',
               textAlign: 'center'
             }}>
-              {rewardCompleted ? (msg || '적립 완료') : '🎁 보상 받기'}
+              {(() => {
+                const m = getStreakMultiplier(userData?.streakCount);
+                return m > 1 ? `🎁 X${m}배 보상 받기` : '🎁 보상 받기';
+              })()}
             </Text>
           </TouchableOpacity>
         )}
+
+        {rewardCompleted && !!msg && (
+          <View style={{
+            backgroundColor: (() => {
+              const m = getStreakMultiplier(userData?.streakCount);
+              return m === 3 ? '#8B5CF6' : m === 2 ? '#059669' : colors.primary;
+            })(),
+            borderRadius: 12,
+            padding: 16,
+            marginTop: 20,
+            alignItems: 'center',
+            marginHorizontal: 40 // 버튼과 동일한 여백 적용
+          }}>
+            <Text style={{ 
+              fontSize: 18, 
+              color: 'white',
+              fontWeight: '700',
+              textAlign: 'center' 
+            }}>
+              {msg}
+            </Text>
+          </View>
+        )}
+
 
         {/* 연속 참여 정보 */}
         {userData && (
@@ -831,21 +850,27 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
               lineHeight: 24
             }}>
               {userData.streakCount >= 11 ? 
-                `🎉 ${userData.streakCount >= 21 ? '3배' : '2배'} 보상 적용 중!` :
+                `🎉 ${userData.streakCount >= 31 ? '3배' : '2배'} 보상 적용 중!` :
                 `내일도 참여하면 ${userData.streakCount + 1}일 연속 달성!`
               }
             </Text>
             
-            {userData.streakCount < 10 && (
+            {userData.streakCount < 31 && (
               <Text style={{
                 fontSize: 16,
                 color: colors.primary,
                 textAlign: 'center',
                 marginTop: 4
               }}>
-                {userData.streakCount < 9 ? 
+                {userData.streakCount < 10 ?
                   `${10 - userData.streakCount}일 더 참여하면 그 이후부터 모든 보상이 2배!` :
-                  '내일 참여하면 2배 보상! 꼭 놓치지 마세요!'
+                  userData.streakCount === 10 ?
+                    '내일 참여하면 2배 보상! 꼭 놓치지 마세요!' :
+                  userData.streakCount < 30 ?
+                    `${30 - userData.streakCount}일 더 참여하면 3배 보상!` :
+                    userData.streakCount === 30 ?
+                    '내일 참여하면 3배 보상! 꼭 놓치지 마세요!' :
+                    null
                 }
               </Text>
             )}
@@ -970,6 +995,8 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
           </View>
         </ScrollView>
       </SafeAreaView>
+
+      
 
 
       {/* 광고 안내 모달 */}

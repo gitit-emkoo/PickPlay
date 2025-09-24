@@ -61,7 +61,7 @@ export async function registerForPushNotificationsAsync() {
 
 // Expo 푸시 토큰 Firestore 저장
 type PlatformType = 'ios' | 'android';
-async function saveExpoPushTokenToFirestore(uid: string, token: string, platformType: PlatformType) {
+export async function saveExpoPushTokenToFirestore(uid: string, token: string, platformType: PlatformType) {
   try {
     const ref = doc(db, 'user_push_tokens', uid);
     await setDoc(
@@ -231,5 +231,38 @@ export async function initializeNotifications(hour: number = 20, minute: number 
   } catch (error) {
     console.error('❌ 알림 초기화 실패:', error);
     return () => {};
+  }
+}
+
+// 디버그/수동 재등록: 권한 요청 → Expo 토큰 획득 → Firestore 저장을 한 번에 수행
+export async function reRegisterPushToken() {
+  try {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== 'granted') {
+      return { ok: false, reason: 'permission-denied' as const };
+    }
+
+    const token = (await Notifications.getExpoPushTokenAsync({
+      projectId: '14d1ecb2-a3c0-4425-ac97-0ec33b289905',
+    })).data;
+
+    const user = await forceAnonymousAuth();
+    const uid = user?.uid;
+    if (!uid) {
+      return { ok: false, reason: 'auth-missing' as const };
+    }
+
+    await saveExpoPushTokenToFirestore(uid, token, Platform.OS === 'ios' ? 'ios' : 'android');
+    await saveFCMToken(token);
+    return { ok: true, token };
+  } catch (e: any) {
+    const message = e?.message || String(e);
+    console.error('❌ reRegisterPushToken 실패:', message);
+    return { ok: false, reason: 'unknown' as const, error: message };
   }
 }

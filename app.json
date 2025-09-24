@@ -12,10 +12,18 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.pickplay.kwcc",
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"]
+        "NSUserTrackingUsageDescription": "이 정보를 사용하여 더 관련성 높은 맞춤형 광고를 제공합니다.",
+        "UIBackgroundModes": [
+          "remote-notification",
+          "remote-notification"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       },
       "config": {
         "googleMobileAdsAppId": "ca-app-pub-2555567440328829~5483134579"
+      },
+      "runtimeVersion": {
+        "policy": "appVersion"
       }
     },
     "android": {
@@ -30,28 +38,17 @@
         "android.permission.VIBRATE",
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.WAKE_LOCK",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.INTERNET",
+        "android.permission.VIBRATE",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.WAKE_LOCK",
         "android.permission.FOREGROUND_SERVICE"
       ],
       "config": {
         "googleMobileAdsAppId": "ca-app-pub-2555567440328829~4208779024"
       },
-      "manifest": {
-        "application": {
-          "meta-data": [
-            {
-              "name": "com.google.android.gms.ads.APPLICATION_ID",
-              "value": "ca-app-pub-2555567440328829~4208779024",
-              "tools:replace": "android:value"
-            },
-            {
-              "name": "com.google.android.gms.ads.DELAY_APP_MEASUREMENT_INIT",
-              "value": "false",
-              "tools:replace": "android:value"
-            }
-          ],
-          "tools:replace": "android:allowBackup,android:label,android:icon,android:theme"
-        }
-      }
+      "runtimeVersion": "1.0.0"
     },
     "web": {
       "bundler": "metro",
@@ -74,7 +71,9 @@
         {
           "icon": "./assets/images/notification-icon.png",
           "color": "#ffffff",
-          "sounds": ["./assets/sounds/notification.mp3"],
+          "sounds": [
+            "./assets/sounds/notification.mp3"
+          ],
           "mode": "production"
         }
       ]
@@ -87,6 +86,9 @@
       "eas": {
         "projectId": "14d1ecb2-a3c0-4425-ac97-0ec33b289905"
       }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/14d1ecb2-a3c0-4425-ac97-0ec33b289905"
     }
   }
 }

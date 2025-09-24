@@ -57,9 +57,10 @@ if (Platform.OS !== 'web') {
 
 // 플랫폼별 광고 단위 ID
 const AD_UNITS = {
-  android: 'ca-app-pub-3940256099942544/5354046379', // 테스트 광고
-  // android: 'ca-app-pub-2555567440328829/7893158578', // 실제 광고 (한달 후 복구)
-  ios: 'ca-app-pub-2555567440328829/9198215970'
+  // android: 'ca-app-pub-3940256099942544/5354046379', // 테스트 광고
+  android: 'ca-app-pub-2555567440328829/7893158578', // 실제 광고
+  ios: 'ca-app-pub-2555567440328829/9198215970' // 실제 광고
+  // ios: 'ca-app-pub-3940256099942544/6978759866' // 보상형 전면광고 테스트 ID
 };
 
 export async function initAds() { 

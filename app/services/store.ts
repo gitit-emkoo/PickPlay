@@ -97,7 +97,7 @@ export async function hasUserVoted(uid: string, questionId: string): Promise<boo
     // 1. AsyncStorage에서 오늘 날짜의 투표 기록 확인 (기기 단위 1일 1회 보장)
     const savedVote = await AsyncStorage.getItem(voteKey);
     if (savedVote) {
-      return true;
+        return true;
     }
 
     // 2. Firestore에서 오늘(KST) 날짜의 투표 기록 확인
@@ -514,7 +514,7 @@ export async function aggregate(questionId: string) {
   }
 }
 
-/** 승패 보상형: 다수 5P / 소수 10P + 연속 참여 배수 보상(10일 2배, 20일 3배) */
+/** 승패 보상형: 다수 5P / 소수 10P + 연속 참여 배수 보상(10일 2배, 30일 3배) */
 export async function rewardWithMajority(uid: string, questionId: string, myOptionIndex: number) {
   // 로컬 집계로 다수/소수 판단
   const agg = await aggregate(questionId);
@@ -537,12 +537,12 @@ export async function rewardWithMajority(uid: string, questionId: string, myOpti
 
   // 연속 참여 배수 보상 적용
   let multiplier = 1;
-  if (currentStreak >= 21) {
-    multiplier = 3; // 20일 이상: 3배
-    console.log('🎉 20일 연속 참여! 3배 보상 적용');
+  if (currentStreak >= 31) {
+    multiplier = 3; // 31일 이상: 3배
+    console.log('🎉 31일 연속 참여! 3배 보상 적용');
   } else if (currentStreak >= 11) {
-    multiplier = 2; // 10일 이상: 2배
-    console.log('🎉 10일 연속 참여! 2배 보상 적용');
+    multiplier = 2; // 11일 이상: 2배
+    console.log('🎉 11일 연속 참여! 2배 보상 적용');
   }
   
   // 최종 보상 계산 (기본 보상 × 배수)

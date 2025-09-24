@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, StyleSheet, Text, View } from 'react-native';
-import { getBannerAdUnitId, isExpoGo } from '../services/banner-ads';
+import { getBannerAdUnitId, isExpoGo } from '@/app/services/banner-ads';
 import colors from '../styles/colors';
 
 interface BannerAdComponentProps {
@@ -56,7 +56,7 @@ export default function BannerAdComponent({ style }: BannerAdComponentProps) {
   // 실제 광고 렌더링
   try {
     const { BannerAd, BannerAdSize } = require('react-native-google-mobile-ads');
-    
+
     return (
       <View style={[styles.container, style]}>
         {/* 로딩 인디케이터: 광고가 로드되지 않았고 에러가 없을 때만 표시 */}

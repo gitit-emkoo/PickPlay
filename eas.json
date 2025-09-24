@@ -17,15 +17,16 @@
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+      }
     }
   },
   "submit": {
     "production": {
       "ios": {
-        "appleId": "APPLE_ID",
-        "ascAppId": "APP_STORE_CONNECT_APP_ID",
-        "appleTeamId": "APPLE_TEAM_ID"
+        "ascAppId": "6751875842"
       },
       "android": {
         "serviceAccountKeyPath": "./google-service-account.json",
