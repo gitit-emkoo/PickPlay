@@ -1,28 +1,53 @@
-// 최소 보안 규칙
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
+    
+    // 관리자 이메일 체크 함수
+    function isAdmin() { 
+      return request.auth != null && 
+             request.auth.token.email in [
+               'cream83779@gmail.com', 
+               'kwcc2020@naver.com'
+             ];
+    }
 
     match /questions/{id} {
       allow read: if true;      // 공개 읽기
-      allow write: if false;     // 서버/관리만
+      allow write: if false;    // 서버/관리만
     }
 
     match /users/{uid} {
+      // 자신의 데이터 읽기/쓰기
       allow read, write: if signedIn() && request.auth.uid == uid;
+      
+      // 관리자는 모든 사용자 데이터 읽기 가능 (관리자 페이지용)
+      allow read: if isAdmin();
     }
 
     match /votes/{id} {
-      allow create: if signedIn();
+      // 읽기는 공개 (집계/실시간 반영용)
       allow read: if true;
-      allow update, delete: if false;
-    }
 
+      // 쓰기는 본인 uid로만, 그리고 필드/타입 검증 + 유효한 questionId만 허용
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid','questionId','optionIndex','timestamp'])
+        && request.resource.data.optionIndex in [0, 1]
+        && request.resource.data.questionId is string
+        && request.resource.data.uid is string
+        && request.resource.data.timestamp is string
+        && exists(/databases/$(database)/documents/questions/$(request.resource.data.questionId));
+
+      // 관리자는 투표 데이터 수정/삭제 가능 (필요시)
+      allow update, delete: if isAdmin(); 
+      
+    }
     // Expo 푸시 토큰 저장 컬렉션
     // 앱 클라이언트가 자신의 문서만 읽기/쓰기 가능
     match /user_push_tokens/{uid} {
       allow read, write: if signedIn() && request.auth.uid == uid;
+      allow read: if isAdmin(); // 관리자 읽기 권한 추가
     }
   }
 }
