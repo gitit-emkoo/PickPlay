@@ -557,6 +557,9 @@ export async function rewardWithMajority(uid: string, questionId: string, myOpti
   await writeLocalUserDataForReward(uid, updatedData);
   console.log('✅ [보상 시점] 포인트 업데이트:', updatedData);
 
+  // Firestore에도 포인트 업데이트 동기화
+  await updateUserInFirestore(uid, { points: updatedData.points });
+
   return { base, myIsMajority, next: currentStreak, agg };
 }
 
