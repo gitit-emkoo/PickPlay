@@ -28,6 +28,7 @@
     },
     "android": {
       "package": "com.pickplay.kwcc",
+      "versionCode": 8,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"

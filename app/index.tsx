@@ -318,7 +318,7 @@ export default function App(){
 
 매일 나를 마주하는 꾸준한 30초!
 오늘부터 긍정 루틴을 달성해 보세요👇
-https://play.google.com/store/apps/details?id=com.pickplay.kwcc` 
+https://pickplay.waveon.me/` 
     });
   };
 
@@ -850,7 +850,7 @@ https://play.google.com/store/apps/details?id=com.pickplay.kwcc`
               lineHeight: 24
             }}>
               {userData.streakCount >= 11 ? 
-                `🎉 ${userData.streakCount >= 31 ? '3배' : '2배'} 보상 적용 중!` :
+                ` ${userData.streakCount >= 31 ? '3배' : '2배'} 보상 적용 중!` :
                 `내일도 참여하면 ${userData.streakCount + 1}일 연속 달성!`
               }
             </Text>
