@@ -126,14 +126,10 @@ export function attachRewardedInterstitial(ad: any, {
   
   if (!moduleLoaded || !RewardedAdEventType || !AdEventType) {
     console.log('📱 광고 모듈이 로드되지 않음 - 더미 리스너 사용');
-    // 더미 광고에서 즉시 보상 지급 (테스트용)
+    // 더미 광고에서는 로드만 완료하고 자동 보상 지급하지 않음
     setTimeout(() => {
-      console.log('📱 더미 광고: 즉시 보상 지급');
+      console.log('📱 더미 광고: 로드 완료 (수동 광고 시청 필요)');
       onLoaded();
-      setTimeout(() => {
-        onEarned();
-        onClosed();
-      }, 100);
     }, 500);
     return createNativeDummyListener();
   }

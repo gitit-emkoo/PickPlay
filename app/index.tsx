@@ -146,6 +146,19 @@ export default function App(){
       onEarned:async()=>{
         // 광고 시청 완료 → 최신 상태에서 보상 지급하도록 플래그만 세움
         addDebugLog('💰 광고 시청 완료!');
+        
+        // 실제 광고 시청 상태를 AsyncStorage에 저장
+        if (q?.id) {
+          const deviceUID = await getDeviceUID();
+          const adWatchKey = `ad_watched_${q.id}_${deviceUID}`;
+          await AsyncStorage.setItem(adWatchKey, JSON.stringify({
+            watchedAt: new Date().toISOString(),
+            questionId: q.id,
+            deviceUID: deviceUID
+          }));
+          addDebugLog('💾 광고 시청 상태 저장 완료');
+        }
+        
         setAdWatched(true);
       },
       onClosed:()=>{ 
@@ -216,18 +229,35 @@ export default function App(){
                   // 투표 후 보상이 이미 지급되었는지 확인(기기 기준 키)
                   const deviceUID = await getDeviceUID();
                   const rewardKey = `reward_${qq.id}_${deviceUID}`;
+                  const adWatchKey = `ad_watched_${qq.id}_${deviceUID}`;
+                  
                   const rewardStatus = await AsyncStorage.getItem(rewardKey);
-                  if (rewardStatus) {
+                  const adWatchStatus = await AsyncStorage.getItem(adWatchKey);
+                  
+                  // 보상이 지급되었고, 실제 광고 시청도 확인된 경우에만 보상 완료 상태로 복원
+                  if (rewardStatus && adWatchStatus) {
                     const rewardData = JSON.parse(rewardStatus);
-                    const baseReward = rewardData.myIsMajority ? 5 : 10;
-                    const m = getStreakMultiplier(typeof rewardData.next === 'number' ? rewardData.next : userData?.streakCount);
-                    const total = typeof rewardData.base === 'number' ? rewardData.base : baseReward;
-                    setRewardMessage(total, rewardData.myIsMajority, m);
-                    setRewardCompleted(true);
-                    setShowRewardButton(false);
+                    const adWatchData = JSON.parse(adWatchStatus);
+                    
+                    // 광고 시청 시간과 보상 지급 시간이 유효한지 확인
+                    if (adWatchData.watchedAt && adWatchData.questionId === qq.id) {
+                      const baseReward = rewardData.myIsMajority ? 5 : 10;
+                      const m = getStreakMultiplier(typeof rewardData.next === 'number' ? rewardData.next : userData?.streakCount);
+                      const total = typeof rewardData.base === 'number' ? rewardData.base : baseReward;
+                      setRewardMessage(total, rewardData.myIsMajority, m);
+                      setRewardCompleted(true);
+                      setShowRewardButton(false);
+                      addDebugLog('✅ 보상 상태 복원 완료 (광고 시청 확인됨)');
+                    } else {
+                      // 광고 시청 기록이 유효하지 않으면 보상 버튼 표시
+                      setRewardCompleted(false);
+                      setShowRewardButton(true);
+                      addDebugLog('⚠️ 광고 시청 기록이 유효하지 않음 - 보상 버튼 표시');
+                    }
                   } else {
                     setRewardCompleted(false);
                     setShowRewardButton(true);
+                    addDebugLog('ℹ️ 보상 또는 광고 시청 기록 없음 - 보상 버튼 표시');
                   }
                 } else {
                   // Firestore 확인(보조)
@@ -245,18 +275,35 @@ export default function App(){
                       setUserChoice(voteData.optionIndex);
                       const deviceUID = await getDeviceUID();
                       const rewardKey = `reward_${qq.id}_${deviceUID}`;
+                      const adWatchKey = `ad_watched_${qq.id}_${deviceUID}`;
+                      
                       const rewardStatus = await AsyncStorage.getItem(rewardKey);
-                      if (rewardStatus) {
+                      const adWatchStatus = await AsyncStorage.getItem(adWatchKey);
+                      
+                      // 보상이 지급되었고, 실제 광고 시청도 확인된 경우에만 보상 완료 상태로 복원
+                      if (rewardStatus && adWatchStatus) {
                         const rewardData = JSON.parse(rewardStatus);
-                        const baseReward = rewardData.myIsMajority ? 5 : 10;
-                        const m = getStreakMultiplier(typeof rewardData.next === 'number' ? rewardData.next : userData?.streakCount);
-                        const total = typeof rewardData.base === 'number' ? rewardData.base : baseReward;
-                        setRewardMessage(total, rewardData.myIsMajority, m);
-                        setRewardCompleted(true);
-                        setShowRewardButton(false);
+                        const adWatchData = JSON.parse(adWatchStatus);
+                        
+                        // 광고 시청 시간과 보상 지급 시간이 유효한지 확인
+                        if (adWatchData.watchedAt && adWatchData.questionId === qq.id) {
+                          const baseReward = rewardData.myIsMajority ? 5 : 10;
+                          const m = getStreakMultiplier(typeof rewardData.next === 'number' ? rewardData.next : userData?.streakCount);
+                          const total = typeof rewardData.base === 'number' ? rewardData.base : baseReward;
+                          setRewardMessage(total, rewardData.myIsMajority, m);
+                          setRewardCompleted(true);
+                          setShowRewardButton(false);
+                          addDebugLog('✅ 보상 상태 복원 완료 (Firestore 기반, 광고 시청 확인됨)');
+                        } else {
+                          // 광고 시청 기록이 유효하지 않으면 보상 버튼 표시
+                          setRewardCompleted(false);
+                          setShowRewardButton(true);
+                          addDebugLog('⚠️ Firestore 기반 - 광고 시청 기록이 유효하지 않음 - 보상 버튼 표시');
+                        }
                       } else {
                         setRewardCompleted(false);
                         setShowRewardButton(true);
+                        addDebugLog('ℹ️ Firestore 기반 - 보상 또는 광고 시청 기록 없음 - 보상 버튼 표시');
                       }
                     }
                   }
@@ -333,6 +380,19 @@ https://pickplay.waveon.me/`
       addDebugLog('❌ 보상 지급 불가: 사용자/질문/선택 상태 누락');
       return;
     }
+
+    // 실제 광고 시청 여부 재확인
+    const deviceUID = await getDeviceUID();
+    const adWatchKey = `ad_watched_${q.id}_${deviceUID}`;
+    const hasActuallyWatchedAd = await AsyncStorage.getItem(adWatchKey);
+    
+    if (!hasActuallyWatchedAd) {
+      addDebugLog('❌ 실제 광고 시청 확인 실패 - 보상 지급 중단');
+      setMsg('광고 시청이 확인되지 않았습니다. 다시 시도해주세요.');
+      setAdWatched(false);
+      return;
+    }
+
     addDebugLog(`🎯 보상 지급 시작: uid=${user.uid}, questionId=${q.id}, userChoice=${userChoice}`);
     try {
       const { base, myIsMajority, next } = await rewardWithMajority(
@@ -371,6 +431,10 @@ https://pickplay.waveon.me/`
         }
       }
 
+      // 보상 지급 완료 후 광고 시청 상태 정리
+      await AsyncStorage.removeItem(adWatchKey);
+      addDebugLog('🧹 광고 시청 상태 정리 완료');
+      
       setAdWatched(false);
       setRewardCompleted(true);
       addDebugLog('✅ 보상 지급 완료!');
@@ -752,6 +816,15 @@ https://pickplay.waveon.me/`
             onPress={async () => {
               if (rewardCompleted) return; // 재진입 가드
               addDebugLog('🎁 보상 버튼 클릭!');
+              
+              // 보상 버튼 클릭 시 이전 광고 시청 상태 정리
+              if (q?.id) {
+                const deviceUID = await getDeviceUID();
+                const adWatchKey = `ad_watched_${q.id}_${deviceUID}`;
+                await AsyncStorage.removeItem(adWatchKey);
+                addDebugLog('🧹 이전 광고 시청 상태 정리');
+              }
+              
               setShowAdInfoModal(true);
             }}
             style={{
