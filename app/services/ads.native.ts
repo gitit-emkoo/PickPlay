@@ -95,7 +95,7 @@ export function createRewardedInterstitial() {
     return createNativeDummyAd();
   }
   
-  const adUnitId = Platform.select(AD_UNITS) || TestIds?.REWARDED_INTERSTITIAL;
+  const adUnitId = Platform.select(AD_UNITS);
   console.log('📱 광고 단위 ID:', adUnitId);
   console.log('📱 플랫폼:', Platform.OS);
   
