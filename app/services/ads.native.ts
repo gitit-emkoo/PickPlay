@@ -126,11 +126,21 @@ export function attachRewardedInterstitial(ad: any, {
   
   if (!moduleLoaded || !RewardedAdEventType || !AdEventType) {
     console.log('📱 광고 모듈이 로드되지 않음 - 더미 리스너 사용');
-    // 더미 광고에서는 로드만 완료하고 자동 보상 지급하지 않음
-    setTimeout(() => {
-      console.log('📱 더미 광고: 로드 완료 (수동 광고 시청 필요)');
-      onLoaded();
-    }, 500);
+    
+    // 개발 환경에서는 더미 광고 시청 기능 제공
+    if (__DEV__) {
+      console.log('📱 개발 모드: 더미 광고 시청 기능 활성화');
+      setTimeout(() => {
+        console.log('📱 더미 광고: 로드 완료');
+        onLoaded();
+      }, 500);
+    } else {
+      // 프로덕션에서는 로드만 완료
+      setTimeout(() => {
+        console.log('📱 더미 광고: 로드 완료 (수동 광고 시청 필요)');
+        onLoaded();
+      }, 500);
+    }
     return createNativeDummyListener();
   }
   

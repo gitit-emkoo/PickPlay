@@ -381,12 +381,13 @@ https://pickplay.waveon.me/`
       return;
     }
 
-    // 실제 광고 시청 여부 재확인
+    // 실제 광고 시청 여부 재확인 (기존 사용자 호환성을 위해 완화)
     const deviceUID = await getDeviceUID();
     const adWatchKey = `ad_watched_${q.id}_${deviceUID}`;
     const hasActuallyWatchedAd = await AsyncStorage.getItem(adWatchKey);
     
-    if (!hasActuallyWatchedAd) {
+    // 기존 사용자 호환성: adWatched 상태가 true면 광고를 본 것으로 간주
+    if (!hasActuallyWatchedAd && !adWatched) {
       addDebugLog('❌ 실제 광고 시청 확인 실패 - 보상 지급 중단');
       setMsg('광고 시청이 확인되지 않았습니다. 다시 시도해주세요.');
       setAdWatched(false);
