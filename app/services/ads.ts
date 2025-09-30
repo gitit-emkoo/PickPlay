@@ -10,11 +10,13 @@ const isExpoGo = () => {
   }
 };
 
-// 플랫폼별 실제 광고 단위 ID
+// 플랫폼별 광고 단위 ID (AdMob 계정 일시정지로 인한 임시 테스트 모드)
 const AD_UNITS = {
   android: 'ca-app-pub-3940256099942544/5354046379', // 테스트 광고
-  // android: 'ca-app-pub-2555567440328829/7893158578', // 실제 광고 (한달 후 복구)
-  ios: 'ca-app-pub-2555567440328829/9198215970'
+  ios: 'ca-app-pub-3940256099942544/6978759866', // 테스트 광고
+  // 실제 광고 ID (AdMob 계정 복구 시 사용)
+  // android: 'ca-app-pub-2555567440328829/7893158578', // 실제 광고
+  // ios: 'ca-app-pub-2555567440328829/9198215970' // 실제 광고
 };
 
 // 더미 광고 객체 (Expo Go용)
@@ -114,10 +116,10 @@ export function createRewardedInterstitial() {
     
     // 플랫폼별 광고 단위 ID 선택
     const platformAdUnitId = Platform.OS === 'ios' ? AD_UNITS.ios : AD_UNITS.android;
-    const adUnitId = __DEV__ ? TestIds.REWARDED_INTERSTITIAL : platformAdUnitId;
+    const adUnitId = platformAdUnitId;
       
     console.log(`🎯 보상형 전면 광고 생성: ${adUnitId}`);
-    console.log(`🔧 모드: ${__DEV__ ? '개발 (테스트 광고)' : '프로덕션 (실제 광고)'}`);
+    console.log(`🔧 모드: 테스트 (AdMob 계정 일시정지)`);
     console.log(`📱 플랫폼: ${Platform.OS}`);
     
     const rewarded = RewardedInterstitialAd.createForAdRequest(adUnitId, {

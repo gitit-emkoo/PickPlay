@@ -55,12 +55,13 @@ if (Platform.OS !== 'web') {
   }
 }
 
-// 플랫폼별 광고 단위 ID
+// 플랫폼별 광고 단위 ID (AdMob 계정 일시정지로 인한 임시 테스트 모드)
 const AD_UNITS = {
-  // android: 'ca-app-pub-3940256099942544/5354046379', // 테스트 광고
-  android: 'ca-app-pub-2555567440328829/7893158578', // 실제 광고
-  ios: 'ca-app-pub-2555567440328829/9198215970' // 실제 광고
-  // ios: 'ca-app-pub-3940256099942544/6978759866' // 보상형 전면광고 테스트 ID
+  android: 'ca-app-pub-3940256099942544/5354046379', // 테스트 광고
+  ios: 'ca-app-pub-3940256099942544/6978759866', // 테스트 광고
+  // 실제 광고 ID (AdMob 계정 복구 시 사용)
+  // android: 'ca-app-pub-2555567440328829/7893158578', // 실제 광고
+  // ios: 'ca-app-pub-2555567440328829/9198215970' // 실제 광고
 };
 
 export async function initAds() { 
@@ -95,7 +96,7 @@ export function createRewardedInterstitial() {
     return createNativeDummyAd();
   }
   
-  const adUnitId = Platform.select(AD_UNITS) || TestIds?.REWARDED_INTERSTITIAL;
+  const adUnitId = Platform.select(AD_UNITS);
   console.log('📱 광고 단위 ID:', adUnitId);
   console.log('📱 플랫폼:', Platform.OS);
   
@@ -126,15 +127,21 @@ export function attachRewardedInterstitial(ad: any, {
   
   if (!moduleLoaded || !RewardedAdEventType || !AdEventType) {
     console.log('📱 광고 모듈이 로드되지 않음 - 더미 리스너 사용');
-    // 더미 광고에서 즉시 보상 지급 (테스트용)
-    setTimeout(() => {
-      console.log('📱 더미 광고: 즉시 보상 지급');
-      onLoaded();
+    
+    // 개발 환경에서는 더미 광고 시청 기능 제공
+    if (__DEV__) {
+      console.log('📱 개발 모드: 더미 광고 시청 기능 활성화');
       setTimeout(() => {
-        onEarned();
-        onClosed();
-      }, 100);
-    }, 500);
+        console.log('📱 더미 광고: 로드 완료');
+        onLoaded();
+      }, 500);
+    } else {
+      // 프로덕션에서는 로드만 완료
+      setTimeout(() => {
+        console.log('📱 더미 광고: 로드 완료 (수동 광고 시청 필요)');
+        onLoaded();
+      }, 500);
+    }
     return createNativeDummyListener();
   }
   
