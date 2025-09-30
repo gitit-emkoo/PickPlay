@@ -12,11 +12,13 @@ service cloud.firestore {
              ];
     }
 
-    match /questions/{id} {
-      allow read: if true;      // 공개 읽기
-      allow write: if false;    // 서버/관리만
+    // 질문 데이터
+    match /questions/{questionId} {
+      allow read: if signedIn();
+      allow write: if isAdmin(); // 관리자 쓰기 권한 추가
     }
 
+    // 사용자 데이터
     match /users/{uid} {
       // 자신의 데이터 읽기/쓰기
       allow read, write: if signedIn() && request.auth.uid == uid;
