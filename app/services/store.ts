@@ -190,8 +190,12 @@ export const saveAnswerAndProcessLogic = async (userData: UserData, question: Qu
   const userRef = firestore().collection('users').doc(uid);
   const selectedOptionText = selectedOptionIndex === 0 ? question.option_1_text : question.option_2_text;
 
-  // --- 1. AI 태그 생성 & 답변 저장 ---
+  // --- 1. AI 태그 생성 & 답변 저장 (고유 ID 사용) ---
   const generatedTags = await generateTagsWithAI(question, selectedOptionText);
+  
+  // 문서 ID를 '{uid}_{questionId}' 형식으로 지정하여 중복 방지
+  const answerRef = firestore().collection('answers').doc(`${uid}_${question.question_id}`);
+  
   const answerData: Omit<Answer, 'answeredAt'> = {
     uid,
     question_id: question.question_id,
@@ -199,11 +203,11 @@ export const saveAnswerAndProcessLogic = async (userData: UserData, question: Qu
     selected_option_text: selectedOptionText,
     tags: generatedTags,
   };
-  await firestore().collection('answers').add({
+  await answerRef.set({
     ...answerData,
     answeredAt: firestore.FieldValue.serverTimestamp(),
   });
-  console.log(`[Logic] 답변 저장 완료: Q.${question.question_id}`);
+  console.log(`[Logic] 답변 저장 완료: Doc ID = ${uid}_${question.question_id}`);
 
   // --- 2. 연속 참여일수, 누적 답변 수 업데이트 (Transaction) ---
   let updatedTotalSelections: number;

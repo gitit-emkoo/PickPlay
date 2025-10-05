@@ -1,3 +1,8 @@
+// --- PickPlay Firestore Rules ---
+// App Version: 3.0 (Anima Code Update)
+// Last Updated: 2025-10-05
+// - 'answers'와 'logs' 컬렉션에 대한 보안 규칙을 추가하여 Anima Code 기능을 지원합니다.
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -25,6 +30,51 @@ service cloud.firestore {
       
       // 관리자는 모든 사용자 데이터 읽기 가능 (관리자 페이지용)
       allow read: if isAdmin();
+    }
+    
+    // [강화] answers 컬렉션 규칙 (Anima Code)
+    match /answers/{answerDocId} {
+      // 문서 ID에서 uid와 questionId를 분리하는 함수
+      function getUid() { return answerDocId.split('_')[0]; }
+      function getQuestionId() { return answerDocId.split('_')[1]; }
+
+      // 본인만 자신의 답변을 읽을 수 있음
+      allow read: if signedIn() && request.auth.uid == getUid();
+
+      // 생성 규칙: 아래 모든 조건을 만족해야 함
+      allow create: if signedIn() 
+        // 1. 인증된 사용자가 본인 문서에만 쓸 수 있는가?
+        && request.auth.uid == getUid()
+        // 2. 문서 ID와 내용의 uid, questionId가 모두 일치하는가?
+        && request.resource.data.uid == getUid()
+        && request.resource.data.question_id == getQuestionId()
+        // 3. 데이터 스키마와 타입이 정확한가?
+        && request.resource.data.keys().hasOnly(['uid', 'question_id', 'selected_option_index', 'selected_option_text', 'tags', 'answeredAt'])
+        && request.resource.data.uid is string
+        && request.resource.data.question_id is string
+        && request.resource.data.selected_option_index in [0, 1]
+        && request.resource.data.selected_option_text is string
+        && request.resource.data.tags is list
+        // 4. 존재하는 질문에 대한 답변인가?
+        && exists(/databases/$(database)/documents/questions/$(getQuestionId()));
+
+      // 한번 생성된 답변은 관리자 외에는 절대 수정/삭제 불가
+      allow update, delete: if isAdmin();
+    }
+
+    // [강화] logs 컬렉션 규칙 (Anima Code)
+    match /logs/{logId} {
+      // 생성: 본인만, 그리고 정해진 스키마/타입으로만 가능
+      allow create: if signedIn() 
+        && request.auth.uid == request.resource.data.uid
+        && request.resource.data.keys().hasOnly(['uid', 'action', 'details', 'createdAt'])
+        && request.resource.data.uid is string
+        && request.resource.data.action is string
+        && request.resource.data.details is map;
+      
+      // 로그는 관리자만 읽을 수 있고, 수정/삭제는 불가능
+      allow read: if isAdmin();
+      allow update, delete: if false;
     }
 
     match /votes/{id} {
