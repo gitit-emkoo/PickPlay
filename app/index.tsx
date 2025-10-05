@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, Text, TouchableOpacity, View, StyleSheet, SafeAreaView } from 'react-native';
-import { loadData, ensureUser, getTodayQuestionForUser, saveAnswerAndProcessLogic, aggregate } from './services/store';
+import { loadData, ensureUser, getTodayQuestionForUser, saveAnswerAndProcessLogic, aggregate, getTodayAnswer } from './services/store';
 import { Question, UserData } from './types';
 import { watchAuth } from './services/firebase';
 import LoadingScreen from './components/LoadingScreen';
@@ -29,20 +29,22 @@ export default function App() {
       const data = await ensureUser(user.uid);
       setUserData(data);
       
-      // 오늘 이미 투표했는지 확인하여 UI 상태 설정
-      if (data.lastAnswerDate === currentDateKey()) {
-        // TODO: 어떤 선택을 했는지 알아내서 userChoice에 설정해야 함
-        // 우선은 투표한 사실만 반영
-        setUserChoice(0); // 임시로 0으로 설정
-      } else {
-        setUserChoice(null);
-      }
-
       const q = getTodayQuestionForUser(data);
       setQuestion(q);
+
       if (q) {
+        // 오늘 답변 기록을 가져와 UI 상태 설정
+        const todayAnswer = await getTodayAnswer(user.uid, q.question_id);
+        if (todayAnswer) {
+          setUserChoice(todayAnswer.selected_option_index);
+        } else {
+          setUserChoice(null);
+        }
+        
         const result = await aggregate(q.question_id);
         setAgg(result);
+      } else {
+        setUserChoice(null);
       }
       setLoading(false);
     };

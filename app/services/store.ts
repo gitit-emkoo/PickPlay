@@ -143,6 +143,27 @@ export const getTodayQuestionForUser = (userData: UserData): Question | null => 
   }
 };
 
+/**
+ * [V2] 사용자가 오늘 질문에 답변했는지 확인하고, 했다면 어떤 선택을 했는지 반환합니다.
+ * @param uid 사용자 ID
+ * @param questionId 질문 ID
+ * @returns Answer 객체 또는 null
+ */
+export const getTodayAnswer = async (uid: string, questionId: string): Promise<Answer | null> => {
+  const answerDocId = `${uid}_${questionId}`;
+  const answerRef = firestore().collection('answers').doc(answerDocId);
+  const doc = await answerRef.get();
+
+  if (doc.exists()) { // .exists -> .exists()
+    console.log(`[Check] 오늘 답변 기록을 찾았습니다: ${answerDocId}`);
+    return doc.data() as Answer;
+  } else {
+    console.log(`[Check] 오늘 답변 기록이 없습니다.`);
+    return null;
+  }
+};
+
+
 // --- Helper Functions ---
 
 /**
