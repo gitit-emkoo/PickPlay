@@ -5,6 +5,8 @@ import { Question, UserData } from './types';
 import { watchAuth } from './services/firebase';
 import LoadingScreen from './components/LoadingScreen';
 import ErrorScreen from './components/ErrorScreen';
+import CharacterCard from './components/CharacterCard';
+import { currentDateKey } from './utils/date';
 
 export default function App() {
   const [user, setUser] = useState<{ uid: string } | null>(null);
@@ -26,10 +28,19 @@ export default function App() {
       setLoading(true);
       const data = await ensureUser(user.uid);
       setUserData(data);
+      
+      // 오늘 이미 투표했는지 확인하여 UI 상태 설정
+      if (data.lastAnswerDate === currentDateKey()) {
+        // TODO: 어떤 선택을 했는지 알아내서 userChoice에 설정해야 함
+        // 우선은 투표한 사실만 반영
+        setUserChoice(0); // 임시로 0으로 설정
+      } else {
+        setUserChoice(null);
+      }
+
       const q = getTodayQuestionForUser(data);
       setQuestion(q);
       if (q) {
-        // TODO: 이미 답변했는지 확인하는 로직
         const result = await aggregate(q.question_id);
         setAgg(result);
       }
@@ -46,9 +57,9 @@ export default function App() {
       setUserChoice(index);
       const result = await aggregate(question.question_id);
       setAgg(result);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      Alert.alert("Error", "Could not save your vote.");
+      Alert.alert("Error", e.message || "Could not save your vote.");
     }
   };
 
@@ -65,12 +76,7 @@ export default function App() {
           </View>
         )}
 
-        {userData?.characterId && (
-          <View style={styles.characterCard}>
-            <Text style={styles.characterTitle}>나의 캐릭터</Text>
-            <Text>{userData.adjective1} {userData.adjective2} {userData.characterId}</Text>
-          </View>
-        )}
+        <CharacterCard userData={userData} />
 
         <View style={styles.card}>
           <Text style={styles.questionText}>{question.text}</Text>

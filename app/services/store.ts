@@ -5,6 +5,7 @@ import { Answer, Character, Question, UserData } from '../types';
 import { db } from './firebase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getDeviceUID } from './firebase';
+import { currentDateKey } from '../utils/date';
 // AsyncStorage는 더 이상 직접 사용하지 않으므로 제거 (필요 시 UI단에서만 사용)
 
 // --- 데이터 로더 (앱 시작 시 호출) ---
@@ -142,56 +143,132 @@ export const getTodayQuestionForUser = (userData: UserData): Question | null => 
   }
 };
 
+// --- Helper Functions ---
+
 /**
- * [신규] 사용자의 답변을 저장하고, 누적 답변 수에 따라 캐릭터 배정/성장 로직을 처리합니다.
- * @param userData 현재 사용자 데이터
- * @param question 현재 질문 객체
- * @param selectedOptionIndex 사용자가 선택한 옵션 (0 또는 1)
- * @returns 업데이트된 사용자 데이터
+ * [AI 연동 준비] 선택지와 질문 정보를 기반으로 AI를 호출하여 태그를 생성합니다.
+ * @param question 질문 객체
+ * @param selectedOptionText 사용자가 선택한 선택지 텍스트
+ * @returns 생성된 태그 배열 (string[])
+ */
+const generateTagsWithAI = async (question: Question, selectedOptionText: string): Promise<string[]> => {
+  console.log(`[AI] 태그 생성 시작... (Q: ${question.text}, A: ${selectedOptionText})`);
+  // TODO: 여기에 실제 AI 모델 호출 및 API 연동 코드를 구현해야 합니다.
+  
+  // 현재는 AI 호출을 시뮬레이션합니다. (1초 대기)
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
+  // 질문 domain에 따라 의미있는 임시 태그를 반환합니다.
+  const mockTagsByDomain = {
+    '감정': ['감성적인', '이성적인', '차분한'],
+    '가치관': ['현실적인', '이상적인', '안정지향'],
+    '습관': ['계획적인', '즉흥적인', '부지런한'],
+    '관계': ['외향적인', '내향적인', '사려깊은'],
+  };
+
+  const domainTags = mockTagsByDomain[question.domain];
+  // 2개의 태그를 랜덤으로 선택하여 반환
+  const selectedTags = domainTags.sort(() => 0.5 - Math.random()).slice(0, 2);
+  
+  console.log(`[AI] 태그 생성 완료: [${selectedTags.join(', ')}]`);
+  return selectedTags;
+};
+
+
+/**
+ * [V2] 사용자의 답변을 저장하고, 연속 참여일수 업데이트 및 캐릭터 로직을 처리합니다.
+ * @throws "오늘 이미 답변했습니다." - 중복 답변 시 에러 발생
  */
 export const saveAnswerAndProcessLogic = async (userData: UserData, question: Question, selectedOptionIndex: 0 | 1): Promise<UserData> => {
+  const todayKey = currentDateKey();
+  if (userData.lastAnswerDate === todayKey) {
+    console.warn(`[Vote] User ${userData.uid} has already voted today. Aborting.`);
+    throw new Error("오늘 이미 답변했습니다.");
+  }
+
   const { uid } = userData;
   const userRef = firestore().collection('users').doc(uid);
+  const selectedOptionText = selectedOptionIndex === 0 ? question.option_1_text : question.option_2_text;
 
-  // --- 1. AI 태그 생성 (현재는 시뮬레이션) ---
-  // TODO: 실제 AI 로직 연동 필요
-  const generatedTags = ['임시태그1', '임시태그2']; // AI가 생성했다고 가정
-  
-  // --- 2. 답변 정보 Firestore 'answers' 컬렉션에 저장 ---
+  // --- 1. AI 태그 생성 & 답변 저장 ---
+  const generatedTags = await generateTagsWithAI(question, selectedOptionText);
   const answerData: Omit<Answer, 'answeredAt'> = {
     uid,
     question_id: question.question_id,
     selected_option_index: selectedOptionIndex,
-    selected_option_text: selectedOptionIndex === 0 ? question.option_1_text : question.option_2_text,
+    selected_option_text: selectedOptionText,
     tags: generatedTags,
   };
   await firestore().collection('answers').add({
     ...answerData,
     answeredAt: firestore.FieldValue.serverTimestamp(),
   });
-  console.log(`[Logic] 답변 저장 완료: Q.${question.question_id}, User: ${uid}`);
+  console.log(`[Logic] 답변 저장 완료: Q.${question.question_id}`);
 
-  // --- 3. 사용자 누적 답변 수 업데이트 ---
-  const updatedTotalSelections = (userData.totalSelections || 0) + 1;
-  await userRef.update({
-    totalSelections: firestore.FieldValue.increment(1),
-  });
+  // --- 2. 연속 참여일수, 누적 답변 수 업데이트 (Transaction) ---
+  let updatedTotalSelections: number;
+  let updatedUserData: UserData;
 
-  let updatedUserData: UserData = {
-    ...userData,
-    totalSelections: updatedTotalSelections,
+  try {
+    await firestore().runTransaction(async (transaction) => {
+      const userDoc = await transaction.get(userRef);
+      if (!userDoc.exists) {
+        throw "User does not exist!";
+      }
+      const currentUserData = userDoc.data() as UserData;
+
+      // 연속 참여일수 계산
+      const kstNow = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
+      const yesterdayKST = new Date(kstNow.getTime());
+      yesterdayKST.setUTCDate(kstNow.getUTCDate() - 1);
+      const year = yesterdayKST.getUTCFullYear();
+      const month = String(yesterdayKST.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(yesterdayKST.getUTCDate()).padStart(2, '0');
+      const yesterdayKey = parseInt(`${year}${month}${day}`, 10);
+
+      let newStreakCount = 1;
+      if (currentUserData.lastAnswerDate === yesterdayKey) {
+        newStreakCount = (currentUserData.streakCount || 0) + 1;
+      }
+      
+      // 트랜잭션 업데이트
+      transaction.update(userRef, {
+        totalSelections: firestore.FieldValue.increment(1),
+        streakCount: newStreakCount,
+        lastAnswerDate: todayKey,
+      });
+
+      updatedTotalSelections = (currentUserData.totalSelections || 0) + 1;
+      updatedUserData = { 
+        ...currentUserData, 
+        totalSelections: updatedTotalSelections,
+        streakCount: newStreakCount,
+        lastAnswerDate: todayKey
+      };
+    });
+    console.log(`[Streak] 연속 참여일수 업데이트 완료. New streak: ${updatedUserData!.streakCount}`);
+  } catch (error) {
+    console.error("❌ 사용자 정보 업데이트 트랜잭션 실패:", error);
+    throw error;
+  }
+
+  // --- 3. 포인트 보상 지급 ---
+  await rewardWithMajority(uid, question.question_id, selectedOptionIndex, updatedUserData!.streakCount);
+  const finalUserData = { // 포인트가 업데이트된 최신 데이터를 반영
+    ...updatedUserData!,
+    points: (updatedUserData!.points || 0) + (await rewardWithMajority(uid, question.question_id, selectedOptionIndex, updatedUserData!.streakCount)).base + (await rewardWithMajority(uid, question.question_id, selectedOptionIndex, updatedUserData!.streakCount)).bonus
   };
 
   // --- 4. 누적 답변 수에 따라 로직 분기 ---
-  if (updatedTotalSelections === 30) {
+  if (updatedTotalSelections! === 30) {
     console.log(`[Logic A] 누적 답변 30회 도달! 캐릭터 배정 로직을 실행합니다.`);
-    updatedUserData = await assignCharacter_LogicA(updatedUserData);
-  } else if (updatedTotalSelections >= 60 && updatedTotalSelections % 30 === 0) {
-    console.log(`[Logic B] 누적 답변 ${updatedTotalSelections}회 도달! 형용사 갱신 로직을 실행합니다.`);
-    updatedUserData = await updateAdjectives_LogicB(updatedUserData);
+    updatedUserData = await assignCharacter_LogicA(finalUserData);
+  } else if (updatedTotalSelections! >= 60 && updatedTotalSelections! % 30 === 0) {
+    console.log(`[Logic B] 누적 답변 ${updatedTotalSelections!}회 도달! 형용사 갱신 로직을 실행합니다.`);
+    updatedUserData = await updateAdjectives_LogicB(finalUserData);
   }
 
-  return updatedUserData;
+  return updatedUserData!;
 };
 
 // --- 로직 A/B 구현 ---
@@ -208,12 +285,14 @@ const isLegacyUser = (userData: UserData): boolean => {
 };
 
 /** [Logic B] 특정 구간의 답변을 분석하여 최빈값 형용사1, 2를 추출 */
-const analyzeAnswersForAdjectives = async (uid: string, start: number, end: number): Promise<{ adj1: string | null, adj2: string | null }> => {
+const analyzeAnswersForAdjectives = async (
+  uid: string, 
+  start: number, 
+  end: number
+): Promise<{ adj1: string | null, adj2: string | null }> => {
   const answersSnapshot = await firestore()
     .collection('answers')
     .where('uid', '==', uid)
-    // TODO: Firestore는 범위 쿼리에 한계가 있어, totalSelections를 기준으로 직접 필터링 불가.
-    // 우선 최근 답변을 가져와 클라이언트에서 필터링하는 방식으로 구현.
     .orderBy('answeredAt', 'desc')
     .limit(end)
     .get();
@@ -224,15 +303,13 @@ const analyzeAnswersForAdjectives = async (uid: string, start: number, end: numb
     '감정': {}, '가치관': {}, '습관': {}, '관계': {}
   };
 
-  // 태그 빈도수 계산
-  // TODO: 실제 question.domain 정보와 연동 필요
+  // 태그 빈도수 계산 (실제 question.domain 정보와 연동)
   answersInRange.forEach(answer => {
-    if (answer.tags) {
+    const question = questions.find(q => q.question_id === answer.question_id);
+    if (question && answer.tags) {
       answer.tags.forEach(tag => {
-        // 임시로 domain을 랜덤 할당하여 계산
-        const domains = ['감정', '가치관', '습관', '관계'];
-        const randomDomain = domains[Math.floor(Math.random() * 4)];
-        tagFrequency[randomDomain][tag] = (tagFrequency[randomDomain][tag] || 0) + 1;
+        const domain = question.domain;
+        tagFrequency[domain][tag] = (tagFrequency[domain][tag] || 0) + 1;
       });
     }
   });
@@ -353,12 +430,18 @@ export const aggregate = async (questionId: string) => {
 };
 
 /**
- * 승패 보상형: 다수 5P / 소수 10P + 연속 참여 배수 보상
+ * [V2] 승패 보상 및 연속 참여 보너스 포인트를 계산하고 지급합니다.
  * @param uid 사용자 ID
  * @param questionId 질문 ID
  * @param myOptionIndex 사용자의 선택
+ * @param streakCount 현재 연속 참여일수
  */
-export async function rewardWithMajority(uid: string, questionId: string, myOptionIndex: number) {
+export async function rewardWithMajority(
+  uid: string, 
+  questionId: string, 
+  myOptionIndex: number,
+  streakCount: number
+) {
   const agg = await aggregate(questionId);
   const myIsMajority = (() => {
     if (agg.c0 === agg.c1) return true;
@@ -366,15 +449,17 @@ export async function rewardWithMajority(uid: string, questionId: string, myOpti
     return myOptionIndex === majorityIndex;
   })();
   
-  let base = myIsMajority ? 5 : 10;
+  const base = myIsMajority ? 5 : 10;
+  const bonus = streakCount > 1 ? streakCount : 0; // 연속 참여 2일차부터 보너스
+  const totalPoints = base + bonus;
   
-  // TODO: V2 UserData에서 streakCount 가져와서 배수 적용 필요
   const userRef = firestore().collection('users').doc(uid);
   await userRef.update({
-    points: firestore.FieldValue.increment(base)
+    points: firestore.FieldValue.increment(totalPoints)
   });
+  console.log(`[Points] 포인트 지급 완료: 기본 ${base}P + 보너스 ${bonus}P = 총 ${totalPoints}P`);
 
-  return { base, myIsMajority, next: 0, agg }; // next 값은 임시
+  return { base, bonus, myIsMajority, agg };
 }
 
 /**
