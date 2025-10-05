@@ -115,11 +115,16 @@ export const getTodayQuestionForUser = (userData: UserData): Question | null => 
     return null;
   }
 
-  // createdAt이 Timestamp 객체일 수 있으므로 toDate()로 변환
-  const startDate = (userData.createdAt as FirebaseFirestoreTypes.Timestamp).toDate ? 
-                      (userData.createdAt as FirebaseFirestoreTypes.Timestamp).toDate() : 
-                      userData.createdAt as Date;
+  // createdAt이 Timestamp 객체인지 Date 객체인지 확인하여 안전하게 Date 객체로 변환
+  const startDate = userData.createdAt && typeof (userData.createdAt as any).toDate === 'function' 
+    ? (userData.createdAt as FirebaseFirestoreTypes.Timestamp).toDate() 
+    : userData.createdAt as Date;
 
+  if (!(startDate instanceof Date) || isNaN(startDate.getTime())) {
+    console.error("❌ [Question] 유효하지 않은 createdAt 값입니다:", userData.createdAt);
+    return null;
+  }
+  
   // KST 기준으로 날짜 차이 계산
   const now = new Date();
   const kstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));

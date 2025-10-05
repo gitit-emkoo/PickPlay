@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image, ActivityIndicator } from 'react-native';
+import LottieView from 'lottie-react-native';
 import { UserData } from '../types'; // Character 타입도 필요할 수 있음
 
 interface CharacterCardProps {
@@ -9,7 +10,6 @@ interface CharacterCardProps {
 
 // 임시 캐릭터 데이터 (실제로는 상위 컴포넌트에서 받아와야 함)
 const characters = require('../../assets/data/characters_19.json');
-const EGG_IMAGE = require('../../assets/images/egg.png');
 
 const CharacterCard: React.FC<CharacterCardProps> = ({ userData }) => {
   if (!userData) {
@@ -31,7 +31,13 @@ const CharacterCard: React.FC<CharacterCardProps> = ({ userData }) => {
           </>
         ) : (
           <>
-            <Image source={EGG_IMAGE} style={styles.characterImage} />
+            <LottieView
+              source={{ uri: "https://lottie.host/df96f2a7-284f-4197-ba3c-5b8388c46299/ykDKnFMp3l.lottie" }}
+              loop={true}
+              autoPlay={true}
+              speed={2}
+              style={styles.characterImage}
+            />
             <Text style={styles.characterName}>???</Text>
             <Text style={styles.adjectives}>아직은 알 수 없어요</Text>
           </>
