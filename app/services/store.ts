@@ -132,14 +132,14 @@ export const getTodayQuestionForUser = (userData: UserData): Question | null => 
   const diffTime = Math.abs(kstNow.getTime() - kstStart.getTime());
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   
-  const questionIndex = diffDays; // Day 0 = 1일차 -> 0번 인덱스 질문
+  // 320일이 지나면 질문이 순환하도록 나머지 연산자(%) 사용
+  const questionIndex = diffDays % questions.length;
 
   if (questions && questions[questionIndex]) {
     console.log(`✅ [Question] Day ${diffDays + 1}, Question #${questionIndex + 1}을(를) 반환합니다.`);
     return questions[questionIndex];
   } else {
     console.warn(`[Question] Day ${diffDays + 1}에 해당하는 질문(인덱스: ${questionIndex})을 찾을 수 없습니다.`);
-    // TODO: 320일이 지난 후 루프 정책 적용
     return null;
   }
 };
