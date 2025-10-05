@@ -6,6 +6,7 @@ import { db } from './firebase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getDeviceUID } from './firebase';
 import { currentDateKey } from '../utils/date';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 // AsyncStorage는 더 이상 직접 사용하지 않으므로 제거 (필요 시 UI단에서만 사용)
 
 // --- 데이터 로더 (앱 시작 시 호출) ---
@@ -167,32 +168,35 @@ export const getTodayAnswer = async (uid: string, questionId: string): Promise<A
 // --- Helper Functions ---
 
 /**
- * [AI 연동 준비] 선택지와 질문 정보를 기반으로 AI를 호출하여 태그를 생성합니다.
+ * [V2] Firebase Cloud Function을 호출하여 AI 태그를 생성합니다.
  * @param question 질문 객체
  * @param selectedOptionText 사용자가 선택한 선택지 텍스트
  * @returns 생성된 태그 배열 (string[])
  */
 const generateTagsWithAI = async (question: Question, selectedOptionText: string): Promise<string[]> => {
-  console.log(`[AI] 태그 생성 시작... (Q: ${question.text}, A: ${selectedOptionText})`);
-  // TODO: 여기에 실제 AI 모델 호출 및 API 연동 코드를 구현해야 합니다.
-  
-  // 현재는 AI 호출을 시뮬레이션합니다. (1초 대기)
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  console.log(`[AI] Cloud Function 'generateTags' 호출 시작...`);
+  try {
+    const functions = getFunctions();
+    const generateTags = httpsCallable(functions, 'generateTags');
+    
+    const result = await generateTags({ 
+      questionId: question.question_id, 
+      selectedText: selectedOptionText,
+    });
+    
+    // Cloud Function의 응답 형식은 { data: { tags: [...] } } 입니다.
+    const tags = (result.data as any).tags; 
+    if (!Array.isArray(tags)) {
+      throw new Error("Cloud Function 응답 형식이 올바르지 않습니다.");
+    }
 
-  // 질문 domain에 따라 의미있는 임시 태그를 반환합니다.
-  const mockTagsByDomain = {
-    '감정': ['감성적인', '이성적인', '차분한'],
-    '가치관': ['현실적인', '이상적인', '안정지향'],
-    '습관': ['계획적인', '즉흥적인', '부지런한'],
-    '관계': ['외향적인', '내향적인', '사려깊은'],
-  };
-
-  const domainTags = mockTagsByDomain[question.domain];
-  // 2개의 태그를 랜덤으로 선택하여 반환
-  const selectedTags = domainTags.sort(() => 0.5 - Math.random()).slice(0, 2);
-  
-  console.log(`[AI] 태그 생성 완료: [${selectedTags.join(', ')}]`);
-  return selectedTags;
+    console.log(`[AI] 태그 생성 완료: [${tags.join(', ')}]`);
+    return tags;
+  } catch (error) {
+    console.error("❌ Cloud Function 호출 실패:", error);
+    // 실패 시 사용자 경험을 해치지 않도록 빈 배열을 반환합니다.
+    return []; 
+  }
 };
 
 
