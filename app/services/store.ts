@@ -3,6 +3,8 @@ import firestore from '@react-native-firebase/firestore';
 import { generateRandomNickname } from '../utils/nickname';
 import { Answer, Character, Question, UserData } from '../types';
 import { db } from './firebase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getDeviceUID } from './firebase';
 // AsyncStorage는 더 이상 직접 사용하지 않으므로 제거 (필요 시 UI단에서만 사용)
 
 // --- 데이터 로더 (앱 시작 시 호출) ---
@@ -24,46 +26,80 @@ export const loadData = () => {
 // --- 핵심 로직 (신규) ---
 
 /**
- * Firestore를 기준으로 사용자를 확인하고, 없으면 새로 생성합니다.
+ * [V2] Firestore를 기준으로 사용자를 확인하고, 없으면 AsyncStorage에서 마이그레이션을 시도하며,
+ * 최종적으로 없으면 신규 사용자를 생성합니다.
  * @param uid 사용자 Firebase UID
  * @returns 사용자 데이터
  */
 export const ensureUser = async (uid: string): Promise<UserData> => {
-  const userRef: FirebaseFirestoreTypes.DocumentReference<UserData> = firestore().collection('users').doc(uid) as FirebaseFirestoreTypes.DocumentReference<UserData>;
-  const doc: FirebaseFirestoreTypes.DocumentSnapshot<UserData> = await userRef.get();
+  const userRef = firestore().collection('users').doc(uid);
+  const doc = await userRef.get();
 
-  if (doc.exists()) {
-    console.log('✅ 기존 사용자 데이터 확인 (Firestore):', uid);
+  // 1. Firestore에 이미 데이터가 있는 경우 (정상)
+  if (doc.exists()) { // .exists -> .exists()
+    console.log('✅ [V2] Firestore에서 사용자 데이터 확인:', uid);
     const data = doc.data() as UserData;
+    // Firestore Timestamp를 JS Date 객체로 변환
     if (data.createdAt && (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate) {
-      // Firestore의 Timestamp를 JavaScript의 Date 객체로 변환
       return { ...data, createdAt: (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate() };
     }
     return data;
-  } else {
-    console.log('🆕 신규 사용자, Firestore에 문서 생성:', uid);
-    // UserData 타입에 맞는 필드를 Omit으로 제외하지 않고 직접 명시
-    const newUserData = {
-      createdAt: firestore.FieldValue.serverTimestamp(),
-      totalSelections: 0,
-      characterId: null,
-      adjective1: null,
-      adjective2: null,
-        points: 0, 
-        streakCount: 0, 
-      lastAnswerDate: 0,
-      nickname: generateRandomNickname(),
-    };
-
-    await userRef.set({ uid, ...newUserData });
-    
-    // 방금 생성한 데이터를 앱 상태용으로 변환하여 반환
-    return {
-      uid,
-      ...newUserData,
-      createdAt: new Date(), // JS Date 객체로 변환
-    };
   }
+
+  // 2. Firestore에 데이터가 없는 경우: AsyncStorage에서 마이그레이션 시도
+  try {
+    const deviceUID = await getDeviceUID();
+    const legacyDataKey = `userData_${deviceUID}`;
+    const legacyDataJSON = await AsyncStorage.getItem(legacyDataKey);
+
+    if (legacyDataJSON) {
+      console.log('🔄 [V1->V2] AsyncStorage에서 기존 데이터 발견. Firestore로 마이그레이션 시작:', uid);
+      const legacyData = JSON.parse(legacyDataJSON);
+
+      // V2 데이터 구조에 맞게 변환
+      const migratedUserData = { // UserData 타입 명시 제거
+        uid,
+        points: legacyData.points || 0,
+        streakCount: legacyData.streakCount || 0,
+        lastAnswerDate: typeof legacyData.lastAnswerDate === 'string' && legacyData.lastAnswerDate.includes('-') ? 
+                          parseInt(legacyData.lastAnswerDate.replace(/-/g, ''), 10) : 0,
+        nickname: legacyData.nickname || generateRandomNickname(),
+        totalSelections: legacyData.totalSelections || 0,
+        createdAt: legacyData.createdAt ? new Date(legacyData.createdAt) : firestore.FieldValue.serverTimestamp(),
+        characterId: null,
+        adjective1: null,
+        adjective2: null,
+      };
+
+      await userRef.set(migratedUserData as any); // as any로 타입 검사 우회
+      console.log('✅ [V1->V2] 마이그레이션 완료:', uid);
+      return { ...migratedUserData, createdAt: new Date(migratedUserData.createdAt as Date) } as UserData;
+    }
+  } catch (error) {
+    console.error("❌ AsyncStorage에서 데이터 마이그레이션 실패:", error);
+  }
+
+  // 3. 마이그레이션할 데이터도 없는 경우: 신규 사용자 생성
+  console.log('🆕 [V2] 신규 사용자, Firestore에 문서 생성:', uid);
+  const newUserData = {
+    uid,
+    createdAt: firestore.FieldValue.serverTimestamp(),
+    totalSelections: 0,
+    characterId: null,
+    adjective1: null,
+    adjective2: null,
+    points: 0,
+    streakCount: 0,
+    lastAnswerDate: 0,
+    nickname: generateRandomNickname(),
+  };
+
+  await userRef.set(newUserData);
+  
+  return {
+    ...newUserData,
+    createdAt: new Date(), // JS Date 객체로 변환하여 반환
+  } as UserData;
 };
 
 /**
