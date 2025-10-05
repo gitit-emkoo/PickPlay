@@ -1,0 +1,128 @@
+[
+  {
+    "character_id": "fox",
+    "name": "여우",
+    "adjective_2": "전략가",
+    "description": "상황을 빠르게 파악하고, 치밀하게 계획하며 움직이는 성향",
+    "image_url": "C:/kwccproject/pickplay/pickplay/assets/images/fox.png"
+  },
+  {
+    "character_id": "lion",
+    "name": "사자",
+    "adjective_2": "설득가",
+    "description": "강한 리더십과 자신감을 바탕으로 타인을 이끄는 성향",
+    "image_url": "C:/kwccproject/pickplay/pickplay/assets/images/lion.png"
+  },
+  {
+    "character_id": "owl",
+    "name": "부엉이",
+    "adjective_2": "통찰자",
+    "description": "깊은 통찰력과 직관으로 상황을 꿰뚫어보는 성향",
+    "image_url": "C:/kwccproject/pickplay/pickplay/assets/images/owl.png"
+  },
+  {
+    "character_id": "dolphin",
+    "name": "돌고래",
+    "adjective_2": "중재자",
+    "description": "갈등을 부드럽게 조율하고, 모두가 편안한 분위기를 만드는 성향",
+    "image_url": "C:/kwccproject/pickplay/pickplay/assets/images/dolphin.png"
+  },
+  {
+    "character_id": "cat",
+    "name": "고양이",
+    "adjective_2": "수호자",
+    "description": "조용하지만 단단하게 주변을 지키고 배려하는 성향",
+    "image_url": "C:/kwccproject/pickplay/pickplay/assets/images/cat.png"
+  },
+  {
+    "character_id": "dog",
+    "name": "강아지",
+    "adjective_2": "창조자",
+    "description": "호기심 많고 활발하며, 새로운 것을 만들어내는 성향",
+    "image_url": "C:/kwccproject/pickplay/pickplay/assets/images/dog.png"
+  },
+  {
+    "character_id": "panda",
+    "name": "팬더곰",
+    "adjective_2": "협상가",
+    "description": "감정을 잘 읽고, 타인의 입장을 조율하며 균형을 맞추는 성향",
+    "image_url": "C:/kwccproject/pickplay/pickplay/assets/images/panda.png"
+  },
+  {
+    "character_id": "giraffe",
+    "name": "기린",
+    "adjective_2": "탐험가",
+    "description": "넓은 시야와 호기심으로 새로운 세계를 탐험하는 성향",
+    "image_url": "C:/kwccproject/pickplay/pickplay/assets/images/giraffe.png"
+  },
+  {
+    "character_id": "deer",
+    "name": "사슴",
+    "adjective_2": "봉사가",
+    "description": "타인을 먼저 생각하고, 헌신적으로 돕는 성향",
+    "image_url": "C:/kwccproject/pickplay/pickplay/assets/images/deer.png"
+  },
+  {
+    "character_id": "polar_bear",
+    "name": "북극곰",
+    "adjective_2": "분석가",
+    "description": "차분하고 냉철하게 정보를 분석하고 판단하는 성향",
+    "image_url": "C:/kwccproject/pickplay/pickplay/assets/images/polar_bear.png"
+  },
+  {
+    "character_id": "rabbit",
+    "name": "토끼",
+    "adjective_2": "연구가",
+    "description": "조용히 집중하며 깊이 있는 탐구를 즐기는 성향",
+    "image_url": "C:/kwccproject/pickplay/pickplay/assets/images/rabbit.png"
+  },
+  {
+    "character_id": "horse",
+    "name": "말",
+    "adjective_2": "추진가",
+    "description": "빠르게 움직이며 목표를 향해 끊임없이 나아가는 성향",
+    "image_url": "C:/kwccproject/pickplay/pickplay/assets/images/horse.png"
+  },
+  {
+    "character_id": "otter",
+    "name": "수달",
+    "adjective_2": "활동가",
+    "description": "에너지 넘치고 사교적이며, 다양한 활동을 즐기는 성향",
+    "image_url": "C:/kwccproject/pickplay/pickplay/assets/images/otter.png"
+  },
+  {
+    "character_id": "leopard",
+    "name": "표범",
+    "adjective_2": "행동가",
+    "description": "직관적으로 판단하고 즉시 행동에 옮기는 성향",
+    "image_url": "C:/kwccproject/pickplay/pickplay/assets/images/leopard.png"
+  },
+  {
+    "character_id": "camel",
+    "name": "낙타",
+    "adjective_2": "인내가",
+    "description": "묵묵히 견디며, 어려운 상황에서도 흔들리지 않는 성향",
+    "image_url": "C:/kwccproject/pickplay/pickplay/assets/images/camel.png"
+  },
+  {
+    "character_id": "meerkat",
+    "name": "미어캣",
+    "adjective_2": "관찰자",
+    "description": "주변을 예리하게 살피며, 상황을 분석하는 성향",
+    "image_url": "C:/kwccproject/pickplay/pickplay/assets/images/meerkat.png"
+  },
+  {
+    "character_id": "sheep",
+    "name": "양",
+    "adjective_2": "수호자",
+    "description": "온순하고 따뜻하게 주변을 감싸는 보호자 성향",
+    "image_url": "C:/kwccproject/pickplay/pickplay/assets/images/sheep.png"
+  },
+  {
+    "character_id": "tiger",
+    "name": "호랑이",
+    "adjective_2": "통솔가",
+    "description": "강한 카리스마로 집단을 이끄는 리더 성향",
+    "image_url": "C:/kwccproject/pickplay/pickplay/assets/images/tiger.png"
+  }
+]

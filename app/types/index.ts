@@ -1,18 +1,60 @@
+import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+
+// --- 신규/수정된 타입 정의 ---
+
+// 새로운 질문 데이터 구조 (questions.json)
+export interface Question {
+  question_id: string; // "Q001" 형식
+  text: string;
+  domain: '감정' | '가치관' | '습관' | '관계';
+  option_1_text: string;
+  option_2_text: string;
+}
+
+// 캐릭터 데이터 구조 (characters_19.json)
+export interface Character {
+  character_id: string;
+  name: string;
+  adjective_2: string;
+  description: string;
+  image_url: string;
+}
+
+// 답변 데이터 구조 (answers 컬렉션)
+export interface Answer {
+  uid: string;
+  question_id: string;
+  selected_option_index: 0 | 1;
+  selected_option_text: string;
+  tags: string[] | null;
+  answeredAt: FirebaseFirestoreTypes.FieldValue;
+}
+
+// 확장된 사용자 데이터 타입
+export interface UserData {
+  uid: string;
+  createdAt: FirebaseFirestoreTypes.Timestamp | Date; // 앱 최초 실행일 (Day 1 기준)
+  totalSelections: number; // 누적 답변 수
+  
+  characterId: string | null; // 배정된 동물 ID (예: "fox")
+  adjective1: string | null; // 현재 [형용사1]
+  adjective2: string | null; // 현재 [형용사2]
+
+  // --- 기존 필드 ---
+  points: number;
+  streakCount: number;
+  lastAnswerDate: number; // YYYYMMDD 형식의 숫자
+  nickname: string;
+}
+
+
+// --- 기존 타입 정의 (유지) ---
+
 // Firebase Auth 타입
 export interface FirebaseUser {
   uid: string;
   email?: string | null;
   isAnonymous: boolean;
-}
-
-// 질문 타입
-export interface Question {
-  id: string;
-  title: string;
-  options: [string, string];
-  dayIndex: number;
-  slot: 'A' | 'B';
-  active: boolean;
 }
 
 // 집계 결과 타입
@@ -22,27 +64,6 @@ export interface Aggregation {
   c1: number;
   p0: number;
   p1: number;
-}
-
-// 사용자 데이터 타입
-export interface UserData {
-  points: number;
-  streakCount: number;
-  lastAnswerDate: string;
-}
-
-// 보상 결과 타입
-export interface RewardResult {
-  base: number;
-  myIsMajority: boolean;
-  next: number;
-  agg: Aggregation;
-}
-
-// 보상 대기 타입
-export interface PendingReward {
-  questionId: string;
-  myOptionIndex: number;
 }
 
 // 광고 콜백 타입

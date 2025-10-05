@@ -1,0 +1,3202 @@
+[
+  {
+    "question_id": "Q001",
+    "question_text": "음식",
+    "option_1_text": "평생 국물만 먹기",
+    "option_1_tag": null,
+    "option_2_text": "평생 건더기만 먹기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q002",
+    "question_text": "계절",
+    "option_1_text": "평생 여름만 살기",
+    "option_1_tag": null,
+    "option_2_text": "평생 겨울만 살기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q003",
+    "question_text": "음식",
+    "option_1_text": "평생 쌀만 먹기",
+    "option_1_tag": null,
+    "option_2_text": "평생 빵만 먹기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q004",
+    "question_text": "짜증",
+    "option_1_text": "음식 주문 후 1시간 기다리기",
+    "option_1_tag": null,
+    "option_2_text": "배달 왔는데 다른 메뉴",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q005",
+    "question_text": "소원",
+    "option_1_text": "세상 모든 맛집 평생 공짜",
+    "option_1_tag": null,
+    "option_2_text": "평생 좋아하는 연예인과 연애",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q006",
+    "question_text": "응대",
+    "option_1_text": "양치 안 한 상사에게 매일 아침 인사",
+    "option_1_tag": null,
+    "option_2_text": "말 안 통하는 외국인 상사에게 매일 아침 인사",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q007",
+    "question_text": "잠들기 전",
+    "option_1_text": "머리 감고 말리지 않고 바로 자기",
+    "option_1_tag": null,
+    "option_2_text": "화장 지우지 않고 바로 자기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q008",
+    "question_text": "음식",
+    "option_1_text": "평생 라면만 먹기",
+    "option_1_tag": null,
+    "option_2_text": "평생 치킨만 먹기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q009",
+    "question_text": "수면 습관",
+    "option_1_text": "더워도 이불 덮고 자기",
+    "option_1_tag": null,
+    "option_2_text": "추워도 이불 걷어차고 자기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q010",
+    "question_text": "약속",
+    "option_1_text": "약속시간 맨날 늦는 친구",
+    "option_1_tag": null,
+    "option_2_text": "약속시간보다 항상 1시간 일찍 오는 친구",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q011",
+    "question_text": "출퇴근",
+    "option_1_text": "어디를 가든 버스로 2시간 이동",
+    "option_1_tag": null,
+    "option_2_text": "매일 지옥철 출퇴근 20분",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q012",
+    "question_text": "음료",
+    "option_1_text": "평생 탄산음료만 마시기",
+    "option_1_tag": null,
+    "option_2_text": "평생 커피만 마시기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q013",
+    "question_text": "디저트",
+    "option_1_text": "평생 아이스크림 못 먹기",
+    "option_1_tag": null,
+    "option_2_text": "평생 과일 못 먹기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q014",
+    "question_text": "음식",
+    "option_1_text": "평생 치킨 무 없이 치킨 먹기",
+    "option_1_tag": null,
+    "option_2_text": "평생 단무지 없이 짜장면 먹기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q015",
+    "question_text": "옷",
+    "option_1_text": "매일 같은 옷 입고 다닐 수 있음 (세탁O)",
+    "option_1_tag": null,
+    "option_2_text": "매일 다른 옷 입는데 매일 한두 군데 찢어져 있음",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q016",
+    "question_text": "헤어스타일",
+    "option_1_text": "평생 같은 머리 스타일",
+    "option_1_tag": null,
+    "option_2_text": "매번 머리 스타일 바꿔야 함 (내가 원치 않아도)",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q017",
+    "question_text": "혀 감각",
+    "option_1_text": "뜨거운 거 못 먹는 혀",
+    "option_1_tag": null,
+    "option_2_text": "차가운 거 못 먹는 혀",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q018",
+    "question_text": "화장실",
+    "option_1_text": "애인 집 화장실",
+    "option_1_tag": null,
+    "option_2_text": "좋아하는 연예인집 화장실",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q019",
+    "question_text": "삶의 질",
+    "option_1_text": "평생 맛없는 밥 먹기",
+    "option_1_tag": null,
+    "option_2_text": "평생 옷 이상하게 입고 다니기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q020",
+    "question_text": "재능",
+    "option_1_text": "평생 노래 못 부르기",
+    "option_1_tag": null,
+    "option_2_text": "평생 춤 못 추기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q021",
+    "question_text": "영화",
+    "option_1_text": "평생 더빙 영화만 보기",
+    "option_1_tag": null,
+    "option_2_text": "평생 자막 영화만 보기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q022",
+    "question_text": "영화관 빌런",
+    "option_1_text": "뒷사람이 발로 의자 차기",
+    "option_1_tag": null,
+    "option_2_text": "앞사람이 계속 이야기하기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q023",
+    "question_text": "잠귀",
+    "option_1_text": "잠귀 어두워서 알람 못 듣고 지각",
+    "option_1_tag": null,
+    "option_2_text": "잠귀 밝아서 작은 소리에도 잠 깨기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q024",
+    "question_text": "소통 방식",
+    "option_1_text": "일주일 동안 말하지 않고 살기",
+    "option_1_tag": null,
+    "option_2_text": "일주일 동안 휴대폰 없이 살기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q025",
+    "question_text": "쇼핑",
+    "option_1_text": "마트 금지",
+    "option_1_tag": null,
+    "option_2_text": "옷 가게 금지",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q026",
+    "question_text": "옷",
+    "option_1_text": "셔링, 프릴, 레이스달린 검정색",
+    "option_1_tag": null,
+    "option_2_text": "베이직한 빨간색",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q027",
+    "question_text": "혜택",
+    "option_1_text": "모든 음식점 평생 공짜",
+    "option_1_tag": null,
+    "option_2_text": "모든 옷 평생 공짜",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q028",
+    "question_text": "외출 필수품",
+    "option_1_text": "이어폰",
+    "option_1_tag": null,
+    "option_2_text": "지갑(카드나 현금)",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q029",
+    "question_text": "스타일",
+    "option_1_text": "평생 매일 똑같은 옷 입기",
+    "option_1_tag": null,
+    "option_2_text": "평생 매일 다른 옷 입기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q030",
+    "question_text": "비 오는 날",
+    "option_1_text": "외출 시 항상 우산 잃어버리기",
+    "option_1_tag": null,
+    "option_2_text": "외출 시 항상 신발 젖기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q031",
+    "question_text": "생활 제약",
+    "option_1_text": "평생 대중교통 이용 불가",
+    "option_1_tag": null,
+    "option_2_text": "평생 외식 불가",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q032",
+    "question_text": "일의 종류",
+    "option_1_text": "평생 집안일 하기",
+    "option_1_tag": null,
+    "option_2_text": "평생 집 밖에서 일하기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q033",
+    "question_text": "극한 ",
+    "option_1_text": "더운 여름날 이불 속에 들어가기",
+    "option_1_tag": null,
+    "option_2_text": "추운 겨울날 얼음물에 들어가기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q034",
+    "question_text": "매일 겪는 일상",
+    "option_1_text": "하루에 한 번 꼭 넘어지기",
+    "option_1_tag": null,
+    "option_2_text": "하루에 한 번 꼭 물건 잃어버리기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q035",
+    "question_text": "수면 복장",
+    "option_1_text": "양말 신고 잠자기",
+    "option_1_tag": null,
+    "option_2_text": "장갑 끼고 잠자기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q036",
+    "question_text": "피로 해소법",
+    "option_1_text": "매일 땀 뻘뻘 흘리며 운동",
+    "option_1_tag": null,
+    "option_2_text": "매일 피곤한 상태로 독서",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q037",
+    "question_text": "취미 능력",
+    "option_1_text": "모든 노래 다 알지만 박치",
+    "option_1_tag": null,
+    "option_2_text": "모든 춤 다 알지만 음치",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q038",
+    "question_text": "식단 종류",
+    "option_1_text": "평생 똑같은 음식만 먹기 (맛있음)",
+    "option_1_tag": null,
+    "option_2_text": "평생 매일 다른 음식 먹기 (맛없음)",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q039",
+    "question_text": "생활",
+    "option_1_text": "일 년 내내 맨발로 다니기",
+    "option_1_tag": null,
+    "option_2_text": "일 년 내내 모자없이 다니기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q040",
+    "question_text": "괴식",
+    "option_1_text": "똥 맛 카레 먹기",
+    "option_1_tag": null,
+    "option_2_text": "카레 맛 똥 먹기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q041",
+    "question_text": "옷차림 제한",
+    "option_1_text": "평생 같은 옷만 입어야 함",
+    "option_1_tag": null,
+    "option_2_text": "절대 같은 옷을 두 번 입을 수 없음",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q042",
+    "question_text": "음식 포기",
+    "option_1_text": "평생 좋아하는 음식을 다시는 먹을 수 없음",
+    "option_1_tag": null,
+    "option_2_text": "평생 좋아하는 식당에 다시는 갈 수 없음",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q043",
+    "question_text": "감각 포기",
+    "option_1_text": "미각을 잃어야 함",
+    "option_1_tag": null,
+    "option_2_text": "후각을 잃어야 함",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q044",
+    "question_text": "전자기기 사용",
+    "option_1_text": "다시는 스마트폰을 사용할 수 없음",
+    "option_1_tag": null,
+    "option_2_text": "다시는 컴퓨터를 사용할 수 없음",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q045",
+    "question_text": "주거 환경",
+    "option_1_text": "가족이 많아 북적거리는 집",
+    "option_1_tag": null,
+    "option_2_text": "혼자인 집",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q046",
+    "question_text": "외모/옷차림 관리",
+    "option_1_text": "머리가 항상 엉망임",
+    "option_1_tag": null,
+    "option_2_text": "옷이 항상 엉망임",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q047",
+    "question_text": "샤워 날벼락",
+    "option_1_text": "갑자기 찬 물 나오기",
+    "option_1_tag": null,
+    "option_2_text": "갑자기 뜨거운 물 나오기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q048",
+    "question_text": "휴식 가구",
+    "option_1_text": "다시는 침대를 사용할 수 없음",
+    "option_1_tag": null,
+    "option_2_text": "다시는 소파를 사용할 수 없음",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q049",
+    "question_text": "식사 도구",
+    "option_1_text": "다시는 포크를 사용할 수 없음",
+    "option_1_tag": null,
+    "option_2_text": "다시는 숟가락을 사용할 수 없음",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q050",
+    "question_text": "음료 선택",
+    "option_1_text": "콜라인줄 알았는데 까나리",
+    "option_1_tag": null,
+    "option_2_text": "사이다인줄 알았는데 식초",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q051",
+    "question_text": "영화 감상 기회",
+    "option_1_text": "평생 한 편의 영화만 볼 수 있음",
+    "option_1_tag": null,
+    "option_2_text": "평생 영화를 볼 수 없음",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q052",
+    "question_text": "독서 기회",
+    "option_1_text": "평생 한 권의 책만 읽을 수 있음",
+    "option_1_tag": null,
+    "option_2_text": "평생 책을 읽을 수 없음",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q053",
+    "question_text": "게임 기회",
+    "option_1_text": "평생 한 게임만 할 수 있음",
+    "option_1_tag": null,
+    "option_2_text": "평생 비디오 게임을 할 수 없음",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q054",
+    "question_text": "휴일",
+    "option_1_text": "다시는 휴가를 갈 수 없음",
+    "option_1_tag": null,
+    "option_2_text": "다시는 공휴일을 보낼 수 없음",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q055",
+    "question_text": "간식",
+    "option_1_text": "다시는 식후 디저트를 먹을 수 없음",
+    "option_1_tag": null,
+    "option_2_text": "다시는 간식을 먹을 수 없음",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q056",
+    "question_text": "설거지",
+    "option_1_text": "컵하나라도 바로 설거지",
+    "option_1_tag": null,
+    "option_2_text": "조금 모아놓고 설거지",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q057",
+    "question_text": "운전 스타일",
+    "option_1_text": "항상 차 막히는 차만 운전하기",
+    "option_1_tag": null,
+    "option_2_text": "항상 과속하는 차만 운전하기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q058",
+    "question_text": "시간 관념",
+    "option_1_text": "다시는 늦을 수 없음",
+    "option_1_tag": null,
+    "option_2_text": "다시는 제시간에 올 수 없음",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q059",
+    "question_text": "완벽주의",
+    "option_1_text": "늘 완벽한 사람으로 살기",
+    "option_1_tag": null,
+    "option_2_text": "가끔은 실수하는 사람으로 살기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q060",
+    "question_text": "집 선택",
+    "option_1_text": "전망이 끔찍한 집에 살기",
+    "option_1_tag": null,
+    "option_2_text": "위치가 끔찍한 집에 살기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q061",
+    "question_text": "욕실 습관",
+    "option_1_text": "샤워실 갈 때 욕실화 신기",
+    "option_1_tag": null,
+    "option_2_text": "샤워실 갈 때 욕실화 안 신기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q062",
+    "question_text": "결혼식 피로연",
+    "option_1_text": "갈비탕",
+    "option_1_tag": null,
+    "option_2_text": "맛없는 뷔페",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q063",
+    "question_text": "애인과의 가치관 차이",
+    "option_1_text": "정치 안 맞기",
+    "option_1_tag": null,
+    "option_2_text": "종교 안 맞기",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q064",
+    "question_text": "애인의 부정행위",
+    "option_1_text": "바람 피고 평생 숨기는 애인",
+    "option_1_tag": null,
+    "option_2_text": "자백하고 용서 구하는 애인",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q065",
+    "question_text": "이별 방식",
+    "option_1_text": "환승 이별",
+    "option_1_tag": null,
+    "option_2_text": "잠수 이별",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q066",
+    "question_text": "새로운 연애 대상",
+    "option_1_text": "절친 동생과 연애",
+    "option_1_tag": null,
+    "option_2_text": "전 애인의 친구와 연애",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q067",
+    "question_text": "애정 전선 문제",
+    "option_1_text": "절친에게 꼬리치는 애인",
+    "option_1_tag": null,
+    "option_2_text": "애인에게 꼬리치는 절친",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q068",
+    "question_text": "의문의 증거물",
+    "option_1_text": "애인 집에 절친 속옷",
+    "option_1_tag": null,
+    "option_2_text": "절친 집에 애인 속옷",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q069",
+    "question_text": "연인과의 주도권",
+    "option_1_text": "낮져밤이",
+    "option_1_tag": null,
+    "option_2_text": "낮이밤져",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q070",
+    "question_text": "애인과 만남 빈도",
+    "option_1_text": "일주일에 5번 만나기",
+    "option_1_tag": null,
+    "option_2_text": "한 달에 1번 만나기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q071",
+    "question_text": "연인과의 생사",
+    "option_1_text": "연인보다 하루 빨리 죽기",
+    "option_1_tag": null,
+    "option_2_text": "연인보다 하루 늦게 죽기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q072",
+    "question_text": "고백 방식",
+    "option_1_text": "단톡방 고백",
+    "option_1_tag": null,
+    "option_2_text": "길거리 고백",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q073",
+    "question_text": "연인의 대화 스타일",
+    "option_1_text": "빙빙 돌려 말하는 애인",
+    "option_1_tag": null,
+    "option_2_text": "팩폭하는 애인",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q074",
+    "question_text": "사랑의 딜레마",
+    "option_1_text": "좋아하는 사람이 날 싫어하기",
+    "option_1_tag": null,
+    "option_2_text": "내가 싫어하는 사람이 날 좋아하기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q075",
+    "question_text": "연인의 소비 습관",
+    "option_1_text": "완전 짠돌이/짠순이 애인",
+    "option_1_tag": null,
+    "option_2_text": "돈을 물 쓰듯 쓰는 애인",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q076",
+    "question_text": "연인의 애정 표현",
+    "option_1_text": "매일 질투하는 애인",
+    "option_1_tag": null,
+    "option_2_text": "나에게 무관심한 애인",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q077",
+    "question_text": "연인의 외모",
+    "option_1_text": "키 작은데 잘생긴 애인",
+    "option_1_tag": null,
+    "option_2_text": "키 큰데 못생긴 애인",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q078",
+    "question_text": "연인의 과거 공개",
+    "option_1_text": "성형 전 사진 공개",
+    "option_1_tag": null,
+    "option_2_text": "통장 잔고 공개",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q079",
+    "question_text": "연애와 자유",
+    "option_1_text": "애인 없는 평생의 자유",
+    "option_1_tag": null,
+    "option_2_text": "평생 애인 있는데 자유 없음",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q080",
+    "question_text": "연인과 주변인 관계",
+    "option_1_text": "연인의 절친과 어색한 사이",
+    "option_1_tag": null,
+    "option_2_text": "연인의 가족과 어색한 사이",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q081",
+    "question_text": "연인과의 갈등 해결",
+    "option_1_text": "애인이랑 하루 종일 싸우기",
+    "option_1_tag": null,
+    "option_2_text": "애인이랑 일주일 동안 대화 안 하기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q082",
+    "question_text": "연인의 기념일",
+    "option_1_text": "기념일 매번 까먹는 애인",
+    "option_1_tag": null,
+    "option_2_text": "기념일 챙기지만 최악의 선물 주는 애인",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q083",
+    "question_text": "인생 동반자",
+    "option_1_text": "평생 혼자 살기",
+    "option_1_tag": null,
+    "option_2_text": "평생 싫어하는 사람과 같이 살기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q084",
+    "question_text": "개인 정보 유출",
+    "option_1_text": "절친에게 내 모든 비밀 들키기",
+    "option_1_tag": null,
+    "option_2_text": "부모님께 내 모든 비밀 들키기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q085",
+    "question_text": "사랑을 찾는 방법",
+    "option_1_text": "평생 소개팅만 하기",
+    "option_1_tag": null,
+    "option_2_text": "평생 선만 보기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q086",
+    "question_text": "약속 상황",
+    "option_1_text": "애인과 데이트 중 친구 합석",
+    "option_1_tag": null,
+    "option_2_text": "친구와 약속 중 애인 합석",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q087",
+    "question_text": "헤어진 연인의 연락",
+    "option_1_text": "밤마다 연락 오기",
+    "option_1_tag": null,
+    "option_2_text": "새로운 연인 자랑 카톡 오기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q088",
+    "question_text": "아침 잠자리",
+    "option_1_text": "연인의 엽기적인 모닝 키스",
+    "option_1_tag": null,
+    "option_2_text": "연인의 매일 아침 방귀",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q089",
+    "question_text": "연인의 케어 방식",
+    "option_1_text": "모든 일정을 관리해 주는 애인",
+    "option_1_tag": null,
+    "option_2_text": "아무것도 신경 안 써주는 애인",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q090",
+    "question_text": "연인의 칭찬",
+    "option_1_text": "매일 불평불만 하는 애인",
+    "option_1_tag": null,
+    "option_2_text": "매일 칭찬만 하는 애인 (거짓)",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q091",
+    "question_text": "이별 통보",
+    "option_1_text": "내가 애인에게 차이기",
+    "option_1_tag": null,
+    "option_2_text": "내가 애인을 차기",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q092",
+    "question_text": "기다림의 미학",
+    "option_1_text": "애인 집 앞에서 1시간 기다리기",
+    "option_1_tag": null,
+    "option_2_text": "애인 나보고 1시간 기다리게 하기",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q093",
+    "question_text": "SNS 염탐",
+    "option_1_text": "헤어진 애인 SNS 염탐",
+    "option_1_tag": null,
+    "option_2_text": "새로운 연인 SNS 염탐",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q094",
+    "question_text": "식사 분위기",
+    "option_1_text": "밥 먹을 때 말 없는 애인",
+    "option_1_tag": null,
+    "option_2_text": "밥 먹을 때 재채기 자주 하는 애인",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q095",
+    "question_text": "관계 주도권",
+    "option_1_text": "모든 통제권을 애인에게 넘기기",
+    "option_1_tag": null,
+    "option_2_text": "애인의 모든 통제권을 내가 가지기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q096",
+    "question_text": "데이트 코스",
+    "option_1_text": "애인과 데이트 매일 같은 코스",
+    "option_1_tag": null,
+    "option_2_text": "애인과 데이트 매일 다른 (망하는) 코스",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q097",
+    "question_text": "잠버릇",
+    "option_1_text": "연인의 잠꼬대 대잔치",
+    "option_1_tag": null,
+    "option_2_text": "연인의 코골이 대잔치",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q098",
+    "question_text": "데이트 비용 부담",
+    "option_1_text": "애인이 다 내기",
+    "option_1_tag": null,
+    "option_2_text": "내가 다 내기",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q099",
+    "question_text": "연인의 친구 관계",
+    "option_1_text": "이성 친구 많은 연인",
+    "option_1_tag": null,
+    "option_2_text": "동성 친구 많은 연인",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q100",
+    "question_text": "관계의 단계",
+    "option_1_text": "연애 말고 결혼",
+    "option_1_tag": null,
+    "option_2_text": "결혼 말고 연애",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q101",
+    "question_text": "연인의 과거 인연",
+    "option_1_text": "연인의 전 애인 연락처 우연히 보기",
+    "option_1_tag": null,
+    "option_2_text": "연인의 전 애인에게 연락 오기",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q102",
+    "question_text": "사랑과 가족",
+    "option_1_text": "아름다운 연애를 하지만 가족과 단절",
+    "option_1_tag": null,
+    "option_2_text": "가족과 평생 함께하지만 사랑을 못 찾음",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q103",
+    "question_text": "애인의 단점",
+    "option_1_text": "완벽하지만 정기적으로 바람",
+    "option_1_tag": null,
+    "option_2_text": "헌신하지만 게으르고 야망 없음",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q104",
+    "question_text": "애인과 가족의 조화",
+    "option_1_text": "애인과 완벽하게 통하지만 가족은 싫어함",
+    "option_1_tag": null,
+    "option_2_text": "가족은 애인을 좋아하지만 교감 없음",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q105",
+    "question_text": "결혼 상대",
+    "option_1_text": "진정으로 사랑하지만 10년 안에 죽을 사람",
+    "option_1_tag": null,
+    "option_2_text": "정이 있지만 오래 행복할 사람",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q106",
+    "question_text": "애인의 조건",
+    "option_1_text": "엄청 부자지만 지루함",
+    "option_1_tag": null,
+    "option_2_text": "항상 재미있지만 가난함",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q107",
+    "question_text": "변화의 기회",
+    "option_1_text": "애인의 단점 한 가지 바꾸기",
+    "option_1_tag": null,
+    "option_2_text": "내 단점 한 가지 바꾸기",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q108",
+    "question_text": "다툼 시 사과",
+    "option_1_text": "내가 옳지만 애인 행복 위해 사과",
+    "option_1_tag": null,
+    "option_2_text": "내가 옳지만 애인은 절대 사과 안 함",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q109",
+    "question_text": "애인의 일상 변화",
+    "option_1_text": "매일 애인 몸이 바뀜",
+    "option_1_tag": null,
+    "option_2_text": "애인과 매일 같은 싸움 반복",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q110",
+    "question_text": "소중한 것 선택",
+    "option_1_text": "모든 돈 잃고 애인이 떠남",
+    "option_1_tag": null,
+    "option_2_text": "돈은 지키지만 가족을 잃음",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q111",
+    "question_text": "소울메이트의 종류",
+    "option_1_text": "육체적으로만 끌리는 소울메이트",
+    "option_1_tag": null,
+    "option_2_text": "감정적으로만 끌리는 소울메이트",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q112",
+    "question_text": "애인의 특이점",
+    "option_1_text": "세상에서 제일 듣기 싫은 웃음소리",
+    "option_1_tag": null,
+    "option_2_text": "끔찍한 노래 실력 (자랑 좋아함)",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q113",
+    "question_text": "애인의 부족한 점",
+    "option_1_text": "돈 관리를 못하는 애인",
+    "option_1_tag": null,
+    "option_2_text": "감정 표현에 서툰 애인",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q114",
+    "question_text": "관계의 중요한 부분",
+    "option_1_text": "다시는 의미 있는 대화 불가",
+    "option_1_tag": null,
+    "option_2_text": "다시는 육체적 관계 불가",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q115",
+    "question_text": "애인의 거짓말",
+    "option_1_text": "과거에 엄청난 거짓말(이후엔 X)",
+    "option_1_tag": null,
+    "option_2_text": "항상 작고 사소한 거짓말",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q116",
+    "question_text": "전 연인과의 관계",
+    "option_1_text": "내 전 애인은 멋진 사람",
+    "option_1_tag": null,
+    "option_2_text": "내 전 애인은 끔찍하지만 강한 유대감",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q117",
+    "question_text": "인생 관계",
+    "option_1_text": "평생 애인과 함께해야 함",
+    "option_1_tag": null,
+    "option_2_text": "평생 혼자여야 함",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q118",
+    "question_text": "애인의 가장 큰 단점",
+    "option_1_text": "엄청 게으름",
+    "option_1_tag": null,
+    "option_2_text": "항상 나를 비판",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q119",
+    "question_text": "마음 읽기 능력",
+    "option_1_text": "나는 애인 마음 읽지만 애인은 못 읽음",
+    "option_1_tag": null,
+    "option_2_text": "애인은 내 마음 읽지만 나는 못 읽음",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q120",
+    "question_text": "미래 예지력",
+    "option_1_text": "애인이 미래를 볼 수 있음",
+    "option_1_tag": null,
+    "option_2_text": "내가 미래를 볼 수 있음",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q121",
+    "question_text": "애인의 목소리",
+    "option_1_text": "아기처럼 말함",
+    "option_1_tag": null,
+    "option_2_text": "단조로운 목소리로만 말함",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q122",
+    "question_text": "애인의 식단",
+    "option_1_text": "채식주의 식단만 먹음",
+    "option_1_tag": null,
+    "option_2_text": "정크 푸드만 먹음",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q123",
+    "question_text": "고립된 상황",
+    "option_1_text": "무인도에서 식량 제한적(둘 다 살 만큼)",
+    "option_1_tag": null,
+    "option_2_text": "식량 무제한이지만 섬 탈출 불가",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q124",
+    "question_text": "이별 통보 방식",
+    "option_1_text": "문자 메시지로 애인에게 헤어짐 통보",
+    "option_1_tag": null,
+    "option_2_text": "직접 만나서 헤어짐 통보(말 못 함)",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q125",
+    "question_text": "애인의 지능과 행복",
+    "option_1_text": "너무 똑똑해서 따라잡을 수 없음",
+    "option_1_tag": null,
+    "option_2_text": "똑똑하지 않지만 항상 행복함",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q126",
+    "question_text": "사랑의 형태",
+    "option_1_text": "매년 진정으로 사랑하는 새 사람 찾기",
+    "option_1_tag": null,
+    "option_2_text": "50년 동안 같은 사람과 함께",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q127",
+    "question_text": "애인의 선물 스타일",
+    "option_1_text": "절대 선물 안 사줌",
+    "option_1_tag": null,
+    "option_2_text": "매번 끔찍한 선물 사줌",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q128",
+    "question_text": "문신 디자인",
+    "option_1_text": "애인 이름으로 끔찍한 문신",
+    "option_1_tag": null,
+    "option_2_text": "애인 얼굴로 끔찍한 문신",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q129",
+    "question_text": "애인과 애완동물",
+    "option_1_text": "애인은 내 애완동물 좋아함(나는 애인 것 싫어함)",
+    "option_1_tag": null,
+    "option_2_text": "애인은 내 애완동물 싫어함(나는 애인 것 좋아함)",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q130",
+    "question_text": "애인의 유명세",
+    "option_1_text": "애인은 엄청 유명함",
+    "option_1_tag": null,
+    "option_2_text": "애인은 엄청 사생활 중시함",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q131",
+    "question_text": "애인과의 금전 관계",
+    "option_1_text": "매일 애인에게 소액의 돈을 달라고 하기",
+    "option_1_tag": null,
+    "option_2_text": "매일 애인에게 소액의 돈을 주기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q132",
+    "question_text": "애인의 체온 감각",
+    "option_1_text": "항상 춥다고 함",
+    "option_1_tag": null,
+    "option_2_text": "항상 덥다고 함",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q133",
+    "question_text": "잠자리 지분",
+    "option_1_text": "애인은 항상 이불 독차지",
+    "option_1_tag": null,
+    "option_2_text": "애인은 항상 베개 훔침",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q134",
+    "question_text": "함께 자는 사람",
+    "option_1_text": "코골이 끔찍한 사람",
+    "option_1_tag": null,
+    "option_2_text": "잠꼬대 끔찍한 사람",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q135",
+    "question_text": "감정 표현 제약",
+    "option_1_text": "애인에게 절대 화낼 수 없음",
+    "option_1_tag": null,
+    "option_2_text": "애인에게 절대 슬퍼할 수 없음",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q136",
+    "question_text": "애인의 집안일",
+    "option_1_text": "요리는 잘하지만 뒷정리 엉망인 애인",
+    "option_1_tag": null,
+    "option_2_text": "요리는 엉망이지만 뒷정리 잘하는 애인",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q137",
+    "question_text": "애정 표현 방식",
+    "option_1_text": "매일 애인과 함께하지만 만질 수 없음",
+    "option_1_tag": null,
+    "option_2_text": "애인을 만질 수 있지만 1년에 한 번만 만날 수 있음",
+    "option_2_tag": null,
+    "domain": "감정",
+    "visible": true
+  },
+  {
+    "question_id": "Q138",
+    "question_text": "자녀 계획",
+    "option_1_text": "애인과 아이를 한 명만 가질 수 있음",
+    "option_1_tag": null,
+    "option_2_text": "애인과 아이를 가질 수 없음",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q139",
+    "question_text": "애인의 운전/동승",
+    "option_1_text": "운전 끔찍하게 하는 애인",
+    "option_1_tag": null,
+    "option_2_text": "동승자로써 끔찍한 애인",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q140",
+    "question_text": "애인의 대화 주제",
+    "option_1_text": "끊임없이 나쁜 농담함",
+    "option_1_tag": null,
+    "option_2_text": "끊임없이 전 애인 이야기함",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q141",
+    "question_text": "애인의 외모와 성격",
+    "option_1_text": "외모는 완벽하지만 성격 나쁨",
+    "option_1_tag": null,
+    "option_2_text": "외모는 보통이지만 성격 천사 같음",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q142",
+    "question_text": "애인의 생활 패턴",
+    "option_1_text": "항상 파티 즐김",
+    "option_1_tag": null,
+    "option_2_text": "완전 집순이/집돌이",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q143",
+    "question_text": "연애 만족도",
+    "option_1_text": "1년에 하루만 애인과 함께(완벽함)",
+    "option_1_tag": null,
+    "option_2_text": "매일 애인과 함께(매일 끔찍함)",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q144",
+    "question_text": "애인의 여가 활동",
+    "option_1_text": "세계 여행 좋아하는 애인",
+    "option_1_tag": null,
+    "option_2_text": "집에만 있고 싶어 하는 애인",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q145",
+    "question_text": "애인의 직업관",
+    "option_1_text": "완전 일 중독인 애인",
+    "option_1_tag": null,
+    "option_2_text": "항상 휴가 중인 애인",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q146",
+    "question_text": "애인의 시간 관념",
+    "option_1_text": "항상 늦는 애인",
+    "option_1_tag": null,
+    "option_2_text": "항상 일찍 오는 애인",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q147",
+    "question_text": "애인의 정리 습관",
+    "option_1_text": "항상 어지르는 애인",
+    "option_1_tag": null,
+    "option_2_text": "항상 깔끔한 애인",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q148",
+    "question_text": "애인의 라이프 스타일",
+    "option_1_text": "올빼미형 애인",
+    "option_1_tag": null,
+    "option_2_text": "아침형 애인",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q149",
+    "question_text": "애인의 특별한 능력",
+    "option_1_text": "춤 엄청 잘 추는 애인",
+    "option_1_tag": null,
+    "option_2_text": "노래 엄청 잘 부르는 애인",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q150",
+    "question_text": "애인과의 소통",
+    "option_1_text": "얘기 잘 들어주는 애인",
+    "option_1_tag": null,
+    "option_2_text": "얘기 잘하는 애인",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q151",
+    "question_text": "애인의 선물 선호",
+    "option_1_text": "선물 주는 것을 좋아하는 애인",
+    "option_1_tag": null,
+    "option_2_text": "선물 받는 것을 좋아하는 애인",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q152",
+    "question_text": "애인의 성격 유형",
+    "option_1_text": "항상 긍정적인 애인",
+    "option_1_tag": null,
+    "option_2_text": "항상 현실적인 애인",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q153",
+    "question_text": "애인의 일처리 방식",
+    "option_1_text": "엄청난 미루기 습관이 있는 애인",
+    "option_1_tag": null,
+    "option_2_text": "엄청난 완벽주의자 애인",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q154",
+    "question_text": "애인의 관심 선호",
+    "option_1_text": "관심의 중심이 되는 것 좋아하는 애인",
+    "option_1_tag": null,
+    "option_2_text": "관심의 중심이 되는 것 싫어하는 애인",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q155",
+    "question_text": "애인의 정직함",
+    "option_1_text": "거짓말을 잘하는 애인",
+    "option_1_tag": null,
+    "option_2_text": "거짓말을 못하는 애인",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q156",
+    "question_text": "애인의 비밀/평정심",
+    "option_1_text": "비밀을 잘 못 지키는 애인",
+    "option_1_tag": null,
+    "option_2_text": "평정심을 잘 못 지키는 애인",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q157",
+    "question_text": "언어 소통 제약",
+    "option_1_text": "애인은 다른 언어로만 말할 수 있음",
+    "option_1_tag": null,
+    "option_2_text": "나는 다른 언어로만 말할 수 있음",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q158",
+    "question_text": "애인과의 식사 방식",
+    "option_1_text": "평생 애인과 같은 식사만 먹을 수 있음",
+    "option_1_tag": null,
+    "option_2_text": "평생 애인과 다른 식사만 먹을 수 있음",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q159",
+    "question_text": "애정 표현의 한계",
+    "option_1_text": "평생 애인을 안아줄 수 있음",
+    "option_1_tag": null,
+    "option_2_text": "평생 애인에게 키스할 수 있음",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q160",
+    "question_text": "애인과의 대화 방식",
+    "option_1_text": "평생 애인과 전화로만 대화",
+    "option_1_tag": null,
+    "option_2_text": "평생 애인과 직접 만나서만 대화",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q161",
+    "question_text": "애인과의 신체 접촉",
+    "option_1_text": "평생 애인의 손만 잡을 수 있음",
+    "option_1_tag": null,
+    "option_2_text": "평생 애인의 팔만 잡을 수 있음",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q162",
+    "question_text": "애인 보기 제한",
+    "option_1_text": "평생 애인의 얼굴만 볼 수 있음",
+    "option_1_tag": null,
+    "option_2_text": "평생 애인의 몸만 볼 수 있음",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q163",
+    "question_text": "애인과의 소통 수단",
+    "option_1_text": "애인과 컴퓨터로만 소통",
+    "option_1_tag": null,
+    "option_2_text": "애인과 TV로만 소통",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q164",
+    "question_text": "회사 분위기",
+    "option_1_text": "분위기 좋아서 잦은 회식, 스포츠, 모임",
+    "option_1_tag": null,
+    "option_2_text": "밥도 따로 먹고 일 외 대화 X",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q165",
+    "question_text": "직업과 수입",
+    "option_1_text": "평생 월 200 백수",
+    "option_1_tag": null,
+    "option_2_text": "월 500 직장인",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q166",
+    "question_text": "근무 시간",
+    "option_1_text": "8시 출근 / 17시 퇴근",
+    "option_1_tag": null,
+    "option_2_text": "11시 출근 / 20시 퇴근",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q167",
+    "question_text": "야근 방식",
+    "option_1_text": "주 3회 최소 1시간씩 야근",
+    "option_1_tag": null,
+    "option_2_text": "매일 퇴근 후 간단한 업무 연락 받기",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q168",
+    "question_text": "점심 식사",
+    "option_1_text": "내 돈으로 메뉴 마음대로",
+    "option_1_tag": null,
+    "option_2_text": "회사 돈으로 메뉴 못 정함",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q169",
+    "question_text": "점심 동반자",
+    "option_1_text": "불편한 상사와 점심마다 한우 먹기",
+    "option_1_tag": null,
+    "option_2_text": "혼자 혹은 친한 동료와 컵라면 먹기",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q170",
+    "question_text": "팀 환경",
+    "option_1_text": "나 빼고 모두 브레인 팀에서 자괴감",
+    "option_1_tag": null,
+    "option_2_text": "내가 유일한 희망 팀에서 혼자 일하기",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q171",
+    "question_text": "극한 미션",
+    "option_1_text": "팔만대장경 읽기",
+    "option_1_tag": null,
+    "option_2_text": "대장 내시경 8만번 하기",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q172",
+    "question_text": "재물과 학업",
+    "option_1_text": "재벌인데 공부 못함",
+    "option_1_tag": null,
+    "option_2_text": "가난하지만 공부 잘함",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q173",
+    "question_text": "상사의 비판 방식",
+    "option_1_text": "상사가 내 실수 동네방네 떠들기",
+    "option_1_tag": null,
+    "option_2_text": "상사가 나한테 직접 혼내기",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q174",
+    "question_text": "상사와의 업무 관계",
+    "option_1_text": "상사가 나의 모든 아이디어 가로채기",
+    "option_1_tag": null,
+    "option_2_text": "상사가 나에게 모든 일 떠넘기기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q175",
+    "question_text": "협업 대상",
+    "option_1_text": "싫어하는 사람과 팀 프로젝트",
+    "option_1_tag": null,
+    "option_2_text": "싫어하는 사람과 같은 방 사용 (출장 등)",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q176",
+    "question_text": "직장 만족도",
+    "option_1_text": "회사에서 혼나지만 연봉 높음",
+    "option_1_tag": null,
+    "option_2_text": "회사에서 칭찬받지만 연봉 낮음",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q177",
+    "question_text": "퇴근길 인사",
+    "option_1_text": "매일 야근하는데 칼퇴 동료에게 인사",
+    "option_1_tag": null,
+    "option_2_text": "매일 칼퇴하는데 야근 동료에게 인사",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q178",
+    "question_text": "출퇴근 경로",
+    "option_1_text": "매일 만원 버스 출퇴근",
+    "option_1_tag": null,
+    "option_2_text": "매일 상사와 같은 차로 카풀 출퇴근",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q179",
+    "question_text": "회사 조건",
+    "option_1_text": "돈 많이 벌지만 야근 많음",
+    "option_1_tag": null,
+    "option_2_text": "돈 적게 벌지만 야근 없음",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q180",
+    "question_text": "업무 성과 인정",
+    "option_1_text": "내가 모든 일 다 하는데 다른 사람이 인정받기",
+    "option_1_tag": null,
+    "option_2_text": "내가 모든 일 다 하는데 다른 사람에게 비난받기",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q181",
+    "question_text": "업무 파트너",
+    "option_1_text": "싫어하는 동료와 듀오 업무",
+    "option_1_tag": null,
+    "option_2_text": "좋아하는 동료와 빡센 업무",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q182",
+    "question_text": "회의 시간",
+    "option_1_text": "매일 아침 회의",
+    "option_1_tag": null,
+    "option_2_text": "매일 퇴근 후 회의",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q183",
+    "question_text": "커리어 경로",
+    "option_1_text": "승진은 빠르지만 일은 힘든 회사",
+    "option_1_tag": null,
+    "option_2_text": "승진은 느리지만 일은 편한 회사",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q184",
+    "question_text": "직업 만족도",
+    "option_1_text": "좋아하는 일 하지만 가난함",
+    "option_1_tag": null,
+    "option_2_text": "싫어하는 일 하지만 부자임",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q185",
+    "question_text": "상사 스타일",
+    "option_1_text": "리더십 훌륭하지만 일은 못하는 상사",
+    "option_1_tag": null,
+    "option_2_text": "리더십 끔찍하지만 일은 잘하는 상사",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q186",
+    "question_text": "동료 관계",
+    "option_1_text": "좋아하는 사람들과 일하지만 직업이 싫음",
+    "option_1_tag": null,
+    "option_2_text": "싫어하는 사람들과 일하지만 직업이 좋음",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q187",
+    "question_text": "출퇴근 환경",
+    "option_1_text": "출퇴근 끔찍하지만 직업이 좋음",
+    "option_1_tag": null,
+    "option_2_text": "출퇴근 훌륭하지만 직업이 끔찍함",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q188",
+    "question_text": "퇴직 선택권",
+    "option_1_text": "다시는 해고될 수 없음",
+    "option_1_tag": null,
+    "option_2_text": "다시는 그만둘 수 없음",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q189",
+    "question_text": "인생 성공",
+    "option_1_text": "일에서는 완전히 실패함",
+    "option_1_tag": null,
+    "option_2_text": "일에서는 완전히 성공했지만 친구가 없음",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q190",
+    "question_text": "업무 종류",
+    "option_1_text": "내가 못하는 일만 해야 함",
+    "option_1_tag": null,
+    "option_2_text": "내가 잘하는 일만 하지만 돈을 거의 못 벌음",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q191",
+    "question_text": "업무 피드백",
+    "option_1_text": "항상 비판받는 일만 해야 함",
+    "option_1_tag": null,
+    "option_2_text": "항상 칭찬받는 일만 해야 함",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q192",
+    "question_text": "업무 스트레스",
+    "option_1_text": "항상 지루한 일만 해야 함",
+    "option_1_tag": null,
+    "option_2_text": "항상 스트레스받는 일만 해야 함",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q193",
+    "question_text": "협업 선호",
+    "option_1_text": "항상 혼자 일하는 직업",
+    "option_1_tag": null,
+    "option_2_text": "항상 사람들과 함께 일하는 직업",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q194",
+    "question_text": "업무 소통 방식",
+    "option_1_text": "항상 전화로 일하는 직업",
+    "option_1_tag": null,
+    "option_2_text": "항상 컴퓨터로 일하는 직업",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q195",
+    "question_text": "회의 참여",
+    "option_1_text": "항상 회의에 참석해야 하는 직업",
+    "option_1_tag": null,
+    "option_2_text": "항상 발표를 해야 하는 직업",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q196",
+    "question_text": "결제 수단",
+    "option_1_text": "한 개 카드만 써야 한다면? 신용카드",
+    "option_1_tag": null,
+    "option_2_text": "한 개 카드만 써야 한다면? 체크카드",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q197",
+    "question_text": "물건 구매 태도",
+    "option_1_text": "저렴한 건 다 이유 있다고 안 삼",
+    "option_1_tag": null,
+    "option_2_text": "한번 사볼까 하고 삼",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q198",
+    "question_text": "일확천금",
+    "option_1_text": "당장 5억 받기",
+    "option_1_tag": null,
+    "option_2_text": "50살에 50억 받기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q199",
+    "question_text": "돈과 사람",
+    "option_1_text": "싫어하는 사람과 10억 나누기",
+    "option_1_tag": null,
+    "option_2_text": "나만 1억 받기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q200",
+    "question_text": "전자기기 포기",
+    "option_1_text": "스마트폰 1년 안 하기",
+    "option_1_tag": null,
+    "option_2_text": "만 원 받고 스마트폰 하기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q201",
+    "question_text": "선택 가치",
+    "option_1_text": "예뻐지기",
+    "option_1_tag": null,
+    "option_2_text": "1억 받기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q202",
+    "question_text": "외모와 재산",
+    "option_1_text": "돈 많은데 못생긴 얼굴",
+    "option_1_tag": null,
+    "option_2_text": "돈 없는데 예쁜 얼굴",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q203",
+    "question_text": "로또 당첨 사실",
+    "option_1_text": "다른 사람이 알려줌",
+    "option_1_tag": null,
+    "option_2_text": "내가 확인 (아무도 모름)",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q204",
+    "question_text": "쇼핑 제한",
+    "option_1_text": "옷 평생 사기 금지",
+    "option_1_tag": null,
+    "option_2_text": "신발 평생 사기 금지",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q205",
+    "question_text": "무제한 쇼핑",
+    "option_1_text": "무제한 백화점 카드",
+    "option_1_tag": null,
+    "option_2_text": "무제한 명품 매장 카드",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q206",
+    "question_text": "행복과 재산",
+    "option_1_text": "100만 원으로 행복하게 살기",
+    "option_1_tag": null,
+    "option_2_text": "10억으로 불행하게 살기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q207",
+    "question_text": "계산 능력",
+    "option_1_text": "평생 돈 계산 못 하기",
+    "option_1_tag": null,
+    "option_2_text": "평생 시간 계산 못 하기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q208",
+    "question_text": "채무 관계",
+    "option_1_text": "빚 1억 갚기",
+    "option_1_tag": null,
+    "option_2_text": "친구에게 1억 빌려주기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q209",
+    "question_text": "돈 쓰는 방식",
+    "option_1_text": "평생 카드깡으로 살기",
+    "option_1_tag": null,
+    "option_2_text": "평생 현금만 쓰고 살기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q210",
+    "question_text": "돈으로 잃는 것",
+    "option_1_text": "돈 때문에 친구 잃기",
+    "option_1_tag": null,
+    "option_2_text": "돈 때문에 애인 잃기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q211",
+    "question_text": "명품 포기",
+    "option_1_text": "명품 가방 평생 못 갖기",
+    "option_1_tag": null,
+    "option_2_text": "비싼 시계 평생 못 갖기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q212",
+    "question_text": "무제한 이용권",
+    "option_1_text": "무제한 택시 탑승권",
+    "option_1_tag": null,
+    "option_2_text": "무제한 커피 이용권",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q213",
+    "question_text": "일의 보람",
+    "option_1_text": "돈 많이 벌지만 싫어하는 일",
+    "option_1_tag": null,
+    "option_2_text": "돈 적게 벌지만 좋아하는 일",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q214",
+    "question_text": "쇼핑 상황",
+    "option_1_text": "백화점 세일 기간 사고 싶은 것 품절",
+    "option_1_tag": null,
+    "option_2_text": "온라인 쇼핑몰 배송 지연",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q215",
+    "question_text": "쇼핑 방법",
+    "option_1_text": "인터넷 쇼핑",
+    "option_1_tag": null,
+    "option_2_text": "오프라인 쇼핑",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q216",
+    "question_text": "용돈 주기",
+    "option_1_text": "매달 10만 원 용돈",
+    "option_1_tag": null,
+    "option_2_text": "매년 100만 원 용돈",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q217",
+    "question_text": "명품 착용",
+    "option_1_text": "평생 명품만 입기",
+    "option_1_tag": null,
+    "option_2_text": "평생 명품 하나도 없이 살기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q218",
+    "question_text": "쇼핑 혜택",
+    "option_1_text": "매일 할인받아 쇼핑하기",
+    "option_1_tag": null,
+    "option_2_text": "매일 공짜로 물건 받기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q219",
+    "question_text": "카드 사용",
+    "option_1_text": "통장 잔고 0원(카드 무제한)",
+    "option_1_tag": null,
+    "option_2_text": "통장 잔고 무제한(카드 사용 불가)",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q220",
+    "question_text": "소비 후회",
+    "option_1_text": "사고 싶은 것 100번 고민해야 함",
+    "option_1_tag": null,
+    "option_2_text": "사고 싶은 것 바로 사지만 다음 날 후회함",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q221",
+    "question_text": "미디어 금지",
+    "option_1_text": "일주일 OTT, 유튜브 금지",
+    "option_1_tag": null,
+    "option_2_text": "SNS 금지",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q222",
+    "question_text": "글 솜씨",
+    "option_1_text": "글씨 잘 쓰기",
+    "option_1_tag": null,
+    "option_2_text": "글 잘 쓰기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q223",
+    "question_text": "컴퓨터 활용 능력",
+    "option_1_text": "컴퓨터 타자 잘 치기",
+    "option_1_tag": null,
+    "option_2_text": "컴퓨터 프로그램 잘 이용하기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q224",
+    "question_text": "여행 범위",
+    "option_1_text": "평생 해외여행 못 가기",
+    "option_1_tag": null,
+    "option_2_text": "평생 국내 여행만 가기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q225",
+    "question_text": "문화생활",
+    "option_1_text": "모든 영화 평생 무료 관람",
+    "option_1_tag": null,
+    "option_2_text": "모든 콘서트 평생 무료 관람",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q226",
+    "question_text": "자유 시간 활용",
+    "option_1_text": "무제한 책 읽을 수 있음 (도서관)",
+    "option_1_tag": null,
+    "option_2_text": "무제한 게임 할 수 있음 (PC방)",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q227",
+    "question_text": "시간 활용 우선순위",
+    "option_1_text": "잠자는 시간 아까워서 안 자기",
+    "option_1_tag": null,
+    "option_2_text": "먹는 시간 아까워서 안 먹기",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q228",
+    "question_text": "필수 예술",
+    "option_1_text": "음악 없이는 못 살기",
+    "option_1_tag": null,
+    "option_2_text": "그림 없이는 못 살기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q229",
+    "question_text": "취미 재능",
+    "option_1_text": "모든 스포츠 다 잘하기",
+    "option_1_tag": null,
+    "option_2_text": "모든 악기 다 잘 다루기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q230",
+    "question_text": "노래 부르기",
+    "option_1_text": "노래방에서 혼자 노래 부르기",
+    "option_1_tag": null,
+    "option_2_text": "코인 노래방에서 사람들 앞에서 노래 부르기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q231",
+    "question_text": "여행 스타일",
+    "option_1_text": "여행 가면 관광지만 구경",
+    "option_1_tag": null,
+    "option_2_text": "여행 가면 맛집만 탐방",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q232",
+    "question_text": "취미 생활",
+    "option_1_text": "매일 새로운 취미 만들기",
+    "option_1_tag": null,
+    "option_2_text": "하나의 취미만 죽을 때까지 하기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q233",
+    "question_text": "영화 감상 방해",
+    "option_1_text": "영화 보다가 스포 당하기",
+    "option_1_tag": null,
+    "option_2_text": "영화 보다가 갑자기 엔딩 크레딧 올라오기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q234",
+    "question_text": "평생 미디어 구독",
+    "option_1_text": "넷플릭스 평생 무료",
+    "option_1_tag": null,
+    "option_2_text": "유튜브 프리미엄 평생 무료",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q235",
+    "question_text": "디지털 콘텐츠",
+    "option_1_text": "평생 웹툰만 보기",
+    "option_1_tag": null,
+    "option_2_text": "평생 웹소설만 보기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q236",
+    "question_text": "모험적인 여행",
+    "option_1_text": "아프리카 여행",
+    "option_1_tag": null,
+    "option_2_text": "북한 여행",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q237",
+    "question_text": "인생 다시 시작",
+    "option_1_text": "다시 태어나기",
+    "option_1_tag": null,
+    "option_2_text": "성공한 삶 살기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q238",
+    "question_text": "시간 여행",
+    "option_1_text": "과거로 돌아가기",
+    "option_1_tag": null,
+    "option_2_text": "미래로 가보기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q239",
+    "question_text": "역대급 괴식",
+    "option_1_text": "똥 맛 카레 먹기",
+    "option_1_tag": null,
+    "option_2_text": "카레 맛 똥 먹기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q240",
+    "question_text": "극한 위생",
+    "option_1_text": "평생 샤워 못 하기",
+    "option_1_tag": null,
+    "option_2_text": "평생 양치 못 하기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q241",
+    "question_text": "방귀 딜레마",
+    "option_1_text": "소리 안 나지만 냄새 지독",
+    "option_1_tag": null,
+    "option_2_text": "냄새 안 나지만 소리 지독",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q242",
+    "question_text": "세상 보기",
+    "option_1_text": "코끼리 코하고 세상 구경하기",
+    "option_1_tag": null,
+    "option_2_text": "빙빙 돌고 세상 구경하기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q243",
+    "question_text": "복권 당첨 황당 상황",
+    "option_1_text": "100만 원 복권 당첨(잃어버림)",
+    "option_1_tag": null,
+    "option_2_text": "10억 복권 당첨(찢어버림)",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q244",
+    "question_text": "외출 시 대담함",
+    "option_1_text": "내 얼굴에 낙서하고 외출",
+    "option_1_tag": null,
+    "option_2_text": "남의 얼굴에 낙서하고 외출",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q245",
+    "question_text": "신체 예술",
+    "option_1_text": "평생 발로 글씨 쓰기",
+    "option_1_tag": null,
+    "option_2_text": "평생 입으로 그림 그리기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q246",
+    "question_text": "생체 리듬",
+    "option_1_text": "하루에 10번 변비",
+    "option_1_tag": null,
+    "option_2_text": "하루에 10번 설사",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q247",
+    "question_text": "감각적 불행",
+    "option_1_text": "세상 모든 음식 맛없음",
+    "option_1_tag": null,
+    "option_2_text": "세상 모든 소리 시끄러움",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q248",
+    "question_text": "인지 불능",
+    "option_1_text": "세상 모든 글자 모르는 글자",
+    "option_1_tag": null,
+    "option_2_text": "세상 모든 그림 모르는 그림",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q249",
+    "question_text": "초월적 존재",
+    "option_1_text": "평생 아무것도 못 먹는 투명 인간",
+    "option_1_tag": null,
+    "option_2_text": "평생 모든 것을 만지는 금손 인간",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q250",
+    "question_text": "몸 냄새와 방귀 냄새",
+    "option_1_text": "몸에서 꽃향기 나지만 방귀 뀌면 똥 냄새",
+    "option_1_tag": null,
+    "option_2_text": "몸에서 똥 냄새 나지만 방귀 뀌면 꽃향기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q251",
+    "question_text": "벌레 세상",
+    "option_1_text": "귀여운 벌레만 살 수 있는 세상",
+    "option_1_tag": null,
+    "option_2_text": "징그러운 벌레만 살 수 있는 세상",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q252",
+    "question_text": "젤리 시식",
+    "option_1_text": "지렁이 젤리 맛없게 먹기",
+    "option_1_tag": null,
+    "option_2_text": "지렁이 진짜로 먹기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q253",
+    "question_text": "감각 차단",
+    "option_1_text": "평생 눈 감고 다니기",
+    "option_1_tag": null,
+    "option_2_text": "평생 귀 막고 다니기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q254",
+    "question_text": "매일 변신",
+    "option_1_text": "매일 다른 사람과 몸 바뀌기",
+    "option_1_tag": null,
+    "option_2_text": "매일 다른 동물과 몸 바뀌기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q255",
+    "question_text": "식사 매너",
+    "option_1_text": "손으로 밥 먹기",
+    "option_1_tag": null,
+    "option_2_text": "발로 밥 먹기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q256",
+    "question_text": "반복적인 생리 현상",
+    "option_1_text": "매일 재채기 100번",
+    "option_1_tag": null,
+    "option_2_text": "매일 하품 100번",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q257",
+    "question_text": "만성 분비물",
+    "option_1_text": "매일 콧물 흘리기",
+    "option_1_tag": null,
+    "option_2_text": "매일 눈물 흘리기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q258",
+    "question_text": "이상한 소리",
+    "option_1_text": "평생 웃음소리 개소리",
+    "option_1_tag": null,
+    "option_2_text": "평생 울음소리 돼지 소리",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q259",
+    "question_text": "신체 변화",
+    "option_1_text": "키 10cm 작아지기",
+    "option_1_tag": null,
+    "option_2_text": "키 10cm 커지기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q260",
+    "question_text": "불편한 소음",
+    "option_1_text": "평생 코딱지 파는 소리 듣기",
+    "option_1_tag": null,
+    "option_2_text": "평생 발톱 깎는 소리 듣기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q261",
+    "question_text": "극한 공간 체험",
+    "option_1_text": "매일 한 시간 벌레 방에서 살기",
+    "option_1_tag": null,
+    "option_2_text": "매일 한 시간 귀신 방에서 살기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q262",
+    "question_text": "피부 트러블",
+    "option_1_text": "매일 얼굴에 여드름 10개 나기",
+    "option_1_tag": null,
+    "option_2_text": "매일 얼굴에 점 10개 나기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q263",
+    "question_text": "시야 환경",
+    "option_1_text": "평생 어두컴컴한 곳에서 살기",
+    "option_1_tag": null,
+    "option_2_text": "평생 번쩍거리는 곳에서 살기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q264",
+    "question_text": "식욕 제어",
+    "option_1_text": "평생 다이어트 못 하기",
+    "option_1_tag": null,
+    "option_2_text": "평생 식욕 없어 먹기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q265",
+    "question_text": "꿈꾸는 밤",
+    "option_1_text": "매일 똑같은 꿈 꾸기",
+    "option_1_tag": null,
+    "option_2_text": "매일 악몽 꾸기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q266",
+    "question_text": "몸 냄새",
+    "option_1_text": "매일 땀 냄새 나는 옷 입기",
+    "option_1_tag": null,
+    "option_2_text": "매일 음식물 쓰레기 냄새 나는 옷 입기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q267",
+    "question_text": "극한 감각 단절",
+    "option_1_text": "일 년 동안 말 못 하기",
+    "option_1_tag": null,
+    "option_2_text": "일 년 동안 눈 못 뜨기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q268",
+    "question_text": "삶의 마지막",
+    "option_1_text": "죽는 날짜 알기",
+    "option_1_tag": null,
+    "option_2_text": "죽는 방법 알기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q269",
+    "question_text": "삶의 가치",
+    "option_1_text": "초능력 가지기",
+    "option_1_tag": null,
+    "option_2_text": "억만장자 되기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q270",
+    "question_text": "초능력",
+    "option_1_text": "투명 인간 되기",
+    "option_1_tag": null,
+    "option_2_text": "순간 이동 능력 가지기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q271",
+    "question_text": "상실의 고통",
+    "option_1_text": "한 달에 한 번 모든 기억 지워지기",
+    "option_1_tag": null,
+    "option_2_text": "일 년에 한 번 모든 물건 잃어버리기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q272",
+    "question_text": "기묘한 능력",
+    "option_1_text": "몸이 투명해지는데 옷은 안 투명해지기",
+    "option_1_tag": null,
+    "option_2_text": "모든 소리 들리지만 내 목소리는 안 들림",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q273",
+    "question_text": "옷차림 고통",
+    "option_1_text": "평생 겨울에 여름 옷 입기",
+    "option_1_tag": null,
+    "option_2_text": "평생 여름에 겨울 옷 입기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q274",
+    "question_text": "밤의 경험",
+    "option_1_text": "매일 귀신 보기",
+    "option_1_tag": null,
+    "option_2_text": "매일 악몽 꾸기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q275",
+    "question_text": "극한 과제",
+    "option_1_text": "팔만대장경 다 읽기",
+    "option_1_tag": null,
+    "option_2_text": "대장내시경 팔만번 하기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q276",
+    "question_text": "언행의 자유",
+    "option_1_text": "거짓말을 절대 못 하는 삶",
+    "option_1_tag": null,
+    "option_2_text": "진실만을 말해야 하는 삶",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q277",
+    "question_text": "앎의 정도",
+    "option_1_text": "모든 것을 다 아는 삶",
+    "option_1_tag": null,
+    "option_2_text": "아무것도 모르는 삶",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q278",
+    "question_text": "인생 목표",
+    "option_1_text": "평생 행복하게 살기",
+    "option_1_tag": null,
+    "option_2_text": "평생 돈 많이 벌기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q279",
+    "question_text": "죽음에 대한 능력",
+    "option_1_text": "어제 죽은 사람 살리기",
+    "option_1_tag": null,
+    "option_2_text": "내일 죽을 사람 알기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q280",
+    "question_text": "시간에 대한 능력",
+    "option_1_text": "시간 되돌리기",
+    "option_1_tag": null,
+    "option_2_text": "미래 보기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q281",
+    "question_text": "특별한 능력",
+    "option_1_text": "모든 병 치료 능력",
+    "option_1_tag": null,
+    "option_2_text": "모든 전쟁 막는 능력",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q282",
+    "question_text": "삶의 태도",
+    "option_1_text": "평생 누군가를 돕는 삶",
+    "option_1_tag": null,
+    "option_2_text": "평생 남에게 도움받는 삶",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q283",
+    "question_text": "영향력 행사",
+    "option_1_text": "평생 남의 말에 휘둘리는 삶",
+    "option_1_tag": null,
+    "option_2_text": "평생 남을 휘두르는 삶",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q284",
+    "question_text": "행복의 범위",
+    "option_1_text": "나만 행복한 세상",
+    "option_1_tag": null,
+    "option_2_text": "모두가 행복한 세상 (나 빼고)",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q285",
+    "question_text": "지적 만족도",
+    "option_1_text": "내가 제일 똑똑한 세상(아무도 날 이해 못 함)",
+    "option_1_tag": null,
+    "option_2_text": "모두가 똑똑한 세상(나는 평범)",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q286",
+    "question_text": "초능력 활용",
+    "option_1_text": "나에게만 초능력(다른 사람 못 구함)",
+    "option_1_tag": null,
+    "option_2_text": "나에겐 없지만 다른 사람에게 초능력 나눠줄 수 있음",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q287",
+    "question_text": "외로움의 정도",
+    "option_1_text": "평생 혼자 외롭게 살기",
+    "option_1_tag": null,
+    "option_2_text": "평생 친구 많지만 외롭게 살기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q288",
+    "question_text": "삶의 만족감",
+    "option_1_text": "평생 후회하며 살기",
+    "option_1_tag": null,
+    "option_2_text": "평생 만족하며 살기 (거짓)",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q289",
+    "question_text": "인생의 의미",
+    "option_1_text": "기억 없는 삶",
+    "option_1_tag": null,
+    "option_2_text": "미래 없는 삶",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q290",
+    "question_text": "삶의 길이",
+    "option_1_text": "영원히 살기",
+    "option_1_tag": null,
+    "option_2_text": "원하는 날짜에 죽을 수 있기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q291",
+    "question_text": "세상에 대한 역할",
+    "option_1_text": "세상을 바꾸는 영웅되기",
+    "option_1_tag": null,
+    "option_2_text": "세상을 조용히 지키는 사람되기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q292",
+    "question_text": "이타심/이기심",
+    "option_1_text": "남을 위해 살기",
+    "option_1_tag": null,
+    "option_2_text": "나를 위해 살기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q293",
+    "question_text": "결혼과 사랑",
+    "option_1_text": "사랑 없이 결혼하기",
+    "option_1_tag": null,
+    "option_2_text": "결혼 없이 사랑하기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q294",
+    "question_text": "가능성",
+    "option_1_text": "불가능을 가능하게 하기",
+    "option_1_tag": null,
+    "option_2_text": "불가능을 예측하기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q295",
+    "question_text": "노력과 결과",
+    "option_1_text": "항상 최선을 다하지만 결과 안 좋음",
+    "option_1_tag": null,
+    "option_2_text": "항상 대충 하지만 결과 좋음",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q296",
+    "question_text": "친구 관계 규모",
+    "option_1_text": "평생 한 명의 친구만 가질 수 있음",
+    "option_1_tag": null,
+    "option_2_text": "친구 100명이지만 절대 만날 수 없음",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q297",
+    "question_text": "반려동물과의 관계",
+    "option_1_text": "평생 한 마리의 반려동물만 가질 수 있음",
+    "option_1_tag": null,
+    "option_2_text": "반려동물 100마리지만 절대 만질 수 없음",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q298",
+    "question_text": "소통 방식",
+    "option_1_text": "사람들과 전화로만 대화",
+    "option_1_tag": null,
+    "option_2_text": "사람들과 직접 만나서만 대화",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q299",
+    "question_text": "관계 선택",
+    "option_1_text": "완벽한 가족이 있지만 친구가 없음",
+    "option_1_tag": null,
+    "option_2_text": "완벽한 친구가 있지만 가족이 없음",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q300",
+    "question_text": "가족 관계",
+    "option_1_text": "항상 싸우는 가족",
+    "option_1_tag": null,
+    "option_2_text": "항상 드라마 같은 가족",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q301",
+    "question_text": "대화 단절",
+    "option_1_text": "다시는 가족과 대화할 수 없음",
+    "option_1_tag": null,
+    "option_2_text": "다시는 친구와 대화할 수 없음",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q302",
+    "question_text": "사랑하는 사람 수",
+    "option_1_text": "진정으로 사랑하는 가족 한 명만 가질 수 있음",
+    "option_1_tag": null,
+    "option_2_text": "진정으로 사랑하는 친구 한 명만 가질 수 있음",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q303",
+    "question_text": "편드는 존재",
+    "option_1_text": "항상 내 편인 친구",
+    "option_1_tag": null,
+    "option_2_text": "항상 내 편인 가족",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q304",
+    "question_text": "친구 목숨과 진실",
+    "option_1_text": "친구 목숨 구하기 위해 거짓말",
+    "option_1_tag": null,
+    "option_2_text": "진실 말하고 친구 죽게 내버려두기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q305",
+    "question_text": "가족과 생존",
+    "option_1_text": "굶주리는 가족 먹이기 위해 음식 훔치기",
+    "option_1_tag": null,
+    "option_2_text": "가족 굶게 하고 훔치지 않기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q306",
+    "question_text": "희생적 선택",
+    "option_1_text": "다섯 명 구하기 위해 한 명 죽이기",
+    "option_1_tag": null,
+    "option_2_text": "아무것도 안 하고 다섯 명 죽게 내버려두기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q307",
+    "question_text": "학업 성취 윤리",
+    "option_1_text": "졸업 시험 합격 위해 부정행위",
+    "option_1_tag": null,
+    "option_2_text": "부정행위 안 하고 낙제하기",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q308",
+    "question_text": "부모님과 친구 약속",
+    "option_1_text": "친구들과 여행 위해 부모님께 거짓말",
+    "option_1_tag": null,
+    "option_2_text": "진실 말하고 여행 가지 않기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q309",
+    "question_text": "약속 이행과 도움",
+    "option_1_text": "낯선 사람 돕기 위해 친구와의 약속 깨기",
+    "option_1_tag": null,
+    "option_2_text": "약속 지키고 낯선 사람 돕지 않기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q310",
+    "question_text": "커리어와 우정",
+    "option_1_text": "승진 위해 친구 배신하기",
+    "option_1_tag": null,
+    "option_2_text": "친구 배신 안 하고 승진 포기하기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q311",
+    "question_text": "행복의 희생",
+    "option_1_text": "가족 행복 위해 자신 희생하기",
+    "option_1_tag": null,
+    "option_2_text": "자신 행복하게 하고 가족 불행하게 만들기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q312",
+    "question_text": "인류 구원",
+    "option_1_text": "세상 구하기 위해 죄 없는 사람 죽이기",
+    "option_1_tag": null,
+    "option_2_text": "사람 안 죽이고 세상 파멸하게 내버려두기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q313",
+    "question_text": "생명 가치",
+    "option_1_text": "사람 구하기 위해 동물 죽이기",
+    "option_1_tag": null,
+    "option_2_text": "동물 안 죽이고 사람 죽게 내버려두기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q314",
+    "question_text": "아이 보호",
+    "option_1_text": "아이에게 가혹한 진실 숨기기 위해 거짓말",
+    "option_1_tag": null,
+    "option_2_text": "아이에게 진실 말하고 상처 주기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q315",
+    "question_text": "애인의 생명과 도덕",
+    "option_1_text": "애인 목숨 구하기 위해 바람 피기",
+    "option_1_tag": null,
+    "option_2_text": "바람 안 피고 애인 죽게 내버려두기",
+    "option_2_tag": null,
+    "domain": "가치관",
+    "visible": true
+  },
+  {
+    "question_id": "Q316",
+    "question_text": "정의로운 도둑",
+    "option_1_text": "가난한 사람 돕기 위해 부자에게서 돈 훔치기",
+    "option_1_tag": null,
+    "option_2_text": "훔치지 않고 가난한 사람 굶게 내버려두기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  },
+  {
+    "question_id": "Q317",
+    "question_text": "친구와 법",
+    "option_1_text": "친구 돕기 위해 법 어기기",
+    "option_1_tag": null,
+    "option_2_text": "법 따르고 친구 위험에 처하게 내버려두기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q318",
+    "question_text": "가족과 조국",
+    "option_1_text": "가족 구하기 위해 조국 배신하기",
+    "option_1_tag": null,
+    "option_2_text": "조국 배신 안 하고 가족 살해당하게 내버려두기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q319",
+    "question_text": "궁극의 희생",
+    "option_1_text": "세상 구하기 위해 가족 죽이기",
+    "option_1_tag": null,
+    "option_2_text": "가족 안 죽이고 세상 파멸하게 내버려두기",
+    "option_2_tag": null,
+    "domain": "관계",
+    "visible": true
+  },
+  {
+    "question_id": "Q320",
+    "question_text": "싸움 해결",
+    "option_1_text": "먼저 풀기",
+    "option_1_tag": null,
+    "option_2_text": "기다리기",
+    "option_2_tag": null,
+    "domain": "습관",
+    "visible": true
+  }
+]

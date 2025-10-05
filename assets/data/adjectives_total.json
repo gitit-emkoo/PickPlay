@@ -1,0 +1,218 @@
+[
+  {
+    "adjective_id": "flexible_1",
+    "adjective": "유연한",
+    "domain": "가치관",
+    "keywords": [
+      "융통성",
+      "적응",
+      "타협",
+      "개방성"
+    ],
+    "description": "상황에 따라 유연하게 사고하고 적응하는 성향"
+  },
+  {
+    "adjective_id": "passionate_1",
+    "adjective": "뜨거운",
+    "domain": "감정",
+    "keywords": [
+      "열정",
+      "몰입",
+      "에너지",
+      "감정표현"
+    ],
+    "description": "감정을 강하게 표현하고 열정적으로 반응하는 성향"
+  },
+  {
+    "adjective_id": "calm",
+    "adjective": "냉정한",
+    "domain": "감정",
+    "keywords": [
+      "침착",
+      "절제",
+      "거리두기",
+      "판단력"
+    ],
+    "description": "감정에 휘둘리지 않고 침착하게 판단하는 성향"
+  },
+  {
+    "adjective_id": "emotional_1",
+    "adjective": "감성적인",
+    "domain": "감정",
+    "keywords": [
+      "감정이입",
+      "공감",
+      "섬세함",
+      "감수성"
+    ],
+    "description": "감정에 민감하고 감성적으로 반응하는 성향"
+  },
+  {
+    "adjective_id": "relaxed_1",
+    "adjective": "느긋한",
+    "domain": "감정",
+    "keywords": [
+      "여유",
+      "느림",
+      "안정감",
+      "편안함"
+    ],
+    "description": "급하지 않고 여유롭게 상황을 받아들이는 성향"
+  },
+  {
+    "adjective_id": "impulsive_1",
+    "adjective": "충동적인",
+    "domain": "가치관",
+    "keywords": [
+      "즉흥",
+      "반사적",
+      "감정적",
+      "예측불가"
+    ],
+    "description": "순간의 판단에 따라 즉흥적으로 행동하는 성향"
+  },
+  {
+    "adjective_id": "sensitive_1",
+    "adjective": "예민한",
+    "domain": "감정",
+    "keywords": [
+      "민감함",
+      "불안",
+      "주의",
+      "섬세함"
+    ],
+    "description": "주변 자극에 민감하게 반응하는 성향"
+  },
+  {
+    "adjective_id": "flexible_2",
+    "adjective": "유연한",
+    "domain": "가치관",
+    "keywords": [
+      "융통성",
+      "적응",
+      "타협",
+      "개방성"
+    ],
+    "description": "상황에 따라 유연하게 사고하고 적응하는 성향"
+  },
+  {
+    "adjective_id": "emotional_2",
+    "adjective": "감성적인",
+    "domain": "감정",
+    "keywords": [
+      "감정이입",
+      "공감",
+      "섬세함",
+      "감수성"
+    ],
+    "description": "감정에 민감하고 감성적으로 반응하는 성향"
+  },
+  {
+    "adjective_id": "cold_1",
+    "adjective": "차가운",
+    "domain": "감정",
+    "keywords": [
+      "거리감",
+      "절제",
+      "냉철함",
+      "이성적"
+    ],
+    "description": "감정보다 이성을 우선하며 차분하게 반응하는 성향"
+  },
+  {
+    "adjective_id": "sensitive_2",
+    "adjective": "예민한",
+    "domain": "가치관",
+    "keywords": [
+      "민감함",
+      "불안",
+      "주의",
+      "섬세함"
+    ],
+    "description": "자신의 기준에 민감하게 반응하며 신중한 성향"
+  },
+  {
+    "adjective_id": "passionate_2",
+    "adjective": "뜨거운",
+    "domain": "감정",
+    "keywords": [
+      "열정",
+      "몰입",
+      "에너지",
+      "감정표현"
+    ],
+    "description": "감정을 강하게 표현하고 열정적으로 반응하는 성향"
+  },
+  {
+    "adjective_id": "relaxed_2",
+    "adjective": "느긋한",
+    "domain": "감정",
+    "keywords": [
+      "여유",
+      "느림",
+      "안정감",
+      "편안함"
+    ],
+    "description": "급하지 않고 여유롭게 상황을 받아들이는 성향"
+  },
+  {
+    "adjective_id": "impulsive_2",
+    "adjective": "충동적인",
+    "domain": "감정",
+    "keywords": [
+      "즉흥",
+      "반사적",
+      "감정적",
+      "예측불가"
+    ],
+    "description": "순간의 감정에 따라 즉흥적으로 행동하는 성향"
+  },
+  {
+    "adjective_id": "cold_2",
+    "adjective": "차가운",
+    "domain": "가치관",
+    "keywords": [
+      "거리감",
+      "절제",
+      "냉철함",
+      "이성적"
+    ],
+    "description": "자신의 기준을 지키며 감정에 휘둘리지 않는 성향"
+  },
+  {
+    "adjective_id": "flexible_3",
+    "adjective": "유연한",
+    "domain": "가치관",
+    "keywords": [
+      "융통성",
+      "적응",
+      "타협",
+      "개방성"
+    ],
+    "description": "상황에 따라 유연하게 사고하고 적응하는 성향"
+  },
+  {
+    "adjective_id": "emotional_3",
+    "adjective": "감성적인",
+    "domain": "감정",
+    "keywords": [
+      "감정이입",
+      "공감",
+      "섬세함",
+      "감수성"
+    ],
+    "description": "감정에 민감하고 감성적으로 반응하는 성향"
+  },
+  {
+    "adjective_id": "passionate_3",
+    "adjective": "뜨거운",
+    "domain": "감정",
+    "keywords": [
+      "열정",
+      "몰입",
+      "에너지",
+      "감정표현"
+    ],
+    "description": "감정을 강하게 표현하고 열정적으로 반응하는 성향"
+  }
+]
