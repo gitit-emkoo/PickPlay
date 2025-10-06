@@ -55,7 +55,7 @@ export default function App() {
     if (!user || !userData || !question || userChoice !== null) return;
     try {
       const updatedUserData = await saveAnswerAndProcessLogic(userData, question, index);
-      setUserData(updatedUserData);
+        setUserData(updatedUserData);
       setUserChoice(index);
       const result = await aggregate(question.question_id);
       setAgg(result);
@@ -82,13 +82,13 @@ export default function App() {
 
         <View style={styles.card}>
           <Text style={styles.questionText}>{question.text}</Text>
-          <TouchableOpacity 
+        <TouchableOpacity
             style={[styles.option, userChoice === 0 && styles.selectedOption]} 
             onPress={() => handleVote(0)}
             disabled={userChoice !== null}
           >
             <Text>{question.option_1_text}</Text>
-          </TouchableOpacity>
+        </TouchableOpacity>
           <TouchableOpacity 
             style={[styles.option, userChoice === 1 && styles.selectedOption]} 
             onPress={() => handleVote(1)}
@@ -96,15 +96,15 @@ export default function App() {
           >
             <Text>{question.option_2_text}</Text>
           </TouchableOpacity>
-        </View>
+          </View>
 
         {userChoice !== null && (
           <View style={styles.card}>
             <Text>결과: {agg.p0}% vs {agg.p1}%</Text>
           </View>
         )}
-      </ScrollView>
-    </SafeAreaView>
+        </ScrollView>
+      </SafeAreaView>
   );
 }
 

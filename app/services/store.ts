@@ -6,7 +6,7 @@ import { db } from './firebase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getDeviceUID } from './firebase';
 import { currentDateKey } from '../utils/date';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import functions from '@react-native-firebase/functions';
 // AsyncStorage는 더 이상 직접 사용하지 않으므로 제거 (필요 시 UI단에서만 사용)
 
 // --- 데이터 로더 (앱 시작 시 호출) ---
@@ -35,17 +35,18 @@ export const loadData = () => {
  */
 export const ensureUser = async (uid: string): Promise<UserData> => {
   const userRef = firestore().collection('users').doc(uid);
-  const doc = await userRef.get();
+    const doc = await userRef.get();
+    const userDocExists = typeof (doc as any).exists === 'function' ? (doc as any).exists() : ((doc as any).exists as boolean);
 
   // 1. Firestore에 이미 데이터가 있는 경우 (정상)
-  if (doc.exists()) { // .exists -> .exists()
+  if (userDocExists) {
     console.log('✅ [V2] Firestore에서 사용자 데이터 확인:', uid);
-    const data = doc.data() as UserData;
+      const data = doc.data() as UserData;
     // Firestore Timestamp를 JS Date 객체로 변환
-    if (data.createdAt && (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate) {
+      if (data.createdAt && (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate) {
       return { ...data, createdAt: (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate() };
-    }
-    return data;
+      }
+      return data;
   }
 
   // 2. Firestore에 데이터가 없는 경우: AsyncStorage에서 마이그레이션 시도
@@ -159,8 +160,9 @@ export const getTodayAnswer = async (uid: string, questionId: string): Promise<A
   const answerDocId = `${uid}_${questionId}`;
   const answerRef = firestore().collection('answers').doc(answerDocId);
   const doc = await answerRef.get();
+  const answerExists = typeof (doc as any).exists === 'function' ? (doc as any).exists() : ((doc as any).exists as boolean);
 
-  if (doc.exists()) { // .exists -> .exists()
+  if (answerExists) {
     console.log(`[Check] 오늘 답변 기록을 찾았습니다: ${answerDocId}`);
     return doc.data() as Answer;
   } else {
@@ -181,16 +183,12 @@ export const getTodayAnswer = async (uid: string, questionId: string): Promise<A
 const generateTagsWithAI = async (question: Question, selectedOptionText: string): Promise<string[]> => {
   console.log(`[AI] Cloud Function 'generateTags' 호출 시작...`);
   try {
-    const functions = getFunctions();
-    const generateTags = httpsCallable(functions, 'generateTags');
-    
-    const result = await generateTags({ 
-      questionId: question.question_id, 
+    const generateTags = functions().httpsCallable('generateTags');
+    const result = await generateTags({
+      questionId: question.question_id,
       selectedText: selectedOptionText,
     });
-    
-    // Cloud Function의 응답 형식은 { data: { tags: [...] } } 입니다.
-    const tags = (result.data as any).tags; 
+    const tags = (result.data as any).tags;
     if (!Array.isArray(tags)) {
       throw new Error("Cloud Function 응답 형식이 올바르지 않습니다.");
     }
@@ -287,10 +285,10 @@ export const saveAnswerAndProcessLogic = async (userData: UserData, question: Qu
   }
 
   // --- 3. 포인트 보상 지급 ---
-  await rewardWithMajority(uid, question.question_id, selectedOptionIndex, updatedUserData!.streakCount);
-  const finalUserData = { // 포인트가 업데이트된 최신 데이터를 반영
+  const reward = await rewardWithMajority(uid, question.question_id, selectedOptionIndex, updatedUserData!.streakCount);
+  const finalUserData = {
     ...updatedUserData!,
-    points: (updatedUserData!.points || 0) + (await rewardWithMajority(uid, question.question_id, selectedOptionIndex, updatedUserData!.streakCount)).base + (await rewardWithMajority(uid, question.question_id, selectedOptionIndex, updatedUserData!.streakCount)).bonus
+    points: (updatedUserData!.points || 0) + reward.base + reward.bonus,
   };
 
   // --- 4. 누적 답변 수에 따라 로직 분기 ---
@@ -450,12 +448,12 @@ const assignCharacter_LogicA = async (userData: UserData): Promise<UserData> => 
  * @param questionId 질문 ID
  */
 export const aggregate = async (questionId: string) => {
-  const votesSnapshot = await firestore().collection('votes').where('question_id', '==', questionId).get();
+  const snapshot = await firestore().collection('answers').where('question_id', '==', questionId).get();
   let c0 = 0, c1 = 0;
-  votesSnapshot.forEach(doc => {
-    const vote = doc.data();
-    if (vote.selected_option_index === 0) c0++;
-    else if (vote.selected_option_index === 1) c1++;
+  snapshot.forEach(doc => {
+    const ans = doc.data() as any;
+    if (ans.selected_option_index === 0) c0++;
+    else if (ans.selected_option_index === 1) c1++;
   });
   const total = c0 + c1;
   const p0 = total ? Math.round((c0 / total) * 100) : 50;
@@ -505,14 +503,14 @@ export function watchAggregation(
   questionId: string,
   onChange: (result: { total: number; c0: number; c1: number; p0: number; p1: number }) => void
 ) {
-  const qRef = firestore().collection('votes').where('question_id', '==', questionId);
+  const qRef = firestore().collection('answers').where('question_id', '==', questionId);
   
-  const unsubscribe = qRef.onSnapshot((snapshot) => {
-    let c0 = 0, c1 = 0;
-    snapshot.forEach(doc => {
-      const vote = doc.data();
-      if (vote.selected_option_index === 0) c0++;
-      else if (vote.selected_option_index === 1) c1++;
+    const unsubscribe = qRef.onSnapshot((snapshot) => {
+      let c0 = 0, c1 = 0;
+      snapshot.forEach(doc => {
+      const ans = doc.data() as any;
+      if (ans.selected_option_index === 0) c0++;
+      else if (ans.selected_option_index === 1) c1++;
     });
     const total = c0 + c1;
     const p0 = total ? Math.round((c0 / total) * 100) : 50;
@@ -520,5 +518,5 @@ export function watchAggregation(
     onChange({ total, c0, c1, p0, p1 });
   });
 
-  return unsubscribe;
+    return unsubscribe;
 }

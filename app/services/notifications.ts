@@ -3,7 +3,7 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { db, forceAnonymousAuth } from './firebase';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import firestore from '@react-native-firebase/firestore';
 
 // 알림 핸들러 설정
 Notifications.setNotificationHandler({
@@ -63,14 +63,13 @@ export async function registerForPushNotificationsAsync() {
 type PlatformType = 'ios' | 'android';
 export async function saveExpoPushTokenToFirestore(uid: string, token: string, platformType: PlatformType) {
   try {
-    const ref = doc(db, 'user_push_tokens', uid);
-    await setDoc(
-      ref,
+    const ref = firestore().collection('user_push_tokens').doc(uid);
+    await ref.set(
       {
         expo: {
           token,
           platform: platformType,
-          updatedAt: serverTimestamp(),
+          updatedAt: firestore.FieldValue.serverTimestamp(),
         },
       },
       { merge: true }
