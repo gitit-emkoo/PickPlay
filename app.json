@@ -11,6 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.pickplay.kwcc",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSUserTrackingUsageDescription": "이 정보를 사용하여 더 관련성 높은 맞춤형 광고를 제공합니다.",
         "UIBackgroundModes": [
@@ -29,6 +30,7 @@
     "android": {
       "package": "com.pickplay.kwcc",
       "versionCode": 9,
+      "googleServicesFile": "./android/app/google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
