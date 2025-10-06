@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "pickplay",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.pickplay.kwcc",
@@ -19,9 +19,6 @@
           "remote-notification"
         ],
         "ITSAppUsesNonExemptEncryption": false
-      },
-      "config": {
-        "googleMobileAdsAppId": "ca-app-pub-2555567440328829~5483134579"
       },
       "runtimeVersion": {
         "policy": "appVersion"
@@ -48,9 +45,6 @@
         "android.permission.WAKE_LOCK",
         "android.permission.FOREGROUND_SERVICE"
       ],
-      "config": {
-        "googleMobileAdsAppId": "ca-app-pub-2555567440328829~4208779024"
-      },
       "runtimeVersion": "1.0.0"
     },
     "web": {
@@ -61,6 +55,14 @@
     "plugins": [
       "expo-router",
       "@react-native-firebase/app",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "android_app_id": "ca-app-pub-2555567440328829~4208779024",
+          "ios_app_id": "ca-app-pub-2555567440328829~5483134579",
+          "delay_app_measurement_init": true
+        }
+      ],
       [
         "expo-splash-screen",
         {
