@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "pickplay",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.pickplay.kwcc",
@@ -58,9 +58,9 @@
       [
         "react-native-google-mobile-ads",
         {
-          "android_app_id": "ca-app-pub-2555567440328829~4208779024",
-          "ios_app_id": "ca-app-pub-2555567440328829~5483134579",
-          "delay_app_measurement_init": true
+          "androidAppId": "ca-app-pub-2555567440328829~4208779024",
+          "iosAppId": "ca-app-pub-2555567440328829~5483134579",
+          "delayAppMeasurementInit": true
         }
       ],
       [
