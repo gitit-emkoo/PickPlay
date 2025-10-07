@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image, ActivityIndicator } from 'react-native';
 import LottieView from 'lottie-react-native';
-import { UserData } from '../types'; // Character 타입도 필요할 수 있음
+import { UserData } from '@/src/types'; // Character 타입도 필요할 수 있음
 
 interface CharacterCardProps {
   userData: UserData | null;

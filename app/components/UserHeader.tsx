@@ -2,6 +2,8 @@ import LottieView from 'lottie-react-native';
 import React, { useState } from 'react';
 import { Modal, Text, TouchableOpacity, View } from 'react-native';
 import colors from '../styles/colors';
+import CharacterCard from './CharacterCard';
+import { UserData } from '@/src/types';
 
 interface UserHeaderProps {
   userData: {
@@ -9,6 +11,9 @@ interface UserHeaderProps {
     streakCount: number;
     nickname: string;
     totalSelections?: number;
+    characterId?: string | null;
+    adjective1?: string | null;
+    adjective2?: string | null;
   };
 }
 
@@ -204,23 +209,26 @@ export default function UserHeader({ userData }: UserHeaderProps) {
             </View>
           </View>
 
-          {/* 하단: 애니마코드 섹션 */}
-          <View style={{
-            alignItems: 'center',
-            width: '100%'
-          }}>
-            {/* 애니마코드 로티 */}
-            <View style={{ width: 120, height: 120, marginBottom: 16 }}>
-              <LottieView
-                source={{ uri: "https://lottie.host/df96f2a7-284f-4197-ba3c-5b8388c46299/ykDKnFMp3l.lottie" }}
-                loop={true}
-                autoPlay={true}
-                speed={2}
-                style={{ width: 120, height: 120 }}
-              />
-            </View>
+          {/* 하단: 애니마코드 섹션 → 캐릭터 카드로 대체 */}
+          <View style={{ alignItems: 'center', width: '100%' }}>
+            <CharacterCard 
+              userData={{
+                // CharacterCard는 characterId/adjective1/adjective2만 사용
+                // 부족한 필드는 타입 호환을 위해 최소값으로 채움
+                uid: '',
+                createdAt: new Date(),
+                totalSelections: userData.totalSelections ?? 0,
+                characterId: userData.characterId ?? null,
+                adjective1: userData.adjective1 ?? null,
+                adjective2: userData.adjective2 ?? null,
+                points: userData.points,
+                streakCount: userData.streakCount,
+                lastAnswerDate: 0,
+                nickname: userData.nickname,
+              } as UserData}
+            />
 
-            {/* 애니마코드 설명 */}
+            {/* 안내 문구 유지 */}
             <Text style={{
               fontSize: 16,
               fontWeight: '700',
@@ -229,15 +237,10 @@ export default function UserHeader({ userData }: UserHeaderProps) {
               lineHeight: 22
             }}>
               AnimaCode 생성을 위한 
-              <Text style={{
-              color: colors.text,
-            }}>
-              {remainingForAnima}번의 선택
-              </Text>이 쌓이면,
-              너의 내면의 캐릭터가 탄생하고 
-              진짜 이름과 여정이 시작돼! 
-              아직은 알 속, 하지만 곧 깨어날 거야. 기대해!
-              
+              <Text style={{ color: colors.text }}>
+                {remainingForAnima}번의 선택
+              </Text>
+              이 쌓이면, 너의 내면의 캐릭터가 탄생하고 진짜 이름과 여정이 시작돼!
             </Text>
           </View>
 

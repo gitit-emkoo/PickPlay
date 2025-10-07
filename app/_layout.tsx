@@ -6,9 +6,11 @@ import { useEffect } from 'react';
 import 'react-native-reanimated';
 import { Platform, useColorScheme } from 'react-native';
 import * as Tracking from 'expo-tracking-transparency';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 
 import NotificationBootstrap from '@/app/components/NotificationBootstrap';
-import { initAds } from '@/app/services/ads';
+import { initAds } from '@/src/services/ads';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -46,12 +48,15 @@ export default function RootLayout() {
   }
 
   return (
-    <>
-      <NotificationBootstrap />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="index" />
-      </Stack>
-    </>
+    <SafeAreaProvider>
+      <SafeAreaView style={{ flex: 1 }} edges={['top','bottom']}>
+        <StatusBar style="dark" />
+        <NotificationBootstrap />
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" />
+        </Stack>
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 

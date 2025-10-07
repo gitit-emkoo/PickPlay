@@ -1,12 +1,13 @@
 import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import firestore from '@react-native-firebase/firestore';
-import { generateRandomNickname } from '../utils/nickname';
-import { Answer, Character, Question, UserData } from '../types';
-import { db } from './firebase';
+import { generateRandomNickname } from '@/src/utils/nickname';
+import { Answer, Character, Question, UserData } from '@/src/types';
+import { db, ensureAnonymousAuth } from '@/src/services/firebase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getDeviceUID } from './firebase';
-import { currentDateKey } from '../utils/date';
+import { getDeviceUID } from '@/src/services/firebase';
+import { currentDateKey } from '@/src/utils/date';
 import functions from '@react-native-firebase/functions';
+import { scheduleStreakNotification } from '@/src/services/notifications';
 // AsyncStorage는 더 이상 직접 사용하지 않으므로 제거 (필요 시 UI단에서만 사용)
 
 // --- 데이터 로더 (앱 시작 시 호출) ---
@@ -59,6 +60,56 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
       console.log('🔄 [V1->V2] AsyncStorage에서 기존 데이터 발견. Firestore로 마이그레이션 시작:', uid);
       const legacyData = JSON.parse(legacyDataJSON);
 
+      // --- createdAt 백필 알고리즘 (기존 Day 진행 상태 보존) ---
+      const parseDateKeyToDate = (val: any): Date | null => {
+        try {
+          if (!val) return null;
+          // case1: 숫자 YYYYMMDD
+          if (typeof val === 'number') {
+            const s = String(val);
+            const y = parseInt(s.slice(0, 4), 10);
+            const m = parseInt(s.slice(4, 6), 10) - 1;
+            const d = parseInt(s.slice(6, 8), 10);
+            const dt = new Date(Date.UTC(y, m, d));
+            return isNaN(dt.getTime()) ? null : dt;
+          }
+          // case2: 'YYYY-MM-DD'
+          if (typeof val === 'string' && /\d{4}-\d{2}-\d{2}/.test(val)) {
+            const [y, m, d] = val.split('-').map((x: string) => parseInt(x, 10));
+            const dt = new Date(Date.UTC(y, m - 1, d));
+            return isNaN(dt.getTime()) ? null : dt;
+          }
+          // case3: ISO string
+          if (typeof val === 'string') {
+            const dt = new Date(val);
+            return isNaN(dt.getTime()) ? null : dt;
+          }
+          return null;
+        } catch {
+          return null;
+        }
+      };
+
+      const computeCreatedAtFromProgress = (): Date | null => {
+        const totalSelections = Number(legacyData.totalSelections || 0);
+        const lastAns = legacyData.lastAnswerDate;
+        const lastDate = parseDateKeyToDate(
+          typeof lastAns === 'string' && lastAns.includes('-') ? lastAns :
+          typeof lastAns === 'number' ? lastAns : null
+        );
+        if (!lastDate || !totalSelections || totalSelections < 1) return null;
+        // Day1 = lastDate - (totalSelections - 1) days, in KST midnight
+        const base = new Date(lastDate.getTime());
+        // 기준은 날짜 단위이므로 UTC 자정 기준으로 보정
+        base.setUTCHours(0,0,0,0);
+        const day1 = new Date(base.getTime() - (totalSelections - 1) * 24 * 60 * 60 * 1000);
+        return day1;
+      };
+
+      const backfilledCreatedAt: Date | null = legacyData.createdAt 
+        ? new Date(legacyData.createdAt)
+        : computeCreatedAtFromProgress();
+
       // V2 데이터 구조에 맞게 변환
       const migratedUserData = { // UserData 타입 명시 제거
         uid,
@@ -68,7 +119,7 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
                           parseInt(legacyData.lastAnswerDate.replace(/-/g, ''), 10) : 0,
         nickname: legacyData.nickname || generateRandomNickname(),
         totalSelections: legacyData.totalSelections || 0,
-        createdAt: legacyData.createdAt ? new Date(legacyData.createdAt) : firestore.FieldValue.serverTimestamp(),
+        createdAt: backfilledCreatedAt ?? firestore.FieldValue.serverTimestamp(),
         characterId: null,
         adjective1: null,
         adjective2: null,
@@ -76,7 +127,10 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
 
       await userRef.set(migratedUserData as any); // as any로 타입 검사 우회
       console.log('✅ [V1->V2] 마이그레이션 완료:', uid);
-      return { ...migratedUserData, createdAt: new Date(migratedUserData.createdAt as Date) } as UserData;
+      return {
+        ...migratedUserData,
+        createdAt: backfilledCreatedAt ?? new Date(),
+      } as UserData;
     }
   } catch (error) {
     console.error("❌ AsyncStorage에서 데이터 마이그레이션 실패:", error);
@@ -183,6 +237,19 @@ export const getTodayAnswer = async (uid: string, questionId: string): Promise<A
 const generateTagsWithAI = async (question: Question, selectedOptionText: string): Promise<string[]> => {
   console.log(`[AI] Cloud Function 'generateTags' 호출 시작...`);
   try {
+    // 보장: 인증 토큰 포함되어 호출되도록 익명 인증 확보
+    const user = await ensureAnonymousAuth();
+    
+    if (!user) {
+      console.warn('[AI] 사용자 인증 실패 - 빈 태그 반환');
+      return [];
+    }
+    
+    console.log(`[AI] 인증된 사용자: ${user.uid}`);
+    
+    // 약간의 딜레이를 주어 토큰이 전파되도록 함
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
     const generateTags = functions().httpsCallable('generateTags');
     const result = await generateTags({
       questionId: question.question_id,
@@ -230,12 +297,25 @@ export const saveAnswerAndProcessLogic = async (userData: UserData, question: Qu
     selected_option_index: selectedOptionIndex,
     selected_option_text: selectedOptionText,
     tags: generatedTags,
+    rewarded: false,
   };
   await answerRef.set({
     ...answerData,
     answeredAt: firestore.FieldValue.serverTimestamp(),
   });
   console.log(`[Logic] 답변 저장 완료: Doc ID = ${uid}_${question.question_id}`);
+
+  // 공개 집계를 위한 votes 컬렉션에도 최소 정보 기록 (Security Rules에 맞춘 스키마)
+  try {
+    await firestore().collection('votes').add({
+      uid,
+      questionId: question.question_id,
+      optionIndex: selectedOptionIndex,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (e) {
+    console.warn('[Votes] 공개 집계 기록 실패(무시 가능):', (e as any)?.message || e);
+  }
 
   // --- 2. 연속 참여일수, 누적 답변 수 업데이트 (Transaction) ---
   let updatedTotalSelections: number;
@@ -279,25 +359,25 @@ export const saveAnswerAndProcessLogic = async (userData: UserData, question: Qu
       };
     });
     console.log(`[Streak] 연속 참여일수 업데이트 완료. New streak: ${updatedUserData!.streakCount}`);
+    
+    // 연속 참여 마일스톤 달성 시 푸시 알림 발송
+    await scheduleStreakNotification(updatedUserData!.streakCount);
   } catch (error) {
     console.error("❌ 사용자 정보 업데이트 트랜잭션 실패:", error);
     throw error;
   }
 
-  // --- 3. 포인트 보상 지급 ---
-  const reward = await rewardWithMajority(uid, question.question_id, selectedOptionIndex, updatedUserData!.streakCount);
-  const finalUserData = {
-    ...updatedUserData!,
-    points: (updatedUserData!.points || 0) + reward.base + reward.bonus,
-  };
+  // --- 3. 포인트 보상은 광고 시청 후 별도로 지급 ---
+  // (포인트 지급을 지연하여 광고 시청 완료 후 rewardWithMajority를 호출하도록 변경)
+  console.log('[Points] 포인트 지급은 광고 시청 후 진행됩니다.');
 
   // --- 4. 누적 답변 수에 따라 로직 분기 ---
   if (updatedTotalSelections! === 30) {
     console.log(`[Logic A] 누적 답변 30회 도달! 캐릭터 배정 로직을 실행합니다.`);
-    updatedUserData = await assignCharacter_LogicA(finalUserData);
+    updatedUserData = await assignCharacter_LogicA(updatedUserData!);
   } else if (updatedTotalSelections! >= 60 && updatedTotalSelections! % 30 === 0) {
     console.log(`[Logic B] 누적 답변 ${updatedTotalSelections!}회 도달! 형용사 갱신 로직을 실행합니다.`);
-    updatedUserData = await updateAdjectives_LogicB(finalUserData);
+    updatedUserData = await updateAdjectives_LogicB(updatedUserData!);
   }
 
   return updatedUserData!;
@@ -370,7 +450,7 @@ const addLog = async (uid: string, action: string, details: object) => {
       createdAt: firestore.FieldValue.serverTimestamp(),
     });
   } catch (error) {
-    console.error(" Firestore 로깅 실패:", error);
+    console.error("❌ Firestore 로깅 실패:", error);
   }
 };
 
@@ -448,12 +528,12 @@ const assignCharacter_LogicA = async (userData: UserData): Promise<UserData> => 
  * @param questionId 질문 ID
  */
 export const aggregate = async (questionId: string) => {
-  const snapshot = await firestore().collection('answers').where('question_id', '==', questionId).get();
+  const snapshot = await firestore().collection('votes').where('questionId', '==', questionId).get();
   let c0 = 0, c1 = 0;
   snapshot.forEach(doc => {
-    const ans = doc.data() as any;
-    if (ans.selected_option_index === 0) c0++;
-    else if (ans.selected_option_index === 1) c1++;
+    const v = doc.data() as any;
+    if (v.optionIndex === 0) c0++;
+    else if (v.optionIndex === 1) c1++;
   });
   const total = c0 + c1;
   const p0 = total ? Math.round((c0 / total) * 100) : 50;
@@ -462,11 +542,12 @@ export const aggregate = async (questionId: string) => {
 };
 
 /**
- * [V2] 승패 보상 및 연속 참여 보너스 포인트를 계산하고 지급합니다.
+ * [V2] 승패 보상 및 연속 참여 배수를 적용하여 포인트를 계산하고 지급합니다.
  * @param uid 사용자 ID
  * @param questionId 질문 ID
  * @param myOptionIndex 사용자의 선택
  * @param streakCount 현재 연속 참여일수
+ * @returns 지급된 포인트 정보 { base, multiplier, totalPoints, myIsMajority, agg }
  */
 export async function rewardWithMajority(
   uid: string, 
@@ -481,17 +562,29 @@ export async function rewardWithMajority(
     return myOptionIndex === majorityIndex;
   })();
   
-  const base = myIsMajority ? 5 : 10;
-  const bonus = streakCount > 1 ? streakCount : 0; // 연속 참여 2일차부터 보너스
-  const totalPoints = base + bonus;
+  const base = myIsMajority ? 5 : 10; // 다수: 5P, 소수: 10P
+  
+  // 연속 참여 배수 적용 (11일 이상: 2배, 31일 이상: 3배)
+  const multiplier = streakCount >= 31 ? 3 : streakCount >= 11 ? 2 : 1;
+  const totalPoints = base * multiplier;
   
   const userRef = firestore().collection('users').doc(uid);
   await userRef.update({
     points: firestore.FieldValue.increment(totalPoints)
   });
-  console.log(`[Points] 포인트 지급 완료: 기본 ${base}P + 보너스 ${bonus}P = 총 ${totalPoints}P`);
 
-  return { base, bonus, myIsMajority, agg };
+  // 오늘 보상 수령 완료 표시
+  try {
+    await firestore().collection('answers').doc(`${uid}_${questionId}`).update({ rewarded: true });
+  } catch (e) {
+    console.warn('[Answer] rewarded 플래그 업데이트 실패(무시 가능):', (e as any)?.message || e);
+  }
+  
+  const majorityText = myIsMajority ? '다수' : '소수';
+  const multiplierText = multiplier > 1 ? ` (${multiplier}배 적용)` : '';
+  console.log(`[Points] 포인트 지급 완료: ${majorityText} ${base}P${multiplierText} = 총 ${totalPoints}P`);
+
+  return { base, multiplier, totalPoints, myIsMajority, agg };
 }
 
 /**
@@ -503,14 +596,14 @@ export function watchAggregation(
   questionId: string,
   onChange: (result: { total: number; c0: number; c1: number; p0: number; p1: number }) => void
 ) {
-  const qRef = firestore().collection('answers').where('question_id', '==', questionId);
+  const qRef = firestore().collection('votes').where('questionId', '==', questionId);
   
     const unsubscribe = qRef.onSnapshot((snapshot) => {
       let c0 = 0, c1 = 0;
       snapshot.forEach(doc => {
-      const ans = doc.data() as any;
-      if (ans.selected_option_index === 0) c0++;
-      else if (ans.selected_option_index === 1) c1++;
+      const v = doc.data() as any;
+      if (v.optionIndex === 0) c0++;
+      else if (v.optionIndex === 1) c1++;
     });
     const total = c0 + c1;
     const p0 = total ? Math.round((c0 / total) * 100) : 50;

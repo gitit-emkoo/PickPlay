@@ -28,6 +28,7 @@ export interface Answer {
   selected_option_text: string;
   tags: string[] | null;
   answeredAt: FirebaseFirestoreTypes.FieldValue;
+  rewarded?: boolean; // 오늘 보상 수령 여부(광고 시청 후 true)
 }
 
 // 확장된 사용자 데이터 타입

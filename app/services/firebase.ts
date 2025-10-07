@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import auth from '@react-native-firebase/auth';
-export { watchAuth, ensureAnonymousAuth } from './authGuard';
+export { watchAuth, ensureAnonymousAuth } from '@/src/services/authGuard';
 import firestore from '@react-native-firebase/firestore';
 
 // 네이티브 SDK 초기화는 google-services.json / GoogleService-Info.plist로 자동 처리됩니다.

@@ -32,6 +32,11 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+      "androidStatusBar": {
+        "translucent": false,
+        "backgroundColor": "#FFFFFF",
+        "barStyle": "dark-content"
+      },
       "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.INTERNET",
