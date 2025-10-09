@@ -8,6 +8,7 @@ import { Platform, useColorScheme } from 'react-native';
 import * as Tracking from 'expo-tracking-transparency';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import appCheck from '@react-native-firebase/app-check';
 
 import NotificationBootstrap from '@/app/components/NotificationBootstrap';
 import { initAds } from '@/src/services/ads';
@@ -23,6 +24,22 @@ export default function RootLayout() {
 
   useEffect(() => {
     (async () => {
+      // 1. App Check 활성화
+      // 개발: 디버그 프로바이더(디버그 토큰 등록 필요)
+      // 배포: 기본 프로바이더(Play Integrity / App Attest)
+      try {
+        if (__DEV__) {
+          await appCheck().activate('debug', true);
+          console.log('✅ App Check: debug provider 활성화');
+        } else {
+          await appCheck().activate('default', true);
+          console.log('✅ App Check: production provider 활성화');
+        }
+      } catch (e) {
+        console.log('⚠️ App Check activate 실패:', (e as Error).message);
+      }
+
+      // 2. ATT 권한 요청 (iOS)
       if (Platform.OS === 'ios') {
         const { status } = await Tracking.requestTrackingPermissionsAsync();
         if (status === 'granted') {
@@ -31,7 +48,8 @@ export default function RootLayout() {
           console.log('❌ ATT: 광고 추적 거부됨');
         }
       }
-      // ATT 권한 요청 후 (또는 iOS가 아닌 경우 즉시) 광고 초기화
+      
+      // 3. 광고 초기화
       console.log('🚀 광고 모듈 초기화를 시작합니다...');
       await initAds();
     })();

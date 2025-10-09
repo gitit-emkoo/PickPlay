@@ -33,6 +33,7 @@ service cloud.firestore {
     }
     
     // [강화] answers 컬렉션 규칙 (Anima Code)
+    // 2025-10-09: rewarded 필드 도입에 따른 규칙 보완
     match /answers/{answerDocId} {
       // 문서 ID에서 uid와 questionId를 분리하는 함수
       function getUid() { return answerDocId.split('_')[0]; }
@@ -49,17 +50,27 @@ service cloud.firestore {
         && request.resource.data.uid == getUid()
         && request.resource.data.question_id == getQuestionId()
         // 3. 데이터 스키마와 타입이 정확한가?
-        && request.resource.data.keys().hasOnly(['uid', 'question_id', 'selected_option_index', 'selected_option_text', 'tags', 'answeredAt'])
+        //    rewarded 필드를 신규로 허용 (광고 시청 후 보상 완료 플래그)
+        && request.resource.data.keys().hasOnly(['uid', 'question_id', 'selected_option_index', 'selected_option_text', 'tags', 'answeredAt', 'rewarded'])
         && request.resource.data.uid is string
         && request.resource.data.question_id is string
         && request.resource.data.selected_option_index in [0, 1]
         && request.resource.data.selected_option_text is string
         && request.resource.data.tags is list
+        && (request.resource.data.rewarded == null || request.resource.data.rewarded is bool)
         // 4. 존재하는 질문에 대한 답변인가?
         && exists(/databases/$(database)/documents/questions/$(getQuestionId()));
 
-      // 한번 생성된 답변은 관리자 외에는 절대 수정/삭제 불가
-      allow update, delete: if isAdmin();
+      // 업데이트 규칙: 보상 완료 플래그(rewarded)만 본인이 true로 갱신 가능
+      // - 다른 필드는 변경/추가/삭제 불가
+      allow update: if signedIn() && request.auth.uid == getUid()
+        && resource.data.diff(request.resource.data).changedKeys().hasOnly(['rewarded'])
+        && resource.data.diff(request.resource.data).addedKeys().size() == 0
+        && resource.data.diff(request.resource.data).removedKeys().size() == 0
+        && request.resource.data.rewarded is bool;
+
+      // 삭제/기타 변경은 관리자만 가능
+      allow delete: if isAdmin();
     }
 
     // [강화] logs 컬렉션 규칙 (Anima Code)

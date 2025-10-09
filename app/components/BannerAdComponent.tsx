@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, StyleSheet, Text, View } from 'react-native';
-import { getBannerAdUnitId, isExpoGo } from '@/src/services/banner-ads';
-import colors from '@/app/styles/colors';
+import { getBannerAdUnitId, isExpoGo } from '@/app/services/banner-ads';
+import colors from '../styles/colors';
 
 interface BannerAdComponentProps {
   style?: any;
@@ -16,7 +16,16 @@ export default function BannerAdComponent({ style }: BannerAdComponentProps) {
   const retryAttemptRef = useRef(0);
 
   const adUnitId = useMemo(() => getBannerAdUnitId(), []);
-  const isDummy = isExpoGo() || !adUnitId;
+
+  // Expo Go 또는 네이티브 모듈 로드 실패 시 더미 UI 렌더링
+  if (isExpoGo() || !adUnitId) {
+    return (
+      <View style={[styles.container, styles.dummyContainer, style]}>
+        <Text style={styles.dummyText}>📱 Expo Go: 배너 광고 영역</Text>
+        <Text style={styles.dummySubText}>실제 빌드에서는 광고가 표시됩니다</Text>
+      </View>
+    );
+  }
 
   // AppState 복귀 시 재로드
   useEffect(() => {
@@ -43,16 +52,6 @@ export default function BannerAdComponent({ style }: BannerAdComponentProps) {
       setReloadKey((v) => v + 1); // Banner 리마운트
     }, delay);
   };
-
-  // 더미 UI 렌더링 (훅 호출 이후 실행 → 훅 규칙 위반 없음)
-  if (isDummy) {
-    return (
-      <View style={[styles.container, styles.dummyContainer, style]}>
-        <Text style={styles.dummyText}>📱 Expo Go: 배너 광고 영역</Text>
-        <Text style={styles.dummySubText}>실제 빌드에서는 광고가 표시됩니다</Text>
-      </View>
-    );
-  }
 
   // 실제 광고 렌더링
   try {
