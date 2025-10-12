@@ -1,7 +1,9 @@
 // --- PickPlay Firestore Rules ---
 // App Version: 3.0 (Anima Code Update)
-// Last Updated: 2025-10-05
+// Last Updated: 2025-10-12
 // - 'answers'와 'logs' 컬렉션에 대한 보안 규칙을 추가하여 Anima Code 기능을 지원합니다.
+// - 관리자페이지의 시뮬레이터 사용을 위한 규칙 업데이트
+// - 푸쉬로그 컬렉션을 위한 규칙 업데이트
 
 rules_version = '2';
 service cloud.firestore {
@@ -51,13 +53,15 @@ service cloud.firestore {
         && request.resource.data.question_id == getQuestionId()
         // 3. 데이터 스키마와 타입이 정확한가?
         //    rewarded 필드를 신규로 허용 (광고 시청 후 보상 완료 플래그)
-        && request.resource.data.keys().hasOnly(['uid', 'question_id', 'selected_option_index', 'selected_option_text', 'tags', 'answeredAt', 'rewarded'])
+        && request.resource.data.keys().hasOnly(['uid', 'question_id', 'selected_option_index', 'selected_option_text', 'tags', 'answeredAt', 'rewarded', 'simulated', 'simulationIndex'])
         && request.resource.data.uid is string
         && request.resource.data.question_id is string
         && request.resource.data.selected_option_index in [0, 1]
         && request.resource.data.selected_option_text is string
         && request.resource.data.tags is list
         && (request.resource.data.rewarded == null || request.resource.data.rewarded is bool)
+        && (request.resource.data.simulated == null || request.resource.data.simulated is bool)
+        && (request.resource.data.simulationIndex == null || request.resource.data.simulationIndex is int)
         // 4. 존재하는 질문에 대한 답변인가?
         && exists(/databases/$(database)/documents/questions/$(getQuestionId()));
 
@@ -95,11 +99,13 @@ service cloud.firestore {
       // 쓰기는 본인 uid로만, 그리고 필드/타입 검증 + 유효한 questionId만 허용
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.keys().hasOnly(['uid','questionId','optionIndex','timestamp'])
+        && request.resource.data.keys().hasOnly(['uid','questionId','optionIndex','timestamp','simulated','simulationIndex'])
         && request.resource.data.optionIndex in [0, 1]
         && request.resource.data.questionId is string
         && request.resource.data.uid is string
         && request.resource.data.timestamp is string
+        && (request.resource.data.simulated == null || request.resource.data.simulated is bool)
+        && (request.resource.data.simulationIndex == null || request.resource.data.simulationIndex is int)
         && exists(/databases/$(database)/documents/questions/$(request.resource.data.questionId));
 
       // 관리자는 투표 데이터 수정/삭제 가능 (필요시)
@@ -112,5 +118,17 @@ service cloud.firestore {
       allow read, write: if signedIn() && request.auth.uid == uid;
       allow read: if isAdmin(); // 관리자 읽기 권한 추가
     }
+    
+    // config 컬렉션은 모든 사용자가 읽을 수 있음 (쓰기는 불가)
+		match /config/{document=**} {
+  		allow read: if true;
+  		allow write: if isAdmin(); // 관리자만 쓰기 가능
+    }
+    // 푸시 로그 컬렉션
+    match /push_logs/{logId} {
+      allow read: if isAdmin(); // 관리자만 읽기 가능
+      allow write: if false; // 서버에서만 쓰기 (Cloud Functions/Run)
+    }
+    
   }
 }

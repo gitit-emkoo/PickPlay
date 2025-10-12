@@ -24,19 +24,24 @@ export default function RootLayout() {
 
   useEffect(() => {
     (async () => {
-      // 1. App Check 활성화
-      // 개발: 디버그 프로바이더(디버그 토큰 등록 필요)
-      // 배포: 기본 프로바이더(Play Integrity / App Attest)
-      try {
-        if (__DEV__) {
-          await appCheck().activate('debug', true);
-          console.log('✅ App Check: debug provider 활성화');
-        } else {
-          await appCheck().activate('default', true);
-          console.log('✅ App Check: production provider 활성화');
+      // 1. App Check 디버그 토큰 출력
+      // v23+ 에서는 activate() 호출 없이 자동 초기화됨
+      // 디버그 토큰만 가져와서 출력
+      if (__DEV__) {
+        try {
+          console.log('🔍 App Check 디버그 토큰 확인 중...');
+          const token = await appCheck().getToken(true);
+          if (token) {
+            console.log('═══════════════════════════════════════');
+            console.log('🔑 Firebase App Check Debug Token:');
+            console.log(token.token);
+            console.log('═══════════════════════════════════════');
+            console.log('👆 위 토큰을 Firebase Console → App Check → Debug tokens에 등록하세요');
+          }
+        } catch (tokenError) {
+          console.error('❌ 디버그 토큰 가져오기 실패:', tokenError);
+          console.log('💡 App Check가 아직 초기화되지 않았을 수 있습니다.');
         }
-      } catch (e) {
-        console.log('⚠️ App Check activate 실패:', (e as Error).message);
       }
 
       // 2. ATT 권한 요청 (iOS)

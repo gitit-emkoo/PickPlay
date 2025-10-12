@@ -1,11 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Alert, ScrollView, Text, TouchableOpacity, View, StyleSheet, Image, Share } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loadData, ensureUser, getTodayQuestionForUser, saveAnswerAndProcessLogic, aggregate, getTodayAnswer, rewardWithMajority } from '@/src/services/store';
 import { Question, UserData } from './types';
 import { watchAuth } from '@/src/services/firebase';
 import LoadingScreen from './components/LoadingScreen';
 import ErrorScreen from './components/ErrorScreen';
-// import CharacterCard from './components/CharacterCard';
+import SplashScreen from './splash';
+import TutorialScreen from './components/TutorialScreen';
 import UserHeader from './components/UserHeader';
 import colors from './styles/colors';
 import * as WebBrowser from 'expo-web-browser';
@@ -15,6 +17,11 @@ import { currentDateKey } from '@/src/utils/date';
 import { createRewardedInterstitial, attachRewardedInterstitial } from '@/src/services/ads';
 
 export default function App() {
+  // 화면 흐름 상태
+  const [showSplash, setShowSplash] = useState(true);
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [tutorialChecked, setTutorialChecked] = useState(false);
+
   const [user, setUser] = useState<{ uid: string } | null>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
   const [question, setQuestion] = useState<Question | null>(null);
@@ -38,6 +45,24 @@ export default function App() {
   const [adLoaded, setAdLoaded] = useState(false);
   const [isLoadingAd, setIsLoadingAd] = useState(false);
   const rewardedAdRef = useRef<any>(null);
+
+  // 스플래시 완료 후 튜토리얼 확인
+  const handleSplashFinish = async () => {
+    setShowSplash(false);
+    
+    // 튜토리얼을 본 적이 있는지 확인
+    const hasSeenTutorial = await AsyncStorage.getItem('hasSeenTutorial');
+    if (!hasSeenTutorial) {
+      setShowTutorial(true);
+    }
+    setTutorialChecked(true);
+  };
+
+  // 튜토리얼 완료
+  const handleTutorialFinish = async () => {
+      await AsyncStorage.setItem('hasSeenTutorial', 'true');
+      setShowTutorial(false);
+  };
 
   useEffect(() => {
     loadData();
@@ -94,6 +119,10 @@ export default function App() {
           // 보상 수령 완료 상태 반영 (버튼 숨기기)
           if (todayAnswer.rewarded) {
             setRewardCompleted(true);
+            // 보상 완료 배너 복원 (배수에 따른 색상 적용)
+            const multiplier = data.streakCount >= 31 ? 3 : data.streakCount >= 11 ? 2 : 1;
+            setLastRewardMultiplier(multiplier);
+            setMsg('보상완료💎');
           } else {
             setRewardCompleted(false);
           }
@@ -118,19 +147,25 @@ export default function App() {
       setShowTomorrowModal(true);
       return;
     }
-    try {
-      const updatedUserData = await saveAnswerAndProcessLogic(userData, question, index);
+
+    // 1. 즉시 UI 업데이트 (사용자 경험 우선)
+    setUserChoice(index);
+    setRewardCompleted(false);
+    setMsg('');
+    
+    // 2. 백그라운드에서 AI 태그 생성 및 저장 처리
+    setTimeout(async () => {
+      try {
+        const updatedUserData = await saveAnswerAndProcessLogic(userData, question, index);
         setUserData(updatedUserData);
-      setUserChoice(index);
-      const result = await aggregate(question.question_id);
-      setAgg(result);
-      // 투표 직후 보상 버튼 표시(현재는 버튼 클릭 시 확인 단계만 진행)
-      setRewardCompleted(false);
-      setMsg('');
-    } catch (e: any) {
-      console.error(e);
-      Alert.alert("Error", e.message || "Could not save your vote.");
-    }
+        const result = await aggregate(question.question_id);
+        setAgg(result);
+        console.log('✅ 백그라운드 투표 처리 완료');
+      } catch (e: any) {
+        console.error('❌ 백그라운드 투표 처리 실패:', e);
+        // 에러 발생 시에도 UI는 이미 업데이트됨 (사용자 경험 유지)
+      }
+    }, 0);
   };
 
   const shareInvite = async () => {
@@ -179,17 +214,20 @@ export default function App() {
     if (!user || !userData || !question || userChoice === null) return;
 
     try {
+      // Firestore에서 최신 데이터 가져오기 (백그라운드 처리와 타이밍 이슈 방지)
+      const latestUserData = await ensureUser(user.uid);
+      
       const reward = await rewardWithMajority(
         user.uid,
         question.question_id,
         userChoice,
-        userData.streakCount
+        latestUserData.streakCount
       );
 
-      // 사용자 데이터 업데이트 (포인트 반영)
+      // 최신 사용자 데이터 기반으로 업데이트 (포인트 반영)
       const updatedUserData = {
-        ...userData,
-        points: userData.points + reward.totalPoints
+        ...latestUserData,
+        points: latestUserData.points + reward.totalPoints
       };
       setUserData(updatedUserData);
 
@@ -209,9 +247,26 @@ export default function App() {
     }
   };
 
+  // 1. 스플래시 화면
+  if (showSplash) {
+    return <SplashScreen onFinish={handleSplashFinish} />;
+  }
+
+  // 2. 튜토리얼 화면 (첫 방문자만)
+  if (showTutorial) {
+    return <TutorialScreen onFinish={handleTutorialFinish} />;
+  }
+
+  // 3. 튜토리얼 체크 완료 전까지 로딩
+  if (!tutorialChecked) {
+    return <LoadingScreen />;
+  }
+
+  // 4. 메인 화면 로딩 및 에러 처리
   if (loading) return <LoadingScreen />;
   if (!question) return <ErrorScreen title="오늘의 질문을 불러오지 못했습니다." />;
 
+  // 5. 메인 화면
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
