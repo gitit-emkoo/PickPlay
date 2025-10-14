@@ -151,8 +151,8 @@ export default function App() {
     if (!user || !userData || !question) return;
     
     // 테스트 유저는 UI 제한 없음
-    const TEST_UID = 'vUlyeAhYmneB5Ii6oPNR8OFCQZg1';
-    if (user.uid !== TEST_UID && userChoice !== null) {
+    const TEST_UIDS = ['vUlyeAhYmneB5Ii6oPNR8OFCQZg1', 'C1iSsR85GoTnvVRSY2nIn9y6ZFz1'];
+    if (!TEST_UIDS.includes(user.uid) && userChoice !== null) {
       setShowTomorrowModal(true);
       return;
     }
@@ -187,7 +187,7 @@ export default function App() {
         await checkAndShowAnimaCodeModal(previousTotalSelections, newTotalSelections, updatedUserData);
         
         // 테스트 유저는 투표 후 다음 질문으로 넘어감
-        if (user.uid === TEST_UID) {
+        if (TEST_UIDS.includes(user.uid)) {
           const nextQuestion = getTodayQuestionForUser(updatedUserData);
           if (nextQuestion) {
             setQuestion(nextQuestion);
