@@ -149,7 +149,10 @@ export default function App() {
 
   const handleVote = async (index: 0 | 1) => {
     if (!user || !userData || !question) return;
-    if (userChoice !== null) {
+    
+    // 테스트 유저는 UI 제한 없음
+    const TEST_UID = 'vUlyeAhYmneB5Ii6oPNR8OFCQZg1';
+    if (user.uid !== TEST_UID && userChoice !== null) {
       setShowTomorrowModal(true);
       return;
     }
@@ -182,6 +185,21 @@ export default function App() {
         // 애니마코드 팝업 표시 체크
         const newTotalSelections = updatedUserData.totalSelections;
         await checkAndShowAnimaCodeModal(previousTotalSelections, newTotalSelections, updatedUserData);
+        
+        // 테스트 유저는 투표 후 다음 질문으로 넘어감
+        if (user.uid === TEST_UID) {
+          const nextQuestion = getTodayQuestionForUser(updatedUserData);
+          if (nextQuestion) {
+            setQuestion(nextQuestion);
+            setUserChoice(null);
+            setRewardCompleted(false);
+            setMsg('');
+            // 새로운 질문의 집계 데이터 로드
+            const nextAgg = await aggregate(nextQuestion.question_id);
+            setAgg(nextAgg);
+            console.log(`🧪 [Test] 다음 질문으로 이동: Q${nextQuestion.question_id}`);
+          }
+        }
       } catch (e: any) {
         console.error('❌ 백그라운드 투표 처리 실패:', e);
         // 에러 발생 시에도 UI는 이미 업데이트됨 (사용자 경험 유지)

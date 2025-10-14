@@ -165,6 +165,22 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
  * @returns 오늘의 질문 객체 또는 null
  */
 export const getTodayQuestionForUser = (userData: UserData): Question | null => {
+  // 테스트 유저는 totalSelections 기반으로 연속 질문 배정
+  const TEST_UID = 'vUlyeAhYmneB5Ii6oPNR8OFCQZg1';
+  if (userData.uid === TEST_UID) {
+    const totalSelections = userData.totalSelections || 0;
+    // Q005 다음이므로 Q006부터 시작 (인덱스 5)
+    const questionIndex = (5 + totalSelections) % questions.length;
+    
+    if (questions && questions[questionIndex]) {
+      console.log(`🧪 [Test] 테스트 유저 - 총 ${totalSelections}번 답변, Question #${questionIndex + 1}을(를) 반환합니다.`);
+      return questions[questionIndex];
+    } else {
+      console.warn(`[Test] 테스트 유저 - Question #${questionIndex + 1}을 찾을 수 없습니다.`);
+      return null;
+    }
+  }
+
   if (!userData.createdAt) {
     console.error("❌ [Question] 사용자의 createdAt 정보가 없어 질문을 가져올 수 없습니다.");
     return null;
@@ -301,7 +317,10 @@ const generateTagsWithAI = async (question: Question, selectedOptionText: string
  */
 export const saveAnswerAndProcessLogic = async (userData: UserData, question: Question, selectedOptionIndex: 0 | 1): Promise<UserData> => {
   const todayKey = currentDateKey();
-  if (userData.lastAnswerDate === todayKey) {
+  
+  // 테스트 유저는 하루 한 번 제한 없음
+  const TEST_UID = 'vUlyeAhYmneB5Ii6oPNR8OFCQZg1';
+  if (userData.uid !== TEST_UID && userData.lastAnswerDate === todayKey) {
     console.warn(`[Vote] User ${userData.uid} has already voted today. Aborting.`);
     throw new Error("오늘 이미 답변했습니다.");
   }
