@@ -118,6 +118,7 @@ export default function UserHeader({ userData }: UserHeaderProps) {
             shadowRadius: 12,
             elevation: 6,
             width: 320,
+            minHeight: 500,
             alignItems: 'center'
           }}>
           {/* 상단: 포인트와 출석 정보 */}
@@ -228,20 +229,22 @@ export default function UserHeader({ userData }: UserHeaderProps) {
               } as UserData}
             />
 
-            {/* 안내 문구 유지 */}
-            <Text style={{
-              fontSize: 16,
-              fontWeight: '700',
-              color: colors.primary,
-              textAlign: 'center',
-              lineHeight: 22
-            }}>
-              AnimaCode 생성을 위한 
-              <Text style={{ color: colors.text }}>
-                {remainingForAnima}번의 선택
+            {/* 안내 문구 - 캐릭터가 없을 때만 표시 */}
+            {!userData.characterId && (
+              <Text style={{
+                fontSize: 16,
+                fontWeight: '700',
+                color: colors.primary,
+                textAlign: 'center',
+                lineHeight: 22
+              }}>
+                AnimaCode 생성을 위한 
+                <Text style={{ color: colors.text }}>
+                  {remainingForAnima}번의 선택
+                </Text>
+                이 쌓이면, 너의 내면의 캐릭터가 탄생하고 진짜 이름과 여정이 시작돼!
               </Text>
-              이 쌓이면, 너의 내면의 캐릭터가 탄생하고 진짜 이름과 여정이 시작돼!
-            </Text>
+            )}
           </View>
 
           {/* 닫기 버튼 */}

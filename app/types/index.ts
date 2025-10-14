@@ -27,7 +27,7 @@ export interface Answer {
   selected_option_index: 0 | 1;
   selected_option_text: string;
   tags: string[] | null;
-  answeredAt: FirebaseFirestoreTypes.FieldValue;
+  answeredAt: FirebaseFirestoreTypes.FieldValue | FirebaseFirestoreTypes.Timestamp | Date;
   rewarded?: boolean; // 오늘 보상 수령 여부(광고 시청 후 true)
 }
 

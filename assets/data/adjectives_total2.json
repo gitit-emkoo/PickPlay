@@ -1,6 +1,6 @@
 [
   {
-    "adjective_id": "strategist_1",
+    "adjective_id": "strategist",
     "adjective": "전략가",
     "domain": "관계",
     "keywords": [
@@ -12,7 +12,7 @@
     "description": "상황을 분석하고 전략적으로 접근하는 성향"
   },
   {
-    "adjective_id": "persuader_1",
+    "adjective_id": "persuader",
     "adjective": "설득가",
     "domain": "관계",
     "keywords": [
@@ -24,67 +24,7 @@
     "description": "타인을 설득하고 의견을 이끌어내는 성향"
   },
   {
-    "adjective_id": "analyst_1",
-    "adjective": "분석가",
-    "domain": "습관",
-    "keywords": [
-      "분석",
-      "논리",
-      "구조화",
-      "판단력"
-    ],
-    "description": "정보를 분석하고 논리적으로 접근하는 성향"
-  },
-  {
-    "adjective_id": "mediator_1",
-    "adjective": "중재자",
-    "domain": "관계",
-    "keywords": [
-      "조율",
-      "중립",
-      "갈등해결",
-      "균형"
-    ],
-    "description": "갈등 상황에서 중립적인 입장으로 조율하는 성향"
-  },
-  {
-    "adjective_id": "creator_1",
-    "adjective": "창조자",
-    "domain": "습관",
-    "keywords": [
-      "창의성",
-      "아이디어",
-      "혁신",
-      "상상력"
-    ],
-    "description": "새로운 아이디어를 만들어내고 창의적으로 행동하는 성향"
-  },
-  {
-    "adjective_id": "guardian_1",
-    "adjective": "수호자",
-    "domain": "관계",
-    "keywords": [
-      "보호",
-      "책임감",
-      "안정감",
-      "헌신"
-    ],
-    "description": "주변을 보호하고 책임감 있게 행동하는 성향"
-  },
-  {
-    "adjective_id": "mediator_2",
-    "adjective": "중재자",
-    "domain": "관계",
-    "keywords": [
-      "조율",
-      "중립",
-      "갈등해결",
-      "균형"
-    ],
-    "description": "갈등 상황에서 중립적인 입장으로 조율하는 성향"
-  },
-  {
-    "adjective_id": "visionary_1",
+    "adjective_id": "visionary",
     "adjective": "통찰자",
     "domain": "습관",
     "keywords": [
@@ -96,7 +36,79 @@
     "description": "깊은 통찰력으로 상황을 꿰뚫어보는 성향"
   },
   {
-    "adjective_id": "analyst_2",
+    "adjective_id": "mediator",
+    "adjective": "중재자",
+    "domain": "관계",
+    "keywords": [
+      "조율",
+      "중립",
+      "갈등해결",
+      "균형"
+    ],
+    "description": "갈등 상황에서 중립적인 입장으로 조율하는 성향"
+  },
+  {
+    "adjective_id": "guardian",
+    "adjective": "수호자",
+    "domain": "관계",
+    "keywords": [
+      "보호",
+      "책임감",
+      "안정감",
+      "헌신"
+    ],
+    "description": "주변을 보호하고 책임감 있게 행동하는 성향"
+  },
+  {
+    "adjective_id": "creator",
+    "adjective": "창조자",
+    "domain": "습관",
+    "keywords": [
+      "창의성",
+      "아이디어",
+      "혁신",
+      "상상력"
+    ],
+    "description": "새로운 아이디어를 만들어내고 창의적으로 행동하는 성향"
+  },
+  {
+    "adjective_id": "negotiator",
+    "adjective": "협상가",
+    "domain": "관계",
+    "keywords": [
+      "협상",
+      "타협",
+      "균형감각",
+      "조율"
+    ],
+    "description": "감정을 잘 읽고, 타인의 입장을 조율하며 균형을 맞추는 성향"
+  },
+  {
+    "adjective_id": "explorer",
+    "adjective": "탐험가",
+    "domain": "습관",
+    "keywords": [
+      "도전",
+      "개척",
+      "호기심",
+      "변화"
+    ],
+    "description": "새로운 것을 탐험하고 변화를 주도하는 성향"
+  },
+  {
+    "adjective_id": "volunteer",
+    "adjective": "봉사가",
+    "domain": "관계",
+    "keywords": [
+      "헌신",
+      "배려",
+      "이타심",
+      "공감"
+    ],
+    "description": "타인을 먼저 생각하고, 헌신적으로 돕는 성향"
+  },
+  {
+    "adjective_id": "analyst",
     "adjective": "분석가",
     "domain": "습관",
     "keywords": [
@@ -108,111 +120,99 @@
     "description": "정보를 분석하고 논리적으로 접근하는 성향"
   },
   {
-    "adjective_id": "guardian_2",
-    "adjective": "수호자",
-    "domain": "관계",
-    "keywords": [
-      "보호",
-      "책임감",
-      "안정감",
-      "헌신"
-    ],
-    "description": "주변을 보호하고 책임감 있게 행동하는 성향"
-  },
-  {
-    "adjective_id": "strategist_2",
-    "adjective": "전략가",
-    "domain": "관계",
-    "keywords": [
-      "계획",
-      "분석",
-      "통제",
-      "판단력"
-    ],
-    "description": "상황을 분석하고 전략적으로 접근하는 성향"
-  },
-  {
-    "adjective_id": "explorer_1",
-    "adjective": "탐험가",
+    "adjective_id": "researcher",
+    "adjective": "연구가",
     "domain": "습관",
     "keywords": [
-      "도전",
-      "개척",
-      "호기심",
-      "변화"
+      "탐구",
+      "집중력",
+      "깊이",
+      "학습"
     ],
-    "description": "새로운 것을 탐험하고 변화를 주도하는 성향"
+    "description": "조용히 집중하며 깊이 있는 탐구를 즐기는 성향"
   },
   {
-    "adjective_id": "persuader_2",
-    "adjective": "설득가",
-    "domain": "관계",
-    "keywords": [
-      "설득",
-      "표현력",
-      "공감",
-      "영향력"
-    ],
-    "description": "타인을 설득하고 의견을 이끌어내는 성향"
-  },
-  {
-    "adjective_id": "creator_2",
-    "adjective": "창조자",
+    "adjective_id": "driver",
+    "adjective": "추진가",
     "domain": "습관",
     "keywords": [
-      "창의성",
-      "아이디어",
-      "혁신",
-      "상상력"
+      "추진력",
+      "실행력",
+      "목표지향",
+      "속도"
     ],
-    "description": "새로운 아이디어를 만들어내고 창의적으로 행동하는 성향"
+    "description": "빠르게 움직이며 목표를 향해 끊임없이 나아가는 성향"
   },
   {
-    "adjective_id": "visionary_2",
-    "adjective": "통찰자",
+    "adjective_id": "activist",
+    "adjective": "활동가",
     "domain": "습관",
     "keywords": [
-      "통찰력",
+      "활동적",
+      "사교적",
+      "에너지",
+      "참여"
+    ],
+    "description": "에너지 넘치고 사교적이며, 다양한 활동을 즐기는 성향"
+  },
+  {
+    "adjective_id": "doer",
+    "adjective": "행동가",
+    "domain": "습관",
+    "keywords": [
+      "실행",
+      "즉각성",
       "직관",
-      "넓은 시야",
-      "예측"
+      "행동력"
     ],
-    "description": "깊은 통찰력으로 상황을 꿰뚫어보는 성향"
+    "description": "직관적으로 판단하고 즉시 행동에 옮기는 성향"
   },
   {
-    "adjective_id": "explorer_2",
-    "adjective": "탐험가",
+    "adjective_id": "endurer",
+    "adjective": "인내가",
     "domain": "습관",
     "keywords": [
-      "도전",
-      "개척",
-      "호기심",
-      "변화"
+      "인내",
+      "끈기",
+      "지구력",
+      "안정감"
     ],
-    "description": "새로운 것을 탐험하고 변화를 주도하는 성향"
+    "description": "묵묵히 견디며, 어려운 상황에서도 흔들리지 않는 성향"
   },
   {
-    "adjective_id": "guardian_3",
-    "adjective": "수호자",
+    "adjective_id": "observer",
+    "adjective": "관찰자",
+    "domain": "습관",
+    "keywords": [
+      "관찰",
+      "예리함",
+      "분석",
+      "주의력"
+    ],
+    "description": "주변을 예리하게 살피며, 상황을 분석하는 성향"
+  },
+  {
+    "adjective_id": "protector",
+    "adjective": "보호자",
     "domain": "관계",
     "keywords": [
       "보호",
-      "책임감",
-      "안정감",
-      "헌신"
+      "온순함",
+      "따뜻함",
+      "포용"
     ],
-    "description": "주변을 보호하고 책임감 있게 행동하는 성향"
+    "description": "온순하고 따뜻하게 주변을 감싸는 보호자 성향"
   },
   {
-    "adjective_id": "creator_3",
-    "adjective": "창조자",
-    "domain": "습관",
+    "adjective_id": "commander",
+    "adjective": "통솔가",
+    "domain": "관계",
     "keywords": [
-      "창의성",
-      "아이디어",
-      "혁신",
-      "상상력"
+      "리더십",
+      "카리스마",
+      "통솔력",
+      "결단력"
     ],
-    "description": "새로운 아이디어를 만들어내고 창의적으로 행동하는 성향"
+    "description": "강한 카리스마로 집단을 이끄는 리더 성향"
   }
 ]

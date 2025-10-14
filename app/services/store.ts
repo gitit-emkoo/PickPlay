@@ -218,7 +218,15 @@ export const getTodayAnswer = async (uid: string, questionId: string): Promise<A
 
   if (answerExists) {
     console.log(`[Check] 오늘 답변 기록을 찾았습니다: ${answerDocId}`);
-    return doc.data() as Answer;
+    const data = doc.data();
+    // Firestore Timestamp를 JS Date 객체로 변환
+    if (data && data.answeredAt && (data.answeredAt as FirebaseFirestoreTypes.Timestamp).toDate) {
+      return {
+        ...data,
+        answeredAt: (data.answeredAt as FirebaseFirestoreTypes.Timestamp).toDate()
+      } as Answer;
+    }
+    return data as Answer;
   } else {
     console.log(`[Check] 오늘 답변 기록이 없습니다.`);
     return null;
@@ -264,8 +272,25 @@ const generateTagsWithAI = async (question: Question, selectedOptionText: string
     return tags;
   } catch (error) {
     console.error("❌ Cloud Function 호출 실패:", error);
-    // 실패 시 사용자 경험을 해치지 않도록 빈 배열을 반환합니다.
-    return []; 
+    
+    // AI 실패 시 폴백 태그 제공 (사용자 경험 보호)
+    const fallbackTags = [
+      ['뜨거운', '탐험가'],
+      ['차가운', '분석가'],
+      ['유연한', '중재자'],
+      ['예민한', '통찰자'],
+      ['느긋한', '수호자'],
+      ['충동적인', '활동가'],
+      ['냉정한', '전략가'],
+      ['감성적인', '창조자']
+    ];
+    
+    // 선택지 텍스트 기반으로 랜덤하게 폴백 태그 선택
+    const randomIndex = selectedOptionText.length % fallbackTags.length;
+    const tags = fallbackTags[randomIndex];
+    
+    console.warn("🔄 AI 실패로 인한 폴백 태그 사용:", tags);
+    return tags;
   }
 };
 
@@ -288,38 +313,43 @@ export const saveAnswerAndProcessLogic = async (userData: UserData, question: Qu
   // --- 1. AI 태그 생성 & 답변 저장 (고유 ID 사용) ---
   const generatedTags = await generateTagsWithAI(question, selectedOptionText);
   
-  // 문서 ID를 '{uid}_{questionId}' 형식으로 지정하여 중복 방지
-  const answerRef = firestore().collection('answers').doc(`${uid}_${question.question_id}`);
+  // 문서 ID: '{uid}_{questionId}' 고정
+  const docId = `${uid}_${question.question_id}`;
+  const answerRef = firestore().collection('answers').doc(docId);
   
-  const answerData: Omit<Answer, 'answeredAt'> = {
+  const answerData = {
     uid,
     question_id: question.question_id,
     selected_option_index: selectedOptionIndex,
     selected_option_text: selectedOptionText,
     tags: generatedTags,
     rewarded: false,
-  };
-  await answerRef.set({
-    ...answerData,
     answeredAt: firestore.FieldValue.serverTimestamp(),
+  };
+  
+  console.log(`[Debug] 저장하려는 데이터:`, {
+    docId: `${uid}_${question.question_id}`,
+    uid: uid,
+    question_id: question.question_id,
+    answerData: answerData
   });
+  
+  await answerRef.set(answerData);
   console.log(`[Logic] 답변 저장 완료: Doc ID = ${uid}_${question.question_id}`);
+  
+  console.log(`[Debug] 현재 사용자 상태:`, {
+    uid: userData.uid,
+    totalSelections: userData.totalSelections,
+    characterId: userData.characterId,
+    adjective1: userData.adjective1,
+    adjective2: userData.adjective2
+  });
 
-  // 공개 집계를 위한 votes 컬렉션에도 최소 정보 기록 (Security Rules에 맞춘 스키마)
-  try {
-    await firestore().collection('votes').add({
-      uid,
-      questionId: question.question_id,
-      optionIndex: selectedOptionIndex,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (e) {
-    console.warn('[Votes] 공개 집계 기록 실패(무시 가능):', (e as any)?.message || e);
-  }
+  // 공개 집계용 votes 기록은 더 이상 사용하지 않습니다(경고 제거 및 단일 집계 경로 유지)
 
   // --- 2. 연속 참여일수, 누적 답변 수 업데이트 (Transaction) ---
-  let updatedTotalSelections: number;
-  let updatedUserData: UserData;
+  let updatedTotalSelections: number = (userData.totalSelections || 0) + 1;
+  let updatedUserData: UserData = { ...userData };
 
   try {
     await firestore().runTransaction(async (transaction) => {
@@ -338,9 +368,20 @@ export const saveAnswerAndProcessLogic = async (userData: UserData, question: Qu
       const day = String(yesterdayKST.getUTCDate()).padStart(2, '0');
       const yesterdayKey = parseInt(`${year}${month}${day}`, 10);
 
+      console.log(`[Streak] 연속 참여일수 계산:`, {
+        todayKey: todayKey,
+        yesterdayKey: yesterdayKey,
+        lastAnswerDate: currentUserData.lastAnswerDate,
+        currentStreakCount: currentUserData.streakCount,
+        isYesterdayAnswered: currentUserData.lastAnswerDate === yesterdayKey
+      });
+
       let newStreakCount = 1;
       if (currentUserData.lastAnswerDate === yesterdayKey) {
         newStreakCount = (currentUserData.streakCount || 0) + 1;
+        console.log(`[Streak] 연속 참여 감지: ${currentUserData.streakCount} → ${newStreakCount}`);
+      } else {
+        console.log(`[Streak] 연속 참여 끊김: 1로 리셋`);
       }
       
       // 트랜잭션 업데이트
@@ -360,6 +401,15 @@ export const saveAnswerAndProcessLogic = async (userData: UserData, question: Qu
     });
     console.log(`[Streak] 연속 참여일수 업데이트 완료. New streak: ${updatedUserData!.streakCount}`);
     
+    console.log(`[Debug] 업데이트된 사용자 상태:`, {
+      uid: updatedUserData!.uid,
+      totalSelections: updatedUserData!.totalSelections,
+      characterId: updatedUserData!.characterId,
+      adjective1: updatedUserData!.adjective1,
+      adjective2: updatedUserData!.adjective2,
+      streakCount: updatedUserData!.streakCount
+    });
+    
     // 연속 참여 마일스톤 달성 시 푸시 알림 발송
     await scheduleStreakNotification(updatedUserData!.streakCount);
   } catch (error) {
@@ -372,13 +422,54 @@ export const saveAnswerAndProcessLogic = async (userData: UserData, question: Qu
   console.log('[Points] 포인트 지급은 광고 시청 후 진행됩니다.');
 
   // --- 4. 누적 답변 수에 따라 로직 분기 ---
-  if (updatedTotalSelections! === 30) {
-    console.log(`[Logic A] 누적 답변 30회 도달! 캐릭터 배정 로직을 실행합니다.`);
-    updatedUserData = await assignCharacter_LogicA(updatedUserData!);
+  console.log(`[Debug] 로직 분기 체크: totalSelections = ${updatedTotalSelections!}`);
+  console.log(`[Debug] 현재 캐릭터 상태:`, {
+    characterId: updatedUserData!.characterId,
+    adjective1: updatedUserData!.adjective1,
+    adjective2: updatedUserData!.adjective2,
+    isLegacy: isLegacyUser(updatedUserData!)
+  });
+  
+  if (updatedTotalSelections! >= 30 && !updatedUserData!.characterId) {
+    console.log(`[Logic A] 🎯 누적 답변 ${updatedTotalSelections!}회 도달! 캐릭터 배정 로직을 실행합니다.`);
+    console.log(`[Debug] Logic A 실행 전 사용자 상태:`, {
+      characterId: updatedUserData!.characterId,
+      adjective1: updatedUserData!.adjective1,
+      adjective2: updatedUserData!.adjective2
+    });
+    
+    try {
+      updatedUserData = await assignCharacter_LogicA(updatedUserData!);
+      console.log(`[Debug] Logic A 실행 후 사용자 상태:`, {
+        characterId: updatedUserData.characterId,
+        adjective1: updatedUserData.adjective1,
+        adjective2: updatedUserData.adjective2
+      });
+  } catch (error) {
+      console.error(`[Logic A] 실행 실패:`, error);
+    }
   } else if (updatedTotalSelections! >= 60 && updatedTotalSelections! % 30 === 0) {
-    console.log(`[Logic B] 누적 답변 ${updatedTotalSelections!}회 도달! 형용사 갱신 로직을 실행합니다.`);
-    updatedUserData = await updateAdjectives_LogicB(updatedUserData!);
+    console.log(`[Logic B] 🔄 누적 답변 ${updatedTotalSelections!}회 도달! 형용사 갱신 로직을 실행합니다.`);
+    console.log(`[Debug] Logic B 실행 전 사용자 상태:`, {
+      characterId: updatedUserData!.characterId,
+      adjective1: updatedUserData!.adjective1,
+      adjective2: updatedUserData!.adjective2
+    });
+    
+    try {
+      updatedUserData = await updateAdjectives_LogicB(updatedUserData!);
+      console.log(`[Debug] Logic B 실행 후 사용자 상태:`, {
+        characterId: updatedUserData.characterId,
+        adjective1: updatedUserData.adjective1,
+        adjective2: updatedUserData.adjective2
+      });
+    } catch (error) {
+      console.error(`[Logic B] 실행 실패:`, error);
+    }
+    } else {
+    console.log(`[Debug] 로직 실행 조건 미충족: totalSelections = ${updatedTotalSelections!}`);
   }
+
 
   return updatedUserData!;
 };
@@ -396,12 +487,14 @@ const isLegacyUser = (userData: UserData): boolean => {
   return (new Date().getTime() - createdAt.getTime()) > oneDay;
 };
 
-/** [Logic B] 특정 구간의 답변을 분석하여 최빈값 형용사1, 2를 추출 */
+/** [Logic B] 특정 구간의 답변을 분석하여 최빈값 형용사1, 2를 추출 - 개선된 버전 */
 const analyzeAnswersForAdjectives = async (
   uid: string, 
   start: number, 
   end: number
 ): Promise<{ adj1: string | null, adj2: string | null }> => {
+  console.log(`[Analyze] 분석 시작: uid=${uid}, start=${start}, end=${end}`);
+  
   const answersSnapshot = await firestore()
     .collection('answers')
     .where('uid', '==', uid)
@@ -409,32 +502,82 @@ const analyzeAnswersForAdjectives = async (
     .limit(end)
     .get();
 
+  console.log(`[Analyze] 총 답변 수: ${answersSnapshot.docs.length}`);
+  
   const answersInRange = answersSnapshot.docs.slice(start - 1, end).map(doc => doc.data() as Answer);
+  
+  console.log(`[Analyze] 분석 대상 답변 수: ${answersInRange.length}`);
 
   const tagFrequency: { [domain: string]: { [tag: string]: number } } = {
     '감정': {}, '가치관': {}, '습관': {}, '관계': {}
   };
 
-  // 태그 빈도수 계산 (실제 question.domain 정보와 연동)
+  let validAnswersCount = 0; // 유효한 태그가 있는 답변 수
+
+  // 유효한 형용사 풀 정의 (무의미한 태그 필터링)
+  // adjective1용: 감정/가치관 형용사만
+  const validEmotionAdjectives = ['뜨거운', '차가운', '유연한', '예민한', '느긋한', '충동적인', '냉정한', '감성적인'];
+  // adjective2용: 캐릭터 형용사만 (동물데이터에서 동적으로 추출)
+  const validCharacterAdjectives = characters.map(c => c.adjective_2);
+
+  // 태그 빈도수 계산 (실제 question.domain 정보와 연동 + 유효성 검증)
   answersInRange.forEach(answer => {
     const question = questions.find(q => q.question_id === answer.question_id);
-    if (question && answer.tags) {
-      answer.tags.forEach(tag => {
-        const domain = question.domain;
-        tagFrequency[domain][tag] = (tagFrequency[domain][tag] || 0) + 1;
-      });
+    if (question && answer.tags && answer.tags.length > 0) {
+      const domain = question.domain;
+      
+      // 도메인별로 올바른 형용사만 필터링
+      let validTags: string[] = [];
+      if (domain === '감정' || domain === '가치관') {
+        // 감정/가치관 도메인: 감정 형용사만 허용
+        validTags = answer.tags.filter(tag => validEmotionAdjectives.includes(tag));
+      } else if (domain === '습관' || domain === '관계') {
+        // 습관/관계 도메인: 캐릭터 형용사만 허용
+        validTags = answer.tags.filter(tag => validCharacterAdjectives.includes(tag));
+      }
+      
+      if (validTags.length > 0) {
+        validAnswersCount++;
+        validTags.forEach(tag => {
+          tagFrequency[domain][tag] = (tagFrequency[domain][tag] || 0) + 1;
+        });
+      }
     }
   });
+
+  console.log(`[Analyze] 구간 ${start}-${end}: 총 ${answersInRange.length}개 답변 중 ${validAnswersCount}개에 유효한 태그 있음`);
+  console.log(`[Analyze] 태그 빈도수:`, tagFrequency);
 
   // 최빈값 형용사 추출 로직 (감정/가치관 -> adj1, 습관/관계 -> adj2)
   const findMostFrequent = (domain1: string, domain2: string) => {
     const combined = { ...tagFrequency[domain1], ...tagFrequency[domain2] };
+    console.log(`[Analyze] ${domain1}+${domain2} 조합 결과:`, combined);
     if (Object.keys(combined).length === 0) return null;
-    return Object.keys(combined).reduce((a, b) => combined[a] > combined[b] ? a : b);
+    const result = Object.keys(combined).reduce((a, b) => combined[a] > combined[b] ? a : b);
+    console.log(`[Analyze] ${domain1}+${domain2} 최빈값:`, result);
+    return result;
   };
 
-  const adj1 = findMostFrequent('감정', '가치관');
-  const adj2 = findMostFrequent('습관', '관계');
+  let adj1 = findMostFrequent('감정', '가치관');
+  let adj2 = findMostFrequent('습관', '관계');
+
+  console.log(`[Analyze] 분석 결과: adj1="${adj1}", adj2="${adj2}"`);
+
+  // 유효한 태그가 부족한 경우 기본값 제공 (사용자 경험 보호)
+  // adjective1용 기본값 (감정/가치관 형용사)
+  const defaultEmotionAdjectives = ['뜨거운', '차가운', '유연한', '예민한', '느긋한', '충동적인', '냉정한', '감성적인'];
+  // adjective2용 기본값 (캐릭터 형용사)
+  const defaultCharacterAdjectives = ['탐험가', '분석가', '중재자', '통찰자', '수호자', '활동가', '전략가', '창조자'];
+
+  // 분석 결과가 없거나 부족한 경우 기본값 사용
+  if (!adj1) {
+    adj1 = defaultEmotionAdjectives[Math.floor(Math.random() * defaultEmotionAdjectives.length)];
+    console.log(`[Analyze] adjective1 기본값 사용: "${adj1}"`);
+  }
+  if (!adj2) {
+    adj2 = defaultCharacterAdjectives[Math.floor(Math.random() * defaultCharacterAdjectives.length)];
+    console.log(`[Analyze] adjective2 기본값 사용: "${adj2}"`);
+  }
 
   console.log(`[Analyze] 답변 ${start}-${end} 구간 분석 완료: adj1=${adj1}, adj2=${adj2}`);
   return { adj1, adj2 };
@@ -480,27 +623,101 @@ const assignCharacter_LogicA = async (userData: UserData): Promise<UserData> => 
   const { uid } = userData;
   const userRef = firestore().collection('users').doc(uid);
 
+  console.log(`[Logic A] 🎯 캐릭터 배정 시작:`, {
+    uid: uid,
+    totalSelections: userData.totalSelections,
+    isLegacy: isLegacyUser(userData),
+    currentCharacterId: userData.characterId,
+    currentAdjective1: userData.adjective1,
+    currentAdjective2: userData.adjective2
+  });
+
   if (isLegacyUser(userData)) {
-    // --- 레거시 사용자: 랜덤 캐릭터 배정 ---
+    // --- 레거시 사용자: AI 분석 기반 캐릭터 배정 ---
+    console.log(`[Logic A] 📜 레거시 사용자 감지 - AI 분석 기반 캐릭터 배정`);
+    const { adj1, adj2 } = await analyzeAnswersForAdjectives(uid, 1, 30);
+    
+    console.log(`[Logic A] 📊 레거시 사용자 분석 결과:`, {
+      adj1: adj1,
+      adj2: adj2
+    });
+    
+    // adj2가 있으면 해당 캐릭터 찾기, 없으면 랜덤 배정
+    if (adj2) {
+      console.log(`[Logic A] 🔍 레거시 사용자 캐릭터 매칭 시도: adj2 = "${adj2}"`);
+      const matchedCharacter = characters.find(c => c.adjective_2 === adj2);
+      if (matchedCharacter) {
+        console.log(`[Logic A] ✅ 레거시 사용자 캐릭터 매칭 성공:`, {
+          characterId: matchedCharacter.character_id,
+          name: matchedCharacter.name,
+          adjective2: matchedCharacter.adjective_2
+        });
+        
+        // 레거시 사용자용 랜덤 형용사1 생성 (감정/가치관 형용사만)
+        const randomEmotionAdjectives = ['뜨거운', '차가운', '유연한', '예민한', '느긋한', '충동적인', '냉정한', '감성적인'];
+        const randomAdj1 = adj1 || randomEmotionAdjectives[Math.floor(Math.random() * randomEmotionAdjectives.length)];
+        
+        await userRef.update({
+          characterId: matchedCharacter.character_id,
+          adjective1: randomAdj1,
+          adjective2: matchedCharacter.adjective_2,
+        });
+        await addLog(uid, 'ASSIGN_CHARACTER_LOGIC_A_LEGACY', { characterId: matchedCharacter.character_id, adj1: randomAdj1, adj2 });
+        console.log(`[Logic A] 레거시 사용자에게 분석 기반 캐릭터 '${matchedCharacter.name}' 배정 완료.`);
+        return { ...userData, characterId: matchedCharacter.character_id, adjective1: randomAdj1, adjective2: matchedCharacter.adjective_2 };
+      } else {
+        console.warn(`[Logic A] ❌ 레거시 사용자: 분석된 형용사 '${adj2}'와 일치하는 캐릭터를 찾지 못했습니다. 랜덤 배정으로 전환.`);
+      }
+    } else {
+      console.warn(`[Logic A] ❌ 레거시 사용자: 분석 결과가 없어 랜덤 배정을 진행합니다.`);
+    }
+    
+    // 매칭 실패 또는 분석 결과 없음 시 랜덤 배정
+    console.log(`[Logic A] 🎲 레거시 사용자 폴백 랜덤 배정 시작`);
     const randomIndex = Math.floor(Math.random() * characters.length);
     const randomCharacter = characters[randomIndex];
     
+    console.log(`[Logic A] 🎲 레거시 사용자 랜덤 캐릭터 선택:`, {
+      index: randomIndex,
+      characterId: randomCharacter.character_id,
+      name: randomCharacter.name,
+      adjective2: randomCharacter.adjective_2
+    });
+    
+    // 레거시 사용자용 랜덤 형용사1 생성 (감정/가치관 형용사만)
+    const randomEmotionAdjectives = ['뜨거운', '차가운', '유연한', '예민한', '느긋한', '충동적인', '냉정한', '감성적인'];
+    const randomAdj1 = adj1 || randomEmotionAdjectives[Math.floor(Math.random() * randomEmotionAdjectives.length)];
+    
     await userRef.update({
       characterId: randomCharacter.character_id,
-      adjective1: '랜덤', // 레거시 사용자는 형용사 분석 없음
+      adjective1: randomAdj1,
       adjective2: randomCharacter.adjective_2,
     });
-    await addLog(uid, 'ASSIGN_CHARACTER_LOGIC_A_LEGACY', { characterId: randomCharacter.character_id });
+    await addLog(uid, 'ASSIGN_CHARACTER_LOGIC_A_LEGACY_FALLBACK', { characterId: randomCharacter.character_id, adj1: randomAdj1, adj2 });
     console.log(`[Logic A] 레거시 사용자에게 랜덤 캐릭터 '${randomCharacter.name}' 배정 완료.`);
-    return { ...userData, characterId: randomCharacter.character_id, adjective1: '랜덤', adjective2: randomCharacter.adjective_2 };
+    return { ...userData, characterId: randomCharacter.character_id, adjective1: randomAdj1, adjective2: randomCharacter.adjective_2 };
 
   } else {
-    // --- 신규 사용자: 답변 분석 기반 캐릭터 배정 ---
+    // --- 신규 사용자: 답변 분석 기반 캐릭터 배정 (개선된 버전) ---
+    console.log(`[Logic A] 🆕 신규 사용자 감지 - 답변 분석 기반 캐릭터 배정`);
     const { adj1, adj2 } = await analyzeAnswersForAdjectives(uid, 1, 30);
     
+    console.log(`[Logic A] 📊 분석 결과:`, {
+      adj1: adj1,
+      adj2: adj2
+    });
+    
+    // adj2가 있으면 해당 캐릭터 찾기, 없으면 랜덤 배정
     if (adj2) {
+      console.log(`[Logic A] 🔍 캐릭터 매칭 시도: adj2 = "${adj2}"`);
       const matchedCharacter = characters.find(c => c.adjective_2 === adj2);
       if (matchedCharacter) {
+        console.log(`[Logic A] ✅ 캐릭터 매칭 성공:`, {
+          characterId: matchedCharacter.character_id,
+          name: matchedCharacter.name,
+          adjective2: matchedCharacter.adjective_2
+        });
+        
         await userRef.update({
           characterId: matchedCharacter.character_id,
           adjective1: adj1,
@@ -509,15 +726,48 @@ const assignCharacter_LogicA = async (userData: UserData): Promise<UserData> => 
         await addLog(uid, 'ASSIGN_CHARACTER_LOGIC_A', { characterId: matchedCharacter.character_id, adj1, adj2 });
         console.log(`[Logic A] 신규 사용자에게 분석 기반 캐릭터 '${matchedCharacter.name}' 배정 완료.`);
         return { ...userData, characterId: matchedCharacter.character_id, adjective1: adj1, adjective2: matchedCharacter.adjective_2 };
+      } else {
+        console.warn(`[Logic A] ❌ 분석된 형용사 '${adj2}'와 일치하는 캐릭터를 찾지 못했습니다. 랜덤 배정으로 전환.`);
       }
+    } else {
+      console.warn(`[Logic A] ❌ 분석 결과가 없어 랜덤 배정을 진행합니다.`);
     }
-    // 매칭 실패 시 폴백 (랜덤 배정)
-    console.warn(`[Logic A] 분석된 형용사 '${adj2}'와 일치하는 캐릭터를 찾지 못해 랜덤 배정합니다.`);
+    
+    // 매칭 실패 또는 분석 결과 없음 시 랜덤 배정 (사용자 경험 보호)
+    console.log(`[Logic A] 🎲 폴백 랜덤 배정 시작`);
     const randomIndex = Math.floor(Math.random() * characters.length);
     const randomCharacter = characters[randomIndex];
-    await userRef.update({ characterId: randomCharacter.character_id });
-    await addLog(uid, 'ASSIGN_CHARACTER_LOGIC_A_FALLBACK', { characterId: randomCharacter.character_id });
-    return { ...userData, characterId: randomCharacter.character_id };
+    
+    console.log(`[Logic A] 🎲 랜덤 캐릭터 선택:`, {
+      index: randomIndex,
+      characterId: randomCharacter.character_id,
+      name: randomCharacter.name,
+      adjective2: randomCharacter.adjective_2,
+      reason: adj2 ? 'no_matching_character' : 'no_analysis_result'
+    });
+    
+    // 신규 사용자용 랜덤 형용사1 생성 (감정/가치관 형용사만)
+    const randomEmotionAdjectives = ['뜨거운', '차가운', '유연한', '예민한', '느긋한', '충동적인', '냉정한', '감성적인'];
+    const randomAdj1 = adj1 || randomEmotionAdjectives[Math.floor(Math.random() * randomEmotionAdjectives.length)];
+    
+    await userRef.update({ 
+      characterId: randomCharacter.character_id,
+      adjective1: randomAdj1,
+      adjective2: randomCharacter.adjective_2
+    });
+    await addLog(uid, 'ASSIGN_CHARACTER_LOGIC_A_FALLBACK', { 
+      characterId: randomCharacter.character_id, 
+      reason: adj2 ? 'no_matching_character' : 'no_analysis_result',
+      adj1: randomAdj1, 
+      adj2 
+    });
+    console.log(`[Logic A] ✅ 랜덤 캐릭터 '${randomCharacter.name}' 배정 완료.`);
+    return { 
+      ...userData, 
+      characterId: randomCharacter.character_id, 
+      adjective1: randomAdj1,
+      adjective2: randomCharacter.adjective_2
+    };
   }
 };
 
@@ -528,12 +778,12 @@ const assignCharacter_LogicA = async (userData: UserData): Promise<UserData> => 
  * @param questionId 질문 ID
  */
 export const aggregate = async (questionId: string) => {
-  const snapshot = await firestore().collection('votes').where('questionId', '==', questionId).get();
+  const snapshot = await firestore().collection('answers').where('question_id', '==', questionId).get();
   let c0 = 0, c1 = 0;
   snapshot.forEach(doc => {
-    const v = doc.data() as any;
-    if (v.optionIndex === 0) c0++;
-    else if (v.optionIndex === 1) c1++;
+    const data = doc.data();
+    if (data.selected_option_index === 0) c0++;
+    else if (data.selected_option_index === 1) c1++;
   });
   const total = c0 + c1;
   const p0 = total ? Math.round((c0 / total) * 100) : 50;
@@ -596,14 +846,14 @@ export function watchAggregation(
   questionId: string,
   onChange: (result: { total: number; c0: number; c1: number; p0: number; p1: number }) => void
 ) {
-  const qRef = firestore().collection('votes').where('questionId', '==', questionId);
+  const qRef = firestore().collection('answers').where('question_id', '==', questionId);
   
     const unsubscribe = qRef.onSnapshot((snapshot) => {
       let c0 = 0, c1 = 0;
       snapshot.forEach(doc => {
-      const v = doc.data() as any;
-      if (v.optionIndex === 0) c0++;
-      else if (v.optionIndex === 1) c1++;
+      const data = doc.data();
+      if (data.selected_option_index === 0) c0++;
+      else if (data.selected_option_index === 1) c1++;
     });
     const total = c0 + c1;
     const p0 = total ? Math.round((c0 / total) * 100) : 50;

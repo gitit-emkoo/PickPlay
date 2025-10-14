@@ -9,6 +9,7 @@ import ErrorScreen from './components/ErrorScreen';
 import SplashScreen from './splash';
 import TutorialScreen from './components/TutorialScreen';
 import UserHeader from './components/UserHeader';
+import AnimaCodeRevealModal from './components/AnimaCodeRevealModal';
 import colors from './styles/colors';
 import * as WebBrowser from 'expo-web-browser';
 import LottieView from 'lottie-react-native';
@@ -41,10 +42,15 @@ export default function App() {
   const [showRewardDoneModal, setShowRewardDoneModal] = useState(false);
   const [lastRewardMultiplier, setLastRewardMultiplier] = useState<number | null>(null);
   
+  // 애니마코드 팝업 상태
+  const [showAnimaCodeModal, setShowAnimaCodeModal] = useState(false);
+  const [isNewCharacter, setIsNewCharacter] = useState(false);
+  
   // 광고 관련 상태
   const [adLoaded, setAdLoaded] = useState(false);
   const [isLoadingAd, setIsLoadingAd] = useState(false);
   const rewardedAdRef = useRef<any>(null);
+
 
   // 스플래시 완료 후 튜토리얼 확인
   const handleSplashFinish = async () => {
@@ -152,20 +158,78 @@ export default function App() {
     setUserChoice(index);
     setRewardCompleted(false);
     setMsg('');
+  
+  // 1-1. 옵티미스틱 집계 업데이트 (즉시 파란 바 반영)
+  setAgg(prev => {
+    const nextTotal = (prev?.total ?? 0) + 1;
+    const nextC0 = (prev?.c0 ?? 0) + (index === 0 ? 1 : 0);
+    const nextC1 = (prev?.c1 ?? 0) + (index === 1 ? 1 : 0);
+    const p0 = nextTotal > 0 ? Math.round((nextC0 / nextTotal) * 100) : 50;
+    const p1 = 100 - p0;
+    return { total: nextTotal, c0: nextC0, c1: nextC1, p0, p1 };
+  });
     
     // 2. 백그라운드에서 AI 태그 생성 및 저장 처리
     setTimeout(async () => {
       try {
+        const previousTotalSelections = userData.totalSelections;
         const updatedUserData = await saveAnswerAndProcessLogic(userData, question, index);
         setUserData(updatedUserData);
         const result = await aggregate(question.question_id);
         setAgg(result);
         console.log('✅ 백그라운드 투표 처리 완료');
+        
+        // 애니마코드 팝업 표시 체크
+        const newTotalSelections = updatedUserData.totalSelections;
+        await checkAndShowAnimaCodeModal(previousTotalSelections, newTotalSelections, updatedUserData);
       } catch (e: any) {
         console.error('❌ 백그라운드 투표 처리 실패:', e);
         // 에러 발생 시에도 UI는 이미 업데이트됨 (사용자 경험 유지)
       }
     }, 0);
+  };
+
+  // 애니마코드 팝업 표시 체크 함수 (중복 표시 방지 복원)
+  const checkAndShowAnimaCodeModal = async (previousTotal: number, newTotal: number, userData: UserData) => {
+    const storageKey = `animaCodeShown_${user?.uid}_${newTotal}`;
+    console.log(`[AnimaCode] 🎯 팝업 조건 체크:`, {
+      previousTotal,
+      newTotal,
+      characterId: userData.characterId,
+      adjective1: userData.adjective1,
+      adjective2: userData.adjective2,
+      storageKey,
+    });
+
+    try {
+      const alreadyShown = await AsyncStorage.getItem(storageKey);
+      if (alreadyShown === 'true') {
+        console.log(`[AnimaCode] ⏭️ 이미 표시한 팝업: ${newTotal}번`);
+        return;
+      }
+    } catch (e) {
+      console.warn('[AnimaCode] AsyncStorage 조회 실패(무시 가능):', (e as any)?.message || e);
+    }
+
+    // 캐릭터 배정 (30번째)
+    if (newTotal === 30 && userData.characterId) {
+      console.log('[AnimaCode] 🎉 캐릭터 배정 팝업 표시');
+      setIsNewCharacter(true);
+      setShowAnimaCodeModal(true);
+      try { await AsyncStorage.setItem(storageKey, 'true'); } catch {}
+      return;
+    }
+    
+    // 형용사 갱신 (60, 90, 120...)
+    if (newTotal >= 60 && newTotal % 30 === 0 && userData.characterId) {
+      console.log(`[AnimaCode] 🔄 형용사 갱신 팝업 표시: ${newTotal}번`);
+      setIsNewCharacter(false);
+      setShowAnimaCodeModal(true);
+      try { await AsyncStorage.setItem(storageKey, 'true'); } catch {}
+      return;
+    }
+    
+    console.log(`[AnimaCode] ❌ 팝업 조건 미충족: newTotal=${newTotal}, characterId=${userData.characterId}`);
   };
 
   const shareInvite = async () => {
@@ -450,6 +514,16 @@ export default function App() {
 
           </View>
         </ScrollView>
+
+      {/* 애니마코드 팝업 */}
+      {showAnimaCodeModal && userData && (
+        <AnimaCodeRevealModal
+          visible={showAnimaCodeModal}
+          onClose={() => setShowAnimaCodeModal(false)}
+          userData={userData}
+          isNewCharacter={isNewCharacter}
+        />
+      )}
 
       {/* 내일 다시 만나요 모달 */}
       {showTomorrowModal && (
