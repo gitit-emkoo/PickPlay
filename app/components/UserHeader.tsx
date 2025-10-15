@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Modal, Text, TouchableOpacity, View } from 'react-native';
 import colors from '../styles/colors';
 import CharacterCard from './CharacterCard';
-import { UserData } from '@/src/types';
+import { UserData } from '../types';
 
 interface UserHeaderProps {
   userData: {

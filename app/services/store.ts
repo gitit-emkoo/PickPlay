@@ -1,13 +1,13 @@
 import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import firestore from '@react-native-firebase/firestore';
-import { generateRandomNickname } from '@/src/utils/nickname';
-import { Answer, Character, Question, UserData } from '@/src/types';
-import { db, ensureAnonymousAuth } from '@/src/services/firebase';
+import { generateRandomNickname } from '../utils/nickname';
+import { Answer, Character, Question, UserData } from '../types';
+import { db, ensureAnonymousAuth } from './firebase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getDeviceUID } from '@/src/services/firebase';
-import { currentDateKey } from '@/src/utils/date';
+import { getDeviceUID } from './firebase';
+import { currentDateKey } from '../utils/date';
 import functions from '@react-native-firebase/functions';
-import { scheduleStreakNotification } from '@/src/services/notifications';
+import { scheduleStreakNotification } from './notifications';
 // AsyncStorage는 더 이상 직접 사용하지 않으므로 제거 (필요 시 UI단에서만 사용)
 
 // --- 데이터 로더 (앱 시작 시 호출) ---

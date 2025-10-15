@@ -2,7 +2,7 @@ import React from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import colors from '../styles/colors';
 import CharacterCard from './CharacterCard';
-import { UserData } from '@/src/types';
+import { UserData } from '../types';
 
 interface AnimaCodeRevealModalProps {
   visible: boolean;

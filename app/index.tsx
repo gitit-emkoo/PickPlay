@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Alert, ScrollView, Text, TouchableOpacity, View, StyleSheet, Image, Share } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { loadData, ensureUser, getTodayQuestionForUser, saveAnswerAndProcessLogic, aggregate, getTodayAnswer, rewardWithMajority } from '@/src/services/store';
+import { loadData, ensureUser, getTodayQuestionForUser, saveAnswerAndProcessLogic, aggregate, getTodayAnswer, rewardWithMajority } from './services/store';
 import { Question, UserData } from './types';
-import { watchAuth } from '@/src/services/firebase';
+import { watchAuth } from './services/firebase';
 import LoadingScreen from './components/LoadingScreen';
 import ErrorScreen from './components/ErrorScreen';
 import SplashScreen from './splash';
