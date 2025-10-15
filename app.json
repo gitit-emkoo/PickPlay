@@ -22,12 +22,11 @@
       },
       "runtimeVersion": {
         "policy": "appVersion"
-      },
-      "buildNumber": "9"
+      }
     },
     "android": {
       "package": "com.pickplay.kwcc",
-      "versionCode": 9,
+      "versionCode": 10,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
@@ -65,7 +64,10 @@
         "expo-build-properties",
         {
           "ios": {
-            "useFrameworks": "static"
+            "useFrameworks": "static",
+            "podfileProperties": {
+              "use_modular_headers_for_pod": "['RNFBApp', 'RNFBAuth', 'RNFBFirestore', 'RNFBFunctions', 'React-Core']"
+            }
           }
         }
       ],

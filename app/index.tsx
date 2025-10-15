@@ -14,7 +14,6 @@ import colors from './styles/colors';
 import * as WebBrowser from 'expo-web-browser';
 import LottieView from 'lottie-react-native';
 import BannerAdComponent from './components/BannerAdComponent';
-import { currentDateKey } from './utils/date';
 import { createRewardedInterstitial, attachRewardedInterstitial } from './services/ads';
 
 export default function App() {

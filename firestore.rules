@@ -61,6 +61,7 @@ service cloud.firestore {
         && request.resource.data.selected_option_text is string
         && request.resource.data.tags is list
         && (request.resource.data.rewarded == null || request.resource.data.rewarded is bool)
+        && request.resource.data.answeredAt == request.time  // 서버 타임스탬프 검증
         // 4. 존재하는 질문에 대한 답변인가?
         && exists(/databases/$(database)/documents/questions/$(getQuestionId()));
 
