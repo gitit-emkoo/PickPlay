@@ -10,8 +10,8 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import appCheck from '@react-native-firebase/app-check';
 
-import NotificationBootstrap from '@/app/components/NotificationBootstrap';
-import { initAds } from '@/src/services/ads';
+import NotificationBootstrap from './components/NotificationBootstrap';
+import { initAds } from '../src/services/ads';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
