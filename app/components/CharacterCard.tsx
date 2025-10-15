@@ -152,18 +152,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({ userData }) => {
                 </>
               ) : (
                 <>
-                  <Text style={styles.backTitle}>애니마코드 대기 중</Text>
-                  <View style={styles.descriptionContainer}>
-                    <Text style={styles.descriptionText}>
-                      아직 충분한 선택이 쌓이지 않았습니다.
-                    </Text>
-                    <Text style={styles.descriptionText}>
-                      더 많은 질문에 답하여
-                    </Text>
-                    <Text style={styles.descriptionText}>
-                      나만의 애니마코드를 만들어보세요!
-                    </Text>
-                  </View>
+                  <Text style={styles.backTitle}>내 애니마코드는 뭘까?</Text>
                   <View style={styles.evolutionContainer}>
                     <Text style={styles.evolutionText}>
                       AnimaCode 생성을 위한
