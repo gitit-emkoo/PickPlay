@@ -11,7 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 import appCheck from '@react-native-firebase/app-check';
 
 import NotificationBootstrap from './components/NotificationBootstrap';
-import { initAds } from '../src/services/ads';
+import { initAds } from './services/ads';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();

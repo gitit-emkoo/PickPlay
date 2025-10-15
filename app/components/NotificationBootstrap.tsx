@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { initializeNotifications } from '../../src/services/notifications';
+import { initializeNotifications } from '../services/notifications';
 
 export default function NotificationBootstrap(){
   useEffect(()=>{
