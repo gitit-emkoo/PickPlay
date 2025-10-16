@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "pickplay",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.pickplay.kwcc",
@@ -59,16 +59,12 @@
     },
     "plugins": [
       "expo-router",
-      "./config/plugins/withModularHeaders",
       "@react-native-firebase/app",
       [
         "expo-build-properties",
         {
           "ios": {
-            "useFrameworks": "static",
-            "podfileProperties": {
-              "use_modular_headers_for_pod": "['RNFBApp', 'RNFBAuth', 'RNFBFirestore', 'RNFBFunctions', 'React-Core']"
-            }
+            "useFrameworks": "dynamic"
           }
         }
       ],

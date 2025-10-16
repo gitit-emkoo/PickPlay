@@ -1,8 +1,9 @@
 import React from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import LottieView from 'lottie-react-native';
 import colors from '../styles/colors';
 import CharacterCard from './CharacterCard';
-import { UserData } from '../types';
+import { UserData } from '@/src/types';
 
 interface AnimaCodeRevealModalProps {
   visible: boolean;
@@ -26,6 +27,17 @@ const AnimaCodeRevealModal: React.FC<AnimaCodeRevealModalProps> = ({
     >
       <View style={styles.overlay}>
         <View style={styles.container}>
+          {/* 축하 애니메이션 */}
+          <View style={styles.lottieContainer}>
+            <LottieView
+              source={{ uri: "https://lottie.host/df96f2a7-284f-4197-ba3c-5b8388c46299/ykDKnFMp3l.lottie" }}
+              loop={true}
+              autoPlay={true}
+              speed={1}
+              style={styles.lottie}
+            />
+          </View>
+
           {/* 메시지 */}
           <Text style={styles.title}>
             {isNewCharacter ? '애니마코드가 깨어났어요!' : '나의 애니마 코드에 변화가 생겼어요!'}
@@ -81,6 +93,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 8,
+  },
+  lottieContainer: {
+    width: 120,
+    height: 120,
+    marginBottom: 16,
+  },
+  lottie: {
+    width: '100%',
+    height: '100%',
   },
   title: {
     fontSize: 24,
