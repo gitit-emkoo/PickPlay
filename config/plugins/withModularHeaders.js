@@ -10,6 +10,9 @@ const TARGET_PODS = [
   'React-RCTNetwork',
   'React-RCTSettings',
   'React-RCTAnimation',
+  'RCT-Folly',
+  'React-Codegen',
+  'ReactCommon/turbomodule/core',
   // RNFB 계열(사용 중인 것만)
   'RNFBApp',
   'RNFBAuth',
@@ -27,7 +30,7 @@ function injectModularHeaders(podfileContent) {
 function injectPostInstallForRNFB(podfileContent) {
   const block = `post_install do |installer|
   installer.pods_project.targets.each do |target|
-    if target.name.start_with?('RNFB')
+    if target.name.start_with?('RNFB') || target.name.start_with?('React') || target.name.start_with?('RCT')
       target.build_configurations.each do |config|
         config.build_settings['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
       end
@@ -40,7 +43,7 @@ end`;
     return podfileContent.replace(/post_install\s+do\s+\|installer\|[\s\S]*?end/gm, (match) => {
       if (match.includes("CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE")) return match; // 이미 주입됨
       const trimmed = match.replace(/end\s*$/, '');
-      return `${trimmed}\n  # Injected by withModularHeaders: disable non-modular warnings for RNFB*\n  installer.pods_project.targets.each do |target|\n    if target.name.start_with?('RNFB')\n      target.build_configurations.each do |config|\n        config.build_settings['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'\n      end\n    end\n  end\nend`;
+      return `${trimmed}\n  # Injected by withModularHeaders: disable non-modular warnings for RNFB*/React*/RCT*\n  installer.pods_project.targets.each do |target|\n    if target.name.start_with?('RNFB') || target.name.start_with?('React') || target.name.start_with?('RCT')\n      target.build_configurations.each do |config|\n        config.build_settings['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'\n      end\n    end\n  end\nend`;
     });
   }
 
