@@ -264,4 +264,3 @@ export default function UserHeader({ userData }: UserHeaderProps) {
     </View>
   );
 }
-
