@@ -62,6 +62,14 @@
       "@react-native-firebase/app",
       "./config/plugins/withModularHeaders",
       [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
+      ],
+      [
         "react-native-google-mobile-ads",
         {
           "androidAppId": "ca-app-pub-2555567440328829~4208779024",
