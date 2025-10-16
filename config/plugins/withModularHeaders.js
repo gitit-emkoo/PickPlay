@@ -23,7 +23,37 @@ const withRNFBHeaderFix = (config) => {
 
       // post_install 블록이 없을 때만 안전하게 추가
       if (!hasPostInstall) {
-        const postInstallCode = `\n${marker}\npost_install do |installer|\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n      if target.name.start_with?('RNFB', 'React', 'RCT', 'Yoga', 'DoubleConversion', 'glog', 'boost', 'Folly')\n        # Allow non-modular includes and prevent warning-as-error\n        config.build_settings['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'\n        config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'\n        config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'\n        # Ensure React*-style pods define modules so headers are treated modularly\n        if target.name.start_with?('React', 'RCT')\n          config.build_settings['DEFINES_MODULE'] = 'YES'\n        end\n        # Silence only this warning if any toolchain forces -Werror\n        cflags = config.build_settings['OTHER_CFLAGS'] || ['$(inherited)']\n        unless cflags.any? { |f| f.include?('-Wno-error=non-modular-include-in-framework-module') }\n          cflags << '-Wno-error=non-modular-include-in-framework-module'\n        end\n        config.build_settings['OTHER_CFLAGS'] = cflags\n      end\n      config.build_settings['OTHER_CPLUSPLUSFLAGS'] ||= ['$(inherited)']\n    end\n  end\nend\n`;
+        const postInstallCode = `
+${marker}
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      if target.name.start_with?('RNFB', 'React', 'RCT', 'Yoga', 'DoubleConversion', 'glog', 'boost', 'Folly')
+        explicit_targets = ['React-Core', 'RCTTypeSafety', 'ReactCommon', 'React-NativeModulesApple']
+        name_matches = target.name.start_with?('RNFB', 'React', 'RCT', 'Yoga', 'DoubleConversion', 'glog', 'boost', 'Folly') || explicit_targets.include?(target.name)
+        if name_matches
+          # Allow non-modular includes and prevent warning-as-error
+          config.build_settings['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
+          config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+          config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+          # Ensure React*/RNFB pods define modules and use headermap for header resolution
+          if target.name.start_with?('React', 'RCT', 'RNFB')
+            config.build_settings['DEFINES_MODULE'] = 'YES'
+          end
+          config.build_settings['USE_HEADERMAP'] = 'YES'
+          # Silence only this warning if any toolchain forces -Werror
+          cflags = config.build_settings['OTHER_CFLAGS'] || ['$(inherited)']
+          unless cflags.any? { |f| f.include?('-Wno-error=non-modular-include-in-framework-module') }
+            cflags << '-Wno-error=non-modular-include-in-framework-module'
+          end
+          config.build_settings['OTHER_CFLAGS'] = cflags
+        end
+      end
+      config.build_settings['OTHER_CPLUSPLUSFLAGS'] ||= ['$(inherited)']
+    end
+  end
+end
+`;
 
         podfile = podfile.trimEnd() + '\n' + postInstallCode;
         fs.writeFileSync(podfilePath, podfile);
