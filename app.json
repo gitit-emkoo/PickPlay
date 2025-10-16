@@ -60,6 +60,7 @@
     "plugins": [
       "expo-router",
       "@react-native-firebase/app",
+      "./config/plugins/withoutUMP",
       [
         "expo-build-properties",
         {
