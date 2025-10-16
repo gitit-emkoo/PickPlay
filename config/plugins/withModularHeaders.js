@@ -36,6 +36,7 @@ post_install do |installer|
           config.build_settings['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
           config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
           config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+          config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
           # Ensure React*/RNFB pods define modules and use headermap for header resolution
           if target.name.start_with?('React', 'RCT', 'RNFB')
             config.build_settings['DEFINES_MODULE'] = 'YES'
