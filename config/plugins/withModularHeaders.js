@@ -24,6 +24,30 @@ function injectModularHeaders(podfileContent) {
   );
 }
 
+function injectPostInstallForRNFB(podfileContent) {
+  const block = `post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    if target.name.start_with?('RNFB')
+      target.build_configurations.each do |config|
+        config.build_settings['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
+      end
+    end
+  end
+end`;
+
+  if (/post_install\s+do\s+\|installer\|/m.test(podfileContent)) {
+    // 이미 post_install 블럭이 있으면, end 앞에 우리 설정을 주입
+    return podfileContent.replace(/post_install\s+do\s+\|installer\|[\s\S]*?end/gm, (match) => {
+      if (match.includes("CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE")) return match; // 이미 주입됨
+      const trimmed = match.replace(/end\s*$/, '');
+      return `${trimmed}\n  # Injected by withModularHeaders: disable non-modular warnings for RNFB*\n  installer.pods_project.targets.each do |target|\n    if target.name.start_with?('RNFB')\n      target.build_configurations.each do |config|\n        config.build_settings['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'\n      end\n    end\n  end\nend`;
+    });
+  }
+
+  // post_install이 없으면 파일 끝에 추가
+  return `${podfileContent}\n\n${block}\n`;
+}
+
 const withModularHeaders = (config) => {
   return withDangerousMod(config, [
     'ios',
@@ -32,7 +56,8 @@ const withModularHeaders = (config) => {
       const file = IOSConfig.Paths.getPodfilePath(cfg.modRequest.projectRoot);
       if (!fs.existsSync(file)) return cfg;
       const podfile = fs.readFileSync(file, 'utf8');
-      const updated = injectModularHeaders(podfile);
+      let updated = injectModularHeaders(podfile);
+      updated = injectPostInstallForRNFB(updated);
       if (updated !== podfile) fs.writeFileSync(file, updated);
       return cfg;
     },
