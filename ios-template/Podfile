@@ -1,14 +1,16 @@
 platform :ios, '13.4'
 
 require_relative '../node_modules/react-native/scripts/react_native_pods'
+require_relative '../node_modules/expo-modules-autolinking/scripts/autolinking'
 
 use_frameworks! :linkage => :static
 
 target 'PickPlay' do
-  config = use_native_modules!
+  # Expo autolinking for native modules
+  use_expo_modules!
 
   use_react_native!(
-    :path => config[:reactNativePath],
+    :path => '../node_modules/react-native',
     :hermes_enabled => true,
     :fabric_enabled => true,
     :flipper_configuration => FlipperConfiguration.disabled,
@@ -26,11 +28,11 @@ target 'PickPlay' do
   post_install do |installer|
     puts "🔧 [post_install] Custom Podfile post_install hook executing..."
     
-    react_native_post_install(
-      installer,
-      config[:reactNativePath],
-      :mac_catalyst_enabled => false
-    )
+    # React Native post install tweaks
+    react_native_post_install(installer)
+    
+    # Expo post install (must be after RN)
+    Expo::PostInstall.install!(installer)
 
     installer.pods_project.targets.each do |target|
       name = target.name.to_s
