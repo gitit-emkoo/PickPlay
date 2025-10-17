@@ -50,68 +50,75 @@ target 'PickPlay' do
     Expo::PostInstall.install!(installer)
 
     installer.pods_project.targets.each do |target|
-      name = target.name.to_s
-
       target.build_configurations.each do |config|
-        # ✅ 핵심: RNFBApp 타겟에 명시적으로 non-modular 허용
-        if name == 'RNFBApp'
-          config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
-          config.build_settings['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
-          config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
-          config.build_settings['DEFINES_MODULE'] = 'YES'
-          config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
-          
-          other_cflags = config.build_settings['OTHER_CFLAGS'] || ['$(inherited)']
-          unless other_cflags.include?('-Wno-error=non-modular-include-in-framework-module')
-            other_cflags << '-Wno-error=non-modular-include-in-framework-module'
+        begin
+          name = target.name.to_s
+
+          # ✅ 핵심: RNFBApp 타겟에 명시적으로 non-modular 허용
+          if name == 'RNFBApp'
+            config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+            config.build_settings['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
+            config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+            config.build_settings['DEFINES_MODULE'] = 'YES'
+            config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
+
+            flags = config.build_settings['OTHER_CFLAGS']
+            flags = flags.is_a?(String) ? flags.split(' ') : (flags || ['$(inherited)'])
+            unless flags.include?('-Wno-error=non-modular-include-in-framework-module')
+              flags << '-Wno-error=non-modular-include-in-framework-module'
+            end
+            config.build_settings['OTHER_CFLAGS'] = flags
+
+            puts "⚙️ [RNFBApp] Explicitly forced non-modular includes for RNFBApp (#{config.name})"
           end
-          config.build_settings['OTHER_CFLAGS'] = other_cflags
-          
-          puts "⚙️ [RNFBApp] Explicitly forced non-modular includes for RNFBApp (#{config.name})"
-        end
 
-        # ✅ React-Core / RCT 계열도 허용 (연쇄 의존성)
-        if name.start_with?('React', 'RCT')
-          config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
-          config.build_settings['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
-          puts "⚙️ [#{name}] Allowed non-modular includes"
-        end
-
-        # ✅ gRPC / Protobuf 모듈 비활성화 (Firestore 의존성)
-        if name.include?('gRPC') || name.include?('grpc') || name.include?('Protobuf')
-          config.build_settings['DEFINES_MODULE'] = 'NO'
-          config.build_settings['CLANG_ENABLE_MODULES'] = 'NO'
-          puts "⚙️ [#{name}] Disabled modules (non-modular dependency)"
-        end
-
-        # ✅ BoringSSL-GRPC: 잘못된 컴파일 플래그 제거 (iOS arm64 타겟에서 -G 옵션 에러)
-        if name == 'BoringSSL-GRPC'
-          # OTHER_CFLAGS에서 -G 옵션 제거
-          other_cflags = config.build_settings['OTHER_CFLAGS'] || []
-          other_cflags = other_cflags.reject { |flag| flag == '-G' || flag.include?('-G') }
-          config.build_settings['OTHER_CFLAGS'] = other_cflags
-          
-          # WARNING_CFLAGS도 정리
-          warning_cflags = config.build_settings['WARNING_CFLAGS'] || []
-          warning_cflags = warning_cflags.reject { |flag| flag == '-G' || flag.include?('-G') }
-          config.build_settings['WARNING_CFLAGS'] = warning_cflags
-          
-          puts "⚙️ [BoringSSL-GRPC] Removed unsupported -G flag for iOS"
-        end
-
-        # ✅ 추가 안전조치: 모든 gRPC/BoringSSL 타겟에서 경고를 에러로 취급하지 않음
-        if name.start_with?('gRPC', 'BoringSSL')
-          other_cflags = config.build_settings['OTHER_CFLAGS'] || []
-          unless other_cflags.include?('-Wno-error')
-            other_cflags << '-Wno-error'
+          # ✅ React-Core / RCT 계열도 허용 (연쇄 의존성)
+          if name.start_with?('React', 'RCT')
+            config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+            config.build_settings['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
+            puts "⚙️ [#{name}] Allowed non-modular includes"
           end
-          config.build_settings['OTHER_CFLAGS'] = other_cflags
-          puts "⚙️ [#{name}] Added -Wno-error flag for safer build"
-        end
 
-        # iOS 15.1+ deployment target 강제
-        config.build_settings.delete 'IPHONEOS_DEPLOYMENT_TARGET'
-        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+          # ✅ gRPC / Protobuf 모듈 비활성화 (Firestore 의존성)
+          if name.include?('gRPC') || name.include?('grpc') || name.include?('Protobuf')
+            config.build_settings['DEFINES_MODULE'] = 'NO'
+            config.build_settings['CLANG_ENABLE_MODULES'] = 'NO'
+            puts "⚙️ [#{name}] Disabled modules (non-modular dependency)"
+          end
+
+          # ✅ BoringSSL-GRPC: 잘못된 컴파일 플래그 제거 (iOS arm64 타겟에서 -G 옵션 에러)
+          if name == 'BoringSSL-GRPC'
+            other = config.build_settings['OTHER_CFLAGS']
+            other = other.is_a?(String) ? other.split(' ') : (other || [])
+            other = other.reject { |f| f == '-G' || (f.is_a?(String) && f.include?('-G')) }
+            config.build_settings['OTHER_CFLAGS'] = other.empty? ? nil : other
+
+            warnf = config.build_settings['WARNING_CFLAGS']
+            warnf = warnf.is_a?(String) ? warnf.split(' ') : (warnf || [])
+            warnf = warnf.reject { |f| f == '-G' || (f.is_a?(String) && f.include?('-G')) }
+            config.build_settings['WARNING_CFLAGS'] = warnf.empty? ? nil : warnf
+
+            puts "⚙️ [BoringSSL-GRPC] Removed unsupported -G flag for iOS"
+          end
+
+          # ✅ 추가 안전조치: 모든 gRPC/BoringSSL 타겟에서 경고를 에러로 취급하지 않음
+          if name.start_with?('gRPC', 'BoringSSL')
+            other = config.build_settings['OTHER_CFLAGS']
+            other = other.is_a?(String) ? other.split(' ') : (other || [])
+            unless other.include?('-Wno-error')
+              other << '-Wno-error'
+            end
+            config.build_settings['OTHER_CFLAGS'] = other
+            puts "⚙️ [#{name}] Added -Wno-error flag for safer build"
+          end
+
+          # iOS 15.1+ deployment target 강제
+          config.build_settings.delete 'IPHONEOS_DEPLOYMENT_TARGET'
+          config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+        rescue => e
+          Pod::UI.puts "⚠️  PostInstall skipped for target #{target.name}: #{e.class} #{e.message}"
+          next
+        end
       end
     end
     
