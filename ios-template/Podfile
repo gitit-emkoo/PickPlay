@@ -29,7 +29,6 @@ target 'PickPlay' do
     :path => '../node_modules/react-native',
     :hermes_enabled => true,
     :fabric_enabled => true,
-    :flipper_configuration => FlipperConfiguration.disabled,
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
 
