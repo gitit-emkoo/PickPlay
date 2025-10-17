@@ -18,15 +18,7 @@ target 'PickPlay' do
   )
 
   post_install do |installer|
-    puts "🔧 [post_install] Custom config active"
-    
-    # Safe-guard: pods_project 존재 확인
-    if installer.pods_project.nil?
-      puts "⚠️  [post_install] pods_project not found! Skipping custom config"
-      return
-    end
-    
-    puts "✅ [post_install] pods_project found, applying build settings..."
+    puts "🔧 [post_install] Custom Podfile post_install hook executing..."
     
     react_native_post_install(
       installer,
@@ -38,32 +30,35 @@ target 'PickPlay' do
       name = target.name.to_s
 
       target.build_configurations.each do |config|
-        # RNFB*, React, RCT 계열에 비-모듈러 헤더 허용 + 모듈 정의 강제
-        if name.start_with?('RNFB', 'React', 'RCT')
-          # 핵심: non-modular include 허용 & 경고 off
+        # ✅ 핵심: RNFBApp 타겟에 명시적으로 non-modular 허용
+        if name == 'RNFBApp'
           config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
           config.build_settings['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
           config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
-
-          # 모듈 사용 강제
           config.build_settings['DEFINES_MODULE'] = 'YES'
           config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
-
-          # 혹시라도 경고가 에러로 승격될 경우 방지
+          
           other_cflags = config.build_settings['OTHER_CFLAGS'] || ['$(inherited)']
           unless other_cflags.include?('-Wno-error=non-modular-include-in-framework-module')
             other_cflags << '-Wno-error=non-modular-include-in-framework-module'
           end
           config.build_settings['OTHER_CFLAGS'] = other_cflags
-
-          puts "⚙️ Applied non-modular allow to #{name} (#{config.name})"
+          
+          puts "⚙️ [RNFBApp] Explicitly forced non-modular includes for RNFBApp (#{config.name})"
         end
 
-        # gRPC/Protobuf 등 일부 타깃은 모듈러 헤더 미지원
-        if name.include?('gRPC') || name.include?('grpc') || name.include?('BoringSSL') || name.include?('Protobuf')
+        # ✅ React-Core / RCT 계열도 허용 (연쇄 의존성)
+        if name.start_with?('React', 'RCT')
+          config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+          config.build_settings['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
+          puts "⚙️ [#{name}] Allowed non-modular includes"
+        end
+
+        # ✅ gRPC / Protobuf 모듈 비활성화 (Firestore 의존성)
+        if name.include?('gRPC') || name.include?('grpc') || name.include?('Protobuf')
           config.build_settings['DEFINES_MODULE'] = 'NO'
           config.build_settings['CLANG_ENABLE_MODULES'] = 'NO'
-          puts "⚙️ Disabled modules for #{name}"
+          puts "⚙️ [#{name}] Disabled modules (non-modular dependency)"
         end
 
         # iOS 13.4+ deployment target 강제
@@ -71,6 +66,7 @@ target 'PickPlay' do
         config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.4'
       end
     end
+    
+    puts "✅ [post_install] Custom build settings applied successfully"
   end
 end
-
