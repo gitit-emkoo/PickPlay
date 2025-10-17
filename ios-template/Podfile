@@ -1,7 +1,7 @@
 platform :ios, '13.4'
 
 require_relative '../node_modules/react-native/scripts/react_native_pods'
-require_relative '../node_modules/@react-native-community/cli-platform-ios/native_modules'
+require_relative '../node_modules/react-native/scripts/native_modules'
 
 use_frameworks! :linkage => :static
 
@@ -15,6 +15,14 @@ target 'PickPlay' do
     :flipper_configuration => FlipperConfiguration.disabled,
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
+
+  # Pin Firebase iOS SDK versions to a stable line for RNFB v23.x
+  firebase_version = '10.29.0'
+  pod 'FirebaseCore', firebase_version
+  pod 'FirebaseCoreInternal', firebase_version
+  pod 'FirebaseAuth', firebase_version
+  pod 'FirebaseFirestore', firebase_version
+  pod 'FirebaseFunctions', firebase_version
 
   post_install do |installer|
     puts "🔧 [post_install] Custom Podfile post_install hook executing..."
