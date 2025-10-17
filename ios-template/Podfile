@@ -1,7 +1,23 @@
 platform :ios, '13.4'
 
 require_relative '../node_modules/react-native/scripts/react_native_pods'
-require_relative '../node_modules/expo-modules-autolinking/scripts/autolinking'
+# Expo autolinking (handle path variations across versions)
+begin
+  require_relative '../node_modules/expo-modules-autolinking/scripts/autolinking'
+rescue LoadError
+  begin
+    require_relative '../node_modules/expo-modules-autolinking/build/scripts/autolinking'
+  rescue LoadError
+    Pod::UI.puts '⚠️  expo-modules-autolinking not found; continuing without it'
+    # Fallback no-ops to avoid Podfile crash (keeps build going)
+    def use_expo_modules!(*args); end
+    module Expo
+      module PostInstall
+        def self.install!(*args); end
+      end
+    end
+  end
+end
 
 use_frameworks! :linkage => :static
 
