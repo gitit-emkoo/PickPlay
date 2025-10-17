@@ -1,7 +1,14 @@
 platform :ios, '13.4'
 
 require_relative '../node_modules/react-native/scripts/react_native_pods'
-require_relative '../node_modules/react-native/scripts/native_modules'
+
+# Support both RN >=0.73 (react-native/scripts/native_modules)
+# and older path (@react-native-community/cli-platform-ios/native_modules)
+begin
+  require_relative '../node_modules/react-native/scripts/native_modules'
+rescue LoadError
+  require_relative '../node_modules/@react-native-community/cli-platform-ios/native_modules'
+end
 
 use_frameworks! :linkage => :static
 
