@@ -1,4 +1,4 @@
-platform :ios, '13.4'
+platform :ios, '15.1'
 
 require_relative '../node_modules/react-native/scripts/react_native_pods'
 # Expo autolinking (handle path variations across versions)
@@ -84,9 +84,9 @@ target 'PickPlay' do
           puts "⚙️ [#{name}] Disabled modules (non-modular dependency)"
         end
 
-        # iOS 13.4+ deployment target 강제
+        # iOS 15.1+ deployment target 강제
         config.build_settings.delete 'IPHONEOS_DEPLOYMENT_TARGET'
-        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.4'
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
       end
     end
     
