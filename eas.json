@@ -36,9 +36,6 @@
       },
       "ios": {
         "buildConfiguration": "Release"
-      },
-      "postPrebuild": {
-        "path": ".eas/build/post-prebuild.sh"
       }
     }
   },

@@ -1,10 +1,10 @@
 #!/bin/bash
-# EAS Build Hook: Podfile 주입 (post-prebuild)
+# EAS Build Hook: Podfile 주입 (post-install - 자동 실행)
 
 set -e
 
-echo "🔧 [post-prebuild] Injecting custom Podfile for iOS..."
-echo "🏗️ [post-prebuild] Current directory: $(pwd)"
+echo "🔧 [eas-build-post-install] Injecting custom Podfile for iOS..."
+echo "🏗️ [eas-build-post-install] Current directory: $(pwd)"
 
 # 디렉토리 및 파일 존재 확인
 echo "📂 Checking ios-template directory:"
@@ -25,9 +25,8 @@ if [ -d "ios" ] && [ -f "ios-template/Podfile" ]; then
   echo "📄 Checking post_install hook:"
   grep -A 5 "post_install do" ios/Podfile || echo "⚠️  post_install hook not found!"
 else
-  echo "❌ [post-prebuild] Failed: ios/ directory or ios-template/Podfile not found"
+  echo "❌ [eas-build-post-install] Failed: ios/ directory or ios-template/Podfile not found"
   exit 1
 fi
 
-echo "✅ [post-prebuild] Hook completed successfully"
-
+echo "✅ [eas-build-post-install] Hook completed successfully"
