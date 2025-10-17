@@ -153,20 +153,6 @@ const CharacterCard: React.FC<CharacterCardProps> = ({ userData }) => {
               ) : (
                 <>
                   <Text style={styles.backTitle}>내 애니마코드는 뭘까?</Text>
-                  <View style={styles.evolutionContainer}>
-                    <Text style={styles.evolutionText}>
-                      AnimaCode 생성을 위한
-                    </Text>
-                    <Text style={styles.evolutionSubText}>
-                      {Math.max(0, 30 - (userData?.totalSelections ?? 0))}번의 선택이 쌓이면,
-                    </Text>
-                    <Text style={styles.evolutionSubText}>
-                      너의 내면의 캐릭터가 탄생하고
-                    </Text>
-                    <Text style={styles.evolutionSubText}>
-                      진짜 이름과 여정이 시작돼!
-                    </Text>
-                  </View>
                 </>
               )}
             </LinearGradient>

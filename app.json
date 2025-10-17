@@ -60,15 +60,11 @@
     "plugins": [
       "expo-router",
       "@react-native-firebase/app",
-      "./config/plugins/withModularHeaders",
       [
         "expo-build-properties",
         {
           "ios": {
-            "useFrameworks": "static",
-            "podfileProperties": {
-              "use_modular_headers_for_pod": "['React-Core','RCTTypeSafety','ReactCommon','React-NativeModulesApple','RNFBApp','RNFBAuth','RNFBFirestore','RNFBFunctions']"
-            }
+            "useFrameworks": "static"
           }
         }
       ],
