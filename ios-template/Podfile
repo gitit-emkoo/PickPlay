@@ -84,6 +84,31 @@ target 'PickPlay' do
           puts "⚙️ [#{name}] Disabled modules (non-modular dependency)"
         end
 
+        # ✅ BoringSSL-GRPC: 잘못된 컴파일 플래그 제거 (iOS arm64 타겟에서 -G 옵션 에러)
+        if name == 'BoringSSL-GRPC'
+          # OTHER_CFLAGS에서 -G 옵션 제거
+          other_cflags = config.build_settings['OTHER_CFLAGS'] || []
+          other_cflags = other_cflags.reject { |flag| flag == '-G' || flag.include?('-G') }
+          config.build_settings['OTHER_CFLAGS'] = other_cflags
+          
+          # WARNING_CFLAGS도 정리
+          warning_cflags = config.build_settings['WARNING_CFLAGS'] || []
+          warning_cflags = warning_cflags.reject { |flag| flag == '-G' || flag.include?('-G') }
+          config.build_settings['WARNING_CFLAGS'] = warning_cflags
+          
+          puts "⚙️ [BoringSSL-GRPC] Removed unsupported -G flag for iOS"
+        end
+
+        # ✅ 추가 안전조치: 모든 gRPC/BoringSSL 타겟에서 경고를 에러로 취급하지 않음
+        if name.start_with?('gRPC', 'BoringSSL')
+          other_cflags = config.build_settings['OTHER_CFLAGS'] || []
+          unless other_cflags.include?('-Wno-error')
+            other_cflags << '-Wno-error'
+          end
+          config.build_settings['OTHER_CFLAGS'] = other_cflags
+          puts "⚙️ [#{name}] Added -Wno-error flag for safer build"
+        end
+
         # iOS 15.1+ deployment target 강제
         config.build_settings.delete 'IPHONEOS_DEPLOYMENT_TARGET'
         config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
