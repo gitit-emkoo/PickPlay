@@ -71,10 +71,10 @@ module.exports = (config) => {
     end
   end`;
           
-          // post_install 훅 끝 부분에 로직 추가
-          const endPattern = /end\s*$/m;
+          // post_install 훅 끝 부분에 로직 추가 (end 앞에)
+          const endPattern = /(\s+)(end\s*)$/m;
           if (endPattern.test(podfileContent)) {
-            podfileContent = podfileContent.replace(endPattern, `${gFlagRemovalLogic}\nend`);
+            podfileContent = podfileContent.replace(endPattern, `$1${gFlagRemovalLogic}\n$1end`);
           }
         } else {
           console.log('✅ [withPodfileFix] Adding new post_install hook with -G flag removal logic...');
