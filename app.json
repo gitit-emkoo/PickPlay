@@ -22,8 +22,7 @@
       },
       "runtimeVersion": {
         "policy": "appVersion"
-      },
-      "podfile": "./ios-template/Podfile"
+      }
     },
     "android": {
       "package": "com.pickplay.kwcc",
@@ -69,6 +68,7 @@
           }
         }
       ],
+      "./config/plugins/withPodfileFix",
       [
         "react-native-google-mobile-ads",
         {
