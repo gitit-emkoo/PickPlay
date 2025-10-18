@@ -22,7 +22,8 @@
       },
       "runtimeVersion": {
         "policy": "appVersion"
-      }
+      },
+      "podfile": "./ios-template/Podfile"
     },
     "android": {
       "package": "com.pickplay.kwcc",
