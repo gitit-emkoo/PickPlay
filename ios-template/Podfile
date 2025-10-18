@@ -49,6 +49,12 @@ target 'PickPlay' do
     # Expo post install (must be after RN)
     Expo::PostInstall.install!(installer)
 
+    # 🔥 CRITICAL: BoringSSL-GRPC와 gRPC 관련 xcconfig 파일에서 직접 -G 제거
+    puts "🔍 Searching for xcconfig files with -G flag..."
+    `find #{installer.sandbox.root} -name "*.xcconfig" \\( -path "*BoringSSL*" -o -path "*gRPC*" \\) -exec sed -i '' 's/-G //g' {} \\;`
+    `find #{installer.sandbox.root} -name "*.xcconfig" \\( -path "*BoringSSL*" -o -path "*gRPC*" \\) -exec sed -i '' 's/ -G / /g' {} \\;`
+    puts "🧨 [CRITICAL FIX] Removed all -G flags from BoringSSL/gRPC xcconfig files"
+
     installer.pods_project.targets.each do |target|
       target.build_configurations.each do |config|
         begin
