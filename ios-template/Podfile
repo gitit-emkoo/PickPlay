@@ -39,6 +39,9 @@ target 'PickPlay' do
   pod 'FirebaseAuth', firebase_version
   pod 'FirebaseFirestore', firebase_version
   pod 'FirebaseFunctions', firebase_version
+  
+  # 🔥 CRITICAL: BoringSSL-GRPC 버전 고정 (1.62.1은 -G 플래그 문제 있음, 1.56.2는 안정적)
+  pod 'BoringSSL-GRPC', '0.0.24', :modular_headers => true
 
   post_install do |installer|
     puts "🔧 [post_install] Custom Podfile post_install hook executing..."
