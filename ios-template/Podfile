@@ -39,9 +39,6 @@ target 'PickPlay' do
   pod 'FirebaseAuth', firebase_version
   pod 'FirebaseFirestore', firebase_version
   pod 'FirebaseFunctions', firebase_version
-  
-  # 🔥 CRITICAL: BoringSSL-GRPC 버전 고정 (1.62.1은 -G 플래그 문제 있음, 1.56.2는 안정적)
-  pod 'BoringSSL-GRPC', '0.0.24', :modular_headers => true
 
   post_install do |installer|
     puts "🔧 [post_install] Custom Podfile post_install hook executing..."
@@ -53,10 +50,44 @@ target 'PickPlay' do
     Expo::PostInstall.install!(installer)
 
     # 🔥 CRITICAL: BoringSSL-GRPC와 gRPC 관련 xcconfig 파일에서 직접 -G 제거
-    puts "🔍 Searching for xcconfig files with -G flag..."
-    `find #{installer.sandbox.root} -name "*.xcconfig" \\( -path "*BoringSSL*" -o -path "*gRPC*" \\) -exec sed -i '' 's/-G //g' {} \\;`
-    `find #{installer.sandbox.root} -name "*.xcconfig" \\( -path "*BoringSSL*" -o -path "*gRPC*" \\) -exec sed -i '' 's/ -G / /g' {} \\;`
-    puts "🧨 [CRITICAL FIX] Removed all -G flags from BoringSSL/gRPC xcconfig files"
+    puts "\n========================================="
+    puts "🧨 [CRITICAL] Removing -G flags from xcconfig files"
+    puts "=========================================\n"
+    
+    sandbox_root = installer.sandbox.root
+    puts "📂 Sandbox root: #{sandbox_root}"
+    
+    # 1. BoringSSL-GRPC xcconfig 파일 찾기
+    boring_ssl_configs = Dir.glob("#{sandbox_root}/**/BoringSSL*/*.xcconfig")
+    grpc_configs = Dir.glob("#{sandbox_root}/**/gRPC*/*.xcconfig")
+    all_configs = (boring_ssl_configs + grpc_configs).uniq
+    
+    puts "🔍 Found #{all_configs.length} xcconfig files to process:"
+    all_configs.each { |f| puts "  - #{File.basename(f)}" }
+    
+    # 2. 각 파일에서 -G 플래그 제거
+    modified_count = 0
+    all_configs.each do |config_file|
+      next unless File.exist?(config_file)
+      
+      content = File.read(config_file)
+      original_content = content.dup
+      
+      # 모든 형태의 -G 플래그 제거
+      content.gsub!(/ -G /, ' ')
+      content.gsub!(/ -G$/, '')
+      content.gsub!(/^-G /, '')
+      content.gsub!(/\s+-G\s+/, ' ')
+      
+      if content != original_content
+        File.write(config_file, content)
+        modified_count += 1
+        puts "  ✅ Modified: #{File.basename(config_file)}"
+      end
+    end
+    
+    puts "\n🧨 [CRITICAL FIX] Modified #{modified_count}/#{all_configs.length} xcconfig files"
+    puts "=========================================\n"
 
     installer.pods_project.targets.each do |target|
       target.build_configurations.each do |config|
@@ -96,32 +127,38 @@ target 'PickPlay' do
           end
 
           # ✅ BoringSSL-GRPC: 잘못된 컴파일 플래그 제거 (iOS arm64 타겟에서 -G 옵션 에러)
-          if name == 'BoringSSL-GRPC'
-            # 모든 C/C++ 플래그 키에서 -G 제거
+          if name.include?('BoringSSL') || name.include?('gRPC')
+            # 모든 C/C++ 플래그 키에서 -G 제거 (SDK 특정 키 포함)
             flag_keys = [
               'OTHER_CFLAGS',
               'OTHER_CPLUSPLUSFLAGS', 
               'WARNING_CFLAGS',
               'OTHER_CFLAGS[sdk=iphoneos*]',
-              'OTHER_CPLUSPLUSFLAGS[sdk=iphoneos*]'
+              'OTHER_CPLUSPLUSFLAGS[sdk=iphoneos*]',
+              'WARNING_CFLAGS[sdk=iphoneos*]',
+              'OTHER_CFLAGS[sdk=iphonesimulator*]',
+              'OTHER_CPLUSPLUSFLAGS[sdk=iphonesimulator*]'
             ]
             
             flag_keys.each do |key|
+              next unless config.build_settings[key]
+              
               flags = config.build_settings[key]
-              flags = flags.is_a?(String) ? flags.split(' ') : (flags || [])
-              flags = flags.reject { |f| f.to_s == '-G' || f.to_s.start_with?('-G') }
-              config.build_settings[key] = flags.empty? ? '$(inherited)' : flags
-            end
-            
-            # 최후 수단: 문자열에 -G가 포함되어 있으면 완전 덮어쓰기
-            if config.build_settings['OTHER_CFLAGS'].to_s.include?('-G')
-              config.build_settings['OTHER_CFLAGS'] = '$(inherited)'
-            end
-            if config.build_settings['OTHER_CPLUSPLUSFLAGS'].to_s.include?('-G')
-              config.build_settings['OTHER_CPLUSPLUSFLAGS'] = '$(inherited)'
+              
+              # 배열 처리
+              if flags.is_a?(Array)
+                flags.reject! { |f| f.to_s =~ /-G(\s|$)/ }
+                config.build_settings[key] = flags.empty? ? ['$(inherited)'] : flags
+              # 문자열 처리
+              elsif flags.is_a?(String)
+                flags.gsub!(/ -G /, ' ')
+                flags.gsub!(/ -G$/, '')
+                flags.gsub!(/^-G /, '')
+                config.build_settings[key] = flags.strip.empty? ? '$(inherited)' : flags
+              end
             end
 
-            puts "🧩 [BoringSSL-GRPC] scrubbed -G from all C/C++ flags"
+            puts "🧩 [#{name}] Scrubbed -G flags from all build settings (#{config.name})"
           end
 
           # ✅ 추가 안전조치: 모든 gRPC/BoringSSL 타겟에서 경고를 에러로 취급하지 않음
