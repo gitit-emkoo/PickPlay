@@ -22,65 +22,52 @@ module.exports = (config) => {
       console.log(`  📄 Podfile Path: ${podfilePath}`);
       
       if (fs.existsSync(podfilePath)) {
-        let podfileContent = fs.readFileSync(podfilePath, 'utf8');
+        console.log('✅ [withPodfileFix] Replacing entire Podfile with fixed version...');
         
-        // post_install 훅이 이미 있는지 확인
-        if (podfileContent.includes('post_install do |installer|')) {
-          console.log('✅ [withPodfileFix] post_install hook already exists, adding -G flag removal logic...');
-          
-          // 기존 post_install 훅에 -G 플래그 제거 로직 추가
-          const gFlagRemovalLogic = `
-  # ✅ BoringSSL-GRPC: -G 플래그 제거 (iOS arm64 타겟에서 에러)
-  installer.pods_project.targets.each do |target|
-    target.build_configurations.each do |config|
-      name = target.name.to_s
-      
-      if name.include?('BoringSSL') || name.include?('gRPC')
-        # 모든 C/C++ 플래그 키에서 -G 제거
-        flag_keys = [
-          'OTHER_CFLAGS',
-          'OTHER_CPLUSPLUSFLAGS', 
-          'WARNING_CFLAGS',
-          'OTHER_CFLAGS[sdk=iphoneos*]',
-          'OTHER_CPLUSPLUSFLAGS[sdk=iphoneos*]',
-          'WARNING_CFLAGS[sdk=iphoneos*]',
-          'OTHER_CFLAGS[sdk=iphonesimulator*]',
-          'OTHER_CPLUSPLUSFLAGS[sdk=iphonesimulator*]'
-        ]
-        
-        flag_keys.each do |key|
-          next unless config.build_settings[key]
-          
-          flags = config.build_settings[key]
-          
-          # 배열 처리
-          if flags.is_a?(Array)
-            flags.reject! { |f| f.to_s =~ /-G(\\s|$)/ }
-            config.build_settings[key] = flags.empty? ? ['$(inherited)'] : flags
-          # 문자열 처리
-          elsif flags.is_a?(String)
-            flags.gsub!(/ -G /, ' ')
-            flags.gsub!(/ -G$/, '')
-            flags.gsub!(/^-G /, '')
-            config.build_settings[key] = flags.strip.empty? ? '$(inherited)' : flags
-          end
-        end
-        
-        puts "🧩 [#{name}] Scrubbed -G flags from all build settings (#{config.name})"
+        // 완전히 새로운 Podfile 내용 생성
+        const newPodfileContent = `platform :ios, '15.1'
+
+require_relative '../node_modules/react-native/scripts/react_native_pods'
+# Expo autolinking (handle path variations across versions)
+begin
+  require_relative '../node_modules/expo-modules-autolinking/scripts/autolinking'
+rescue LoadError
+  begin
+    require_relative '../node_modules/expo-modules-autolinking/build/scripts/autolinking'
+  rescue LoadError
+    Pod::UI.puts '⚠️  expo-modules-autolinking not found; continuing without it'
+    # Fallback no-ops to avoid Podfile crash (keeps build going)
+    def use_expo_modules!(*args); end
+    module Expo
+      module PostInstall
+        def self.install!(*args); end
       end
     end
-  end`;
-          
-          // post_install 훅 끝 부분에 로직 추가 (end 앞에)
-          const endPattern = /(\s+)(end\s*)$/m;
-          if (endPattern.test(podfileContent)) {
-            podfileContent = podfileContent.replace(endPattern, `$1${gFlagRemovalLogic}\n$1end`);
-          }
-        } else {
-          console.log('✅ [withPodfileFix] Adding new post_install hook with -G flag removal logic...');
-          
-          // 새로운 post_install 훅 추가
-          const newPostInstallHook = `
+  end
+end
+
+use_frameworks! :linkage => :static
+
+target 'PickPlay' do
+  # Expo autolinking for native modules
+  use_expo_modules!
+
+  use_react_native!(
+    :path => '../node_modules/react-native',
+    :hermes_enabled => true,
+    :fabric_enabled => true,
+    :app_path => "#{Pod::Config.instance.installation_root}/.."
+  )
+
+  # Pin Firebase iOS SDK versions to a stable line for RNFB v23.x
+  firebase_version = '10.29.0'
+  pod 'FirebaseCore', firebase_version
+  pod 'FirebaseCoreInternal', firebase_version
+  pod 'FirebaseAuth', firebase_version
+  pod 'FirebaseFirestore', firebase_version
+  pod 'FirebaseFunctions', firebase_version
+end
+
 post_install do |installer|
   puts "🔧 [post_install] Custom Podfile post_install hook executing..."
   
@@ -141,20 +128,17 @@ post_install do |installer|
     
   puts "✅ [post_install] Custom build settings applied successfully"
 end`;
-          
-          podfileContent += newPostInstallHook;
-        }
         
-        // 수정된 Podfile 저장
-        fs.writeFileSync(podfilePath, podfileContent);
-        console.log('✅ [withPodfileFix] Podfile fixed successfully');
+        // 새로운 Podfile 저장
+        fs.writeFileSync(podfilePath, newPodfileContent);
+        console.log('✅ [withPodfileFix] Podfile completely replaced with fixed version');
         
         // 검증
         const updatedContent = fs.readFileSync(podfilePath, 'utf8');
         if (updatedContent.includes('BoringSSL') && updatedContent.includes('-G')) {
-          console.log('✅ [withPodfileFix] -G flag removal logic VERIFIED in Podfile');
+          console.log('✅ [withPodfileFix] -G flag removal logic VERIFIED in new Podfile');
         } else {
-          console.warn('⚠️  [withPodfileFix] -G flag removal logic NOT FOUND in updated Podfile!');
+          console.warn('⚠️  [withPodfileFix] -G flag removal logic NOT FOUND in new Podfile!');
         }
       } else {
         console.error('❌ [withPodfileFix] Podfile not found at', podfilePath);
