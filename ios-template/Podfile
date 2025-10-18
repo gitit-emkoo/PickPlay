@@ -39,159 +39,159 @@ target 'PickPlay' do
   pod 'FirebaseAuth', firebase_version
   pod 'FirebaseFirestore', firebase_version
   pod 'FirebaseFunctions', firebase_version
+end
 
-  post_install do |installer|
-    puts "🔧 [post_install] Custom Podfile post_install hook executing..."
-    
-    # React Native post install tweaks
-    react_native_post_install(installer)
-    
-    # Expo post install (must be after RN)
-    Expo::PostInstall.install!(installer)
+post_install do |installer|
+  puts "🔧 [post_install] Custom Podfile post_install hook executing..."
+  
+  # React Native post install tweaks
+  react_native_post_install(installer)
+  
+  # Expo post install (must be after RN)
+  Expo::PostInstall.install!(installer)
 
-    # 🔥 CRITICAL: BoringSSL-GRPC와 gRPC 관련 xcconfig 파일에서 직접 -G 제거
-    puts "\n========================================="
-    puts "🧨 [CRITICAL] Removing -G flags from xcconfig files"
-    puts "=========================================\n"
+  # 🔥 CRITICAL: BoringSSL-GRPC와 gRPC 관련 xcconfig 파일에서 직접 -G 제거
+  puts "\n========================================="
+  puts "🧨 [CRITICAL] Removing -G flags from xcconfig files"
+  puts "=========================================\n"
+  
+  sandbox_root = installer.sandbox.root
+  puts "📂 Sandbox root: #{sandbox_root}"
+  
+  # 1. BoringSSL-GRPC xcconfig 파일 찾기
+  boring_ssl_configs = Dir.glob("#{sandbox_root}/**/BoringSSL*/*.xcconfig")
+  grpc_configs = Dir.glob("#{sandbox_root}/**/gRPC*/*.xcconfig")
+  all_configs = (boring_ssl_configs + grpc_configs).uniq
+  
+  puts "🔍 Found #{all_configs.length} xcconfig files to process:"
+  all_configs.each { |f| puts "  - #{File.basename(f)}" }
+  
+  # 2. 각 파일에서 -G 플래그 제거
+  modified_count = 0
+  all_configs.each do |config_file|
+    next unless File.exist?(config_file)
     
-    sandbox_root = installer.sandbox.root
-    puts "📂 Sandbox root: #{sandbox_root}"
+    content = File.read(config_file)
+    original_content = content.dup
     
-    # 1. BoringSSL-GRPC xcconfig 파일 찾기
-    boring_ssl_configs = Dir.glob("#{sandbox_root}/**/BoringSSL*/*.xcconfig")
-    grpc_configs = Dir.glob("#{sandbox_root}/**/gRPC*/*.xcconfig")
-    all_configs = (boring_ssl_configs + grpc_configs).uniq
+    # 모든 형태의 -G 플래그 제거
+    content.gsub!(/ -G /, ' ')
+    content.gsub!(/ -G$/, '')
+    content.gsub!(/^-G /, '')
+    content.gsub!(/\s+-G\s+/, ' ')
     
-    puts "🔍 Found #{all_configs.length} xcconfig files to process:"
-    all_configs.each { |f| puts "  - #{File.basename(f)}" }
-    
-    # 2. 각 파일에서 -G 플래그 제거
-    modified_count = 0
-    all_configs.each do |config_file|
-      next unless File.exist?(config_file)
-      
-      content = File.read(config_file)
-      original_content = content.dup
-      
-      # 모든 형태의 -G 플래그 제거
-      content.gsub!(/ -G /, ' ')
-      content.gsub!(/ -G$/, '')
-      content.gsub!(/^-G /, '')
-      content.gsub!(/\s+-G\s+/, ' ')
-      
-      if content != original_content
-        File.write(config_file, content)
-        modified_count += 1
-        puts "  ✅ Modified: #{File.basename(config_file)}"
-      end
+    if content != original_content
+      File.write(config_file, content)
+      modified_count += 1
+      puts "  ✅ Modified: #{File.basename(config_file)}"
     end
-    
-    puts "\n🧨 [CRITICAL FIX] Modified #{modified_count}/#{all_configs.length} xcconfig files"
-    puts "=========================================\n"
-
-    installer.pods_project.targets.each do |target|
-      target.build_configurations.each do |config|
-        begin
-          name = target.name.to_s
-
-          # ✅ 핵심: RNFBApp 타겟에 명시적으로 non-modular 허용
-          if name == 'RNFBApp'
-            config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
-            config.build_settings['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
-            config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
-            config.build_settings['DEFINES_MODULE'] = 'YES'
-            config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
-
-            flags = config.build_settings['OTHER_CFLAGS']
-            flags = flags.is_a?(String) ? flags.split(' ') : (flags || ['$(inherited)'])
-            unless flags.include?('-Wno-error=non-modular-include-in-framework-module')
-              flags << '-Wno-error=non-modular-include-in-framework-module'
-            end
-            config.build_settings['OTHER_CFLAGS'] = flags
-
-            puts "⚙️ [RNFBApp] Explicitly forced non-modular includes for RNFBApp (#{config.name})"
-          end
-
-          # ✅ React-Core / RCT 계열도 허용 (연쇄 의존성)
-          if name.start_with?('React', 'RCT')
-            config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
-            config.build_settings['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
-            puts "⚙️ [#{name}] Allowed non-modular includes"
-          end
-
-          # ✅ gRPC / Protobuf 모듈 비활성화 (Firestore 의존성)
-          if name.include?('gRPC') || name.include?('grpc') || name.include?('Protobuf')
-            config.build_settings['DEFINES_MODULE'] = 'NO'
-            config.build_settings['CLANG_ENABLE_MODULES'] = 'NO'
-            puts "⚙️ [#{name}] Disabled modules (non-modular dependency)"
-          end
-
-          # ✅ BoringSSL-GRPC: 잘못된 컴파일 플래그 제거 (iOS arm64 타겟에서 -G 옵션 에러)
-          if name.include?('BoringSSL') || name.include?('gRPC')
-            # 모든 C/C++ 플래그 키에서 -G 제거 (SDK 특정 키 포함)
-            flag_keys = [
-              'OTHER_CFLAGS',
-              'OTHER_CPLUSPLUSFLAGS', 
-              'WARNING_CFLAGS',
-              'OTHER_CFLAGS[sdk=iphoneos*]',
-              'OTHER_CPLUSPLUSFLAGS[sdk=iphoneos*]',
-              'WARNING_CFLAGS[sdk=iphoneos*]',
-              'OTHER_CFLAGS[sdk=iphonesimulator*]',
-              'OTHER_CPLUSPLUSFLAGS[sdk=iphonesimulator*]'
-            ]
-            
-            flag_keys.each do |key|
-              next unless config.build_settings[key]
-              
-              flags = config.build_settings[key]
-              
-              # 배열 처리
-              if flags.is_a?(Array)
-                flags.reject! { |f| f.to_s =~ /-G(\s|$)/ }
-                config.build_settings[key] = flags.empty? ? ['$(inherited)'] : flags
-              # 문자열 처리
-              elsif flags.is_a?(String)
-                flags.gsub!(/ -G /, ' ')
-                flags.gsub!(/ -G$/, '')
-                flags.gsub!(/^-G /, '')
-                config.build_settings[key] = flags.strip.empty? ? '$(inherited)' : flags
-              end
-            end
-
-            puts "🧩 [#{name}] Scrubbed -G flags from all build settings (#{config.name})"
-          end
-
-          # ✅ 추가 안전조치: 모든 gRPC/BoringSSL 타겟에서 경고를 에러로 취급하지 않음
-          if name.start_with?('gRPC', 'BoringSSL')
-            other = config.build_settings['OTHER_CFLAGS']
-            other = other.is_a?(String) ? other.split(' ') : (other || [])
-            unless other.include?('-Wno-error')
-              other << '-Wno-error'
-            end
-            config.build_settings['OTHER_CFLAGS'] = other
-            puts "⚙️ [#{name}] Added -Wno-error flag for safer build"
-          end
-
-          # iOS 15.1+ deployment target 강제
-          config.build_settings.delete 'IPHONEOS_DEPLOYMENT_TARGET'
-          config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-
-          # ✅ 전역 빌드 안정성 설정
-          config.build_settings['ENABLE_BITCODE'] = 'NO'
-          config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
-          
-          # ✅ 중복 파일 경고 해결 (safeareacontext 관련)
-          if name.include?('ReactCodegen') || name.include?('safeareacontext')
-            config.build_settings['EXCLUDED_SOURCE_FILE_NAMES'] = 'safeareacontext/*'
-            puts "⚙️ [#{name}] Excluded safeareacontext duplicate files"
-          end
-        rescue => e
-          Pod::UI.puts "⚠️  PostInstall skipped for target #{target.name}: #{e.class} #{e.message}"
-          next
-        end
-      end
-    end
-    
-    puts "✅ [post_install] Custom build settings applied successfully"
   end
+  
+  puts "\n🧨 [CRITICAL FIX] Modified #{modified_count}/#{all_configs.length} xcconfig files"
+  puts "=========================================\n"
+
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      begin
+        name = target.name.to_s
+
+        # ✅ 핵심: RNFBApp 타겟에 명시적으로 non-modular 허용
+        if name == 'RNFBApp'
+          config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+          config.build_settings['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
+          config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+          config.build_settings['DEFINES_MODULE'] = 'YES'
+          config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
+
+          flags = config.build_settings['OTHER_CFLAGS']
+          flags = flags.is_a?(String) ? flags.split(' ') : (flags || ['$(inherited)'])
+          unless flags.include?('-Wno-error=non-modular-include-in-framework-module')
+            flags << '-Wno-error=non-modular-include-in-framework-module'
+          end
+          config.build_settings['OTHER_CFLAGS'] = flags
+
+          puts "⚙️ [RNFBApp] Explicitly forced non-modular includes for RNFBApp (#{config.name})"
+        end
+
+        # ✅ React-Core / RCT 계열도 허용 (연쇄 의존성)
+        if name.start_with?('React', 'RCT')
+          config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+          config.build_settings['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
+          puts "⚙️ [#{name}] Allowed non-modular includes"
+        end
+
+        # ✅ gRPC / Protobuf 모듈 비활성화 (Firestore 의존성)
+        if name.include?('gRPC') || name.include?('grpc') || name.include?('Protobuf')
+          config.build_settings['DEFINES_MODULE'] = 'NO'
+          config.build_settings['CLANG_ENABLE_MODULES'] = 'NO'
+          puts "⚙️ [#{name}] Disabled modules (non-modular dependency)"
+        end
+
+        # ✅ BoringSSL-GRPC: 잘못된 컴파일 플래그 제거 (iOS arm64 타겟에서 -G 옵션 에러)
+        if name.include?('BoringSSL') || name.include?('gRPC')
+          # 모든 C/C++ 플래그 키에서 -G 제거 (SDK 특정 키 포함)
+          flag_keys = [
+            'OTHER_CFLAGS',
+            'OTHER_CPLUSPLUSFLAGS', 
+            'WARNING_CFLAGS',
+            'OTHER_CFLAGS[sdk=iphoneos*]',
+            'OTHER_CPLUSPLUSFLAGS[sdk=iphoneos*]',
+            'WARNING_CFLAGS[sdk=iphoneos*]',
+            'OTHER_CFLAGS[sdk=iphonesimulator*]',
+            'OTHER_CPLUSPLUSFLAGS[sdk=iphonesimulator*]'
+          ]
+          
+          flag_keys.each do |key|
+            next unless config.build_settings[key]
+            
+            flags = config.build_settings[key]
+            
+            # 배열 처리
+            if flags.is_a?(Array)
+              flags.reject! { |f| f.to_s =~ /-G(\s|$)/ }
+              config.build_settings[key] = flags.empty? ? ['$(inherited)'] : flags
+            # 문자열 처리
+            elsif flags.is_a?(String)
+              flags.gsub!(/ -G /, ' ')
+              flags.gsub!(/ -G$/, '')
+              flags.gsub!(/^-G /, '')
+              config.build_settings[key] = flags.strip.empty? ? '$(inherited)' : flags
+            end
+          end
+
+          puts "🧩 [#{name}] Scrubbed -G flags from all build settings (#{config.name})"
+        end
+
+        # ✅ 추가 안전조치: 모든 gRPC/BoringSSL 타겟에서 경고를 에러로 취급하지 않음
+        if name.start_with?('gRPC', 'BoringSSL')
+          other = config.build_settings['OTHER_CFLAGS']
+          other = other.is_a?(String) ? other.split(' ') : (other || [])
+          unless other.include?('-Wno-error')
+            other << '-Wno-error'
+          end
+          config.build_settings['OTHER_CFLAGS'] = other
+          puts "⚙️ [#{name}] Added -Wno-error flag for safer build"
+        end
+
+        # iOS 15.1+ deployment target 강제
+        config.build_settings.delete 'IPHONEOS_DEPLOYMENT_TARGET'
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+
+        # ✅ 전역 빌드 안정성 설정
+        config.build_settings['ENABLE_BITCODE'] = 'NO'
+        config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
+        
+        # ✅ 중복 파일 경고 해결 (safeareacontext 관련)
+        if name.include?('ReactCodegen') || name.include?('safeareacontext')
+          config.build_settings['EXCLUDED_SOURCE_FILE_NAMES'] = 'safeareacontext/*'
+          puts "⚙️ [#{name}] Excluded safeareacontext duplicate files"
+        end
+      rescue => e
+        Pod::UI.puts "⚠️  PostInstall skipped for target #{target.name}: #{e.class} #{e.message}"
+        next
+      end
+    end
+  end
+    
+  puts "✅ [post_install] Custom build settings applied successfully"
 end
