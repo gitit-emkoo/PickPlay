@@ -68,7 +68,6 @@
           }
         }
       ],
-      "./config/plugins/withCustomPodfile",
       [
         "react-native-google-mobile-ads",
         {

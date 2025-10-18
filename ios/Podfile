@@ -1,0 +1,103 @@
+platform :ios, '15.1'
+
+require_relative '../node_modules/react-native/scripts/react_native_pods'
+# Expo autolinking (handle path variations across versions)
+begin
+  require_relative '../node_modules/expo-modules-autolinking/scripts/autolinking'
+rescue LoadError
+  begin
+    require_relative '../node_modules/expo-modules-autolinking/build/scripts/autolinking'
+  rescue LoadError
+    Pod::UI.puts '⚠️  expo-modules-autolinking not found; continuing without it'
+    # Fallback no-ops to avoid Podfile crash (keeps build going)
+    def use_expo_modules!(*args); end
+    module Expo
+      module PostInstall
+        def self.install!(*args); end
+      end
+    end
+  end
+end
+
+use_frameworks! :linkage => :static
+
+target 'PickPlay' do
+  # Expo autolinking for native modules
+  use_expo_modules!
+
+  use_react_native!(
+    :path => '../node_modules/react-native',
+    :hermes_enabled => true,
+    :fabric_enabled => true,
+    :app_path => "#{Pod::Config.instance.installation_root}/.."
+  )
+
+  # Pin Firebase iOS SDK versions to a stable line for RNFB v23.x
+  firebase_version = '10.29.0'
+  pod 'FirebaseCore', firebase_version
+  pod 'FirebaseCoreInternal', firebase_version
+  pod 'FirebaseAuth', firebase_version
+  pod 'FirebaseFirestore', firebase_version
+  pod 'FirebaseFunctions', firebase_version
+end
+
+post_install do |installer|
+  puts "🔧 [post_install] Custom Podfile post_install hook executing..."
+  
+  # React Native post install tweaks
+  react_native_post_install(installer)
+  
+  # Expo post install (must be after RN)
+  Expo::PostInstall.install!(installer)
+
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      name = target.name.to_s
+
+      # ✅ BoringSSL-GRPC: -G 플래그 제거 (iOS arm64 타겟에서 에러)
+      if name.include?('BoringSSL') || name.include?('gRPC')
+        # 모든 C/C++ 플래그 키에서 -G 제거
+        flag_keys = [
+          'OTHER_CFLAGS',
+          'OTHER_CPLUSPLUSFLAGS', 
+          'WARNING_CFLAGS',
+          'OTHER_CFLAGS[sdk=iphoneos*]',
+          'OTHER_CPLUSPLUSFLAGS[sdk=iphoneos*]',
+          'WARNING_CFLAGS[sdk=iphoneos*]',
+          'OTHER_CFLAGS[sdk=iphonesimulator*]',
+          'OTHER_CPLUSPLUSFLAGS[sdk=iphonesimulator*]'
+        ]
+        
+        flag_keys.each do |key|
+          next unless config.build_settings[key]
+          
+          flags = config.build_settings[key]
+          
+          # 배열 처리
+          if flags.is_a?(Array)
+            flags.reject! { |f| f.to_s =~ /-G(\s|$)/ }
+            config.build_settings[key] = flags.empty? ? ['$(inherited)'] : flags
+          # 문자열 처리
+          elsif flags.is_a?(String)
+            flags.gsub!(/ -G /, ' ')
+            flags.gsub!(/ -G$/, '')
+            flags.gsub!(/^-G /, '')
+            config.build_settings[key] = flags.strip.empty? ? '$(inherited)' : flags
+          end
+        end
+
+        puts "🧩 [#{name}] Scrubbed -G flags from all build settings (#{config.name})"
+      end
+
+      # iOS 15.1+ deployment target 강제
+      config.build_settings.delete 'IPHONEOS_DEPLOYMENT_TARGET'
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+
+      # ✅ 전역 빌드 안정성 설정
+      config.build_settings['ENABLE_BITCODE'] = 'NO'
+      config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
+    end
+  end
+    
+  puts "✅ [post_install] Custom build settings applied successfully"
+end
