@@ -66,6 +66,9 @@ target 'PickPlay' do
   pod 'FirebaseAuth', firebase_version
   pod 'FirebaseFirestore', firebase_version
   pod 'FirebaseFunctions', firebase_version
+  
+  # ✅ BoringSSL-GRPC 버전 강제 (0.0.32의 -G 플래그 버그 회피)
+  pod 'BoringSSL-GRPC', '0.0.24', :modular_headers => false
 end
 
 post_install do |installer|
