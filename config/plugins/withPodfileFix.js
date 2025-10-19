@@ -126,31 +126,52 @@ post_install do |installer|
     end
   end
   
-  # ✅ 추가: .xcconfig 파일에서도 -G 플래그 제거
-  puts "🧹 [post_install] Cleaning -G flags from xcconfig files..."
-  
-  xcconfig_path = File.join(Dir.pwd, 'Pods', 'Target Support Files')
-  
-  if Dir.exist?(xcconfig_path)
-    Dir.glob("#{xcconfig_path}/**/*.xcconfig").each do |file|
-      if file.include?('BoringSSL') || file.include?('gRPC')
-        content = File.read(file)
-        original_content = content.dup
-        
-        # -G 플래그 제거
-        content.gsub!(/ -G /, ' ')
-        content.gsub!(/ -G$/, '')
-        content.gsub!(/^-G /, '')
-        
-        if content != original_content
-          File.write(file, content)
-          puts "  🧹 Cleaned: #{File.basename(file)}"
-        end
-      end
-    end
-    
-    puts "✅ [post_install] xcconfig files cleaned"
-  end
+         # ✅ 추가: .xcconfig 파일에서도 -G 플래그 제거 (강화된 버전)
+         puts "🧹 [post_install] Cleaning -G flags from xcconfig files..."
+         
+         xcconfig_path = File.join(Dir.pwd, 'Pods', 'Target Support Files')
+         puts "📂 [post_install] Looking in: #{xcconfig_path}"
+         
+         if Dir.exist?(xcconfig_path)
+           cleaned_files = 0
+           Dir.glob("#{xcconfig_path}/**/*.xcconfig").each do |file|
+             if file.include?('BoringSSL') || file.include?('gRPC')
+               content = File.read(file)
+               original_content = content.dup
+               
+               puts "  🔍 Checking: #{File.basename(file)}"
+               
+               # 더 강력한 -G 플래그 제거 (모든 경우의 수 커버)
+               # 1. 공백으로 구분된 -G
+               content.gsub!(/\s+-G\s+/, ' ')
+               # 2. 줄 끝의 -G
+               content.gsub!(/\s+-G$/, '')
+               # 3. 줄 시작의 -G
+               content.gsub!(/^-G\s+/, '')
+               # 4. 단독 -G (공백 없이)
+               content.gsub!(/\s+-G(?=\s|$)/, ' ')
+               # 5. 다른 플래그와 붙어있는 경우
+               content.gsub!(/-G\s+/, '')
+               # 6. 공백이 여러 개인 경우 정리
+               content.gsub!(/\s+/, ' ')
+               content.strip!
+               
+               if content != original_content
+                 File.write(file, content)
+                 cleaned_files += 1
+                 puts "  ✅ Cleaned: #{File.basename(file)}"
+                 puts "    Before: #{original_content.gsub(/\n/, ' ').strip[0..100]}..."
+                 puts "    After:  #{content.gsub(/\n/, ' ').strip[0..100]}..."
+               else
+                 puts "  ℹ️  No -G flags found in: #{File.basename(file)}"
+               end
+             end
+           end
+           
+           puts "✅ [post_install] xcconfig files cleaned (#{cleaned_files} files modified)"
+         else
+           puts "⚠️  [post_install] xcconfig directory not found!"
+         end
     
   puts "✅ [post_install] Custom build settings applied successfully"
 end`;
