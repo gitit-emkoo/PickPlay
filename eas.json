@@ -38,6 +38,9 @@
       },
       "ios": {
         "buildConfiguration": "Release"
+      },
+      "hooks": {
+        "postInstall": ".eas/build/eas-build-post-install.sh"
       }
     }
   },

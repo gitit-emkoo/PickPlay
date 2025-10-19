@@ -1,32 +1,50 @@
 #!/bin/bash
-# EAS Build Hook: Podfile 주입 (post-install - 자동 실행)
+# EAS Build Hook: BoringSSL-GRPC -G 플래그 제거 (post-install)
 
 set -e
 
-echo "🔧 [eas-build-post-install] Injecting custom Podfile for iOS..."
+echo "🔧 [eas-build-post-install] Removing -G flags from BoringSSL-GRPC and gRPC xcconfig files..."
 echo "🏗️ [eas-build-post-install] Current directory: $(pwd)"
 
-# 디렉토리 및 파일 존재 확인
-echo "📂 Checking ios-template directory:"
-ls -la ios-template || echo "⚠️  ios-template directory not found"
+# iOS 디렉토리로 이동
+if [ ! -d "ios" ]; then
+  echo "⚠️  [eas-build-post-install] ios/ directory not found, skipping"
+  exit 0
+fi
 
-echo "📂 Checking ios directory:"
-ls -la ios || echo "⚠️  ios directory not found"
+cd ios
 
-if [ -d "ios" ] && [ -f "ios-template/Podfile" ]; then
-  echo "📝 Copying ios-template/Podfile to ios/Podfile"
-  cp ios-template/Podfile ios/Podfile
-  echo "✅ Custom Podfile injected successfully"
-  
-  # Podfile 내용 확인 (디버깅용)
-  echo "📄 Podfile contents (first 40 lines):"
-  head -n 40 ios/Podfile
-  
-  echo "📄 Checking post_install hook:"
-  grep -A 5 "post_install do" ios/Podfile || echo "⚠️  post_install hook not found!"
+# Pods/Target Support Files에서 .xcconfig 파일 찾아서 -G 플래그 제거
+echo "📂 Searching for BoringSSL-GRPC and gRPC xcconfig files..."
+
+# BoringSSL-GRPC 관련 xcconfig 파일 수정
+find Pods/Target\ Support\ Files/BoringSSL-GRPC -name "*.xcconfig" 2>/dev/null | while read -r file; do
+  echo "🧹 Processing: $file"
+  # macOS에서 sed는 -i '' 필요
+  sed -i '' 's/ -G / /g' "$file" || true
+  sed -i '' 's/ -G$//g' "$file" || true
+  sed -i '' 's/^-G //g' "$file" || true
+  echo "✅ Cleaned: $file"
+done
+
+# gRPC 관련 xcconfig 파일 수정
+find Pods/Target\ Support\ Files/gRPC* -name "*.xcconfig" 2>/dev/null | while read -r file; do
+  echo "🧹 Processing: $file"
+  sed -i '' 's/ -G / /g' "$file" || true
+  sed -i '' 's/ -G$//g' "$file" || true
+  sed -i '' 's/^-G //g' "$file" || true
+  echo "✅ Cleaned: $file"
+done
+
+echo "✅ [eas-build-post-install] -G flags removed from all xcconfig files"
+
+# 검증: -G 플래그가 남아있는지 확인
+echo "🔍 Verifying: Checking for remaining -G flags..."
+if grep -r " -G " Pods/Target\ Support\ Files/BoringSSL-GRPC/*.xcconfig 2>/dev/null || \
+   grep -r " -G " Pods/Target\ Support\ Files/gRPC*/*.xcconfig 2>/dev/null; then
+  echo "⚠️  Warning: Some -G flags may still remain"
 else
-  echo "❌ [eas-build-post-install] Failed: ios/ directory or ios-template/Podfile not found"
-  exit 1
+  echo "✅ Verification passed: No -G flags found"
 fi
 
 echo "✅ [eas-build-post-install] Hook completed successfully"
