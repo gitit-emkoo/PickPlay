@@ -181,47 +181,85 @@ post_install do |installer|
   
   puts "📊 [post_install] Scanned #{scanned_count} xcconfig files, cleaned #{cleaned_count} files"
   
-  # ✅ BoringSSL-GRPC.podspec 파일에서 -G 플래그 제거
-  puts "🔍 [post_install] Patching BoringSSL-GRPC.podspec file..."
+  # ✅ BoringSSL-GRPC.podspec 파일에서 -G 플래그 제거 (모든 가능한 위치 검색)
+  puts "🔍 [post_install] Searching for BoringSSL-GRPC podspec files..."
   
-  podspec_path = File.join(Dir.pwd, 'Pods', 'Local Podspecs', 'BoringSSL-GRPC.podspec.json')
-  if File.exist?(podspec_path)
-    podspec_content = File.read(podspec_path)
-    original_podspec = podspec_content.dup
-    
-    if podspec_content.include?('-G')
-      puts "  🔍 Found -G in BoringSSL-GRPC.podspec.json"
+  podspec_found = false
+  podspec_cleaned = false
+  
+  # 가능한 모든 podspec 파일 경로 검색
+  [
+    File.join(Dir.pwd, 'Pods', 'Local Podspecs', 'BoringSSL-GRPC.podspec.json'),
+    File.join(Dir.pwd, 'Pods', 'BoringSSL-GRPC', 'BoringSSL-GRPC.podspec'),
+    File.join(Dir.pwd, 'Pods', 'BoringSSL-GRPC', 'BoringSSL-GRPC.podspec.json')
+  ].each do |podspec_path|
+    if File.exist?(podspec_path)
+      podspec_found = true
+      puts "  📄 Found podspec at: #{podspec_path}"
       
-      # JSON 파일에서 -G 플래그 제거
-      podspec_content.gsub!(/ -G /, ' ')
-      podspec_content.gsub!(/ -G"/, '"')
-      podspec_content.gsub!(/" -G /, '" ')
-      podspec_content.gsub!(/-G /, '')
-      podspec_content.gsub!(/ -G/, '')
+      podspec_content = File.read(podspec_path)
       
-      File.write(podspec_path, podspec_content)
-      puts "  ✅ Patched BoringSSL-GRPC.podspec.json"
-    else
-      puts "  ℹ️  No -G flags found in podspec"
-    end
-  else
-    puts "  ⚠️  BoringSSL-GRPC.podspec.json not found at: #{podspec_path}"
-  end
-  
-  # ✅ Response 파일 캐시 무효화: DerivedData 삭제 강제
-  puts "🧹 [post_install] Forcing DerivedData cleanup for response file cache..."
-  
-  # Xcode 빌드 시 깨끗한 상태에서 시작하도록 강제
-  installer.pods_project.targets.each do |target|
-    if target.name.include?('BoringSSL') || target.name.include?('gRPC')
-      target.build_configurations.each do |config|
-        # Response 파일 재생성 강제를 위한 설정
-        config.build_settings['COMPILER_INDEX_STORE_ENABLE'] = 'NO'
+      if podspec_content.include?('-G')
+        puts "  🔍 Found -G in podspec file"
+        
+        # 모든 형태의 -G 플래그 제거
+        podspec_content.gsub!(/ -G /, ' ')
+        podspec_content.gsub!(/ -G"/, '"')
+        podspec_content.gsub!(/" -G /, '" ')
+        podspec_content.gsub!(/-G /, '')
+        podspec_content.gsub!(/ -G/, '')
+        podspec_content.gsub!(/'-G'/, "''")
+        podspec_content.gsub!(/"-G"/, '""')
+        
+        File.write(podspec_path, podspec_content)
+        podspec_cleaned = true
+        puts "  ✅ Patched podspec file"
       end
     end
   end
   
-  puts "✅ [post_install] Response file cache invalidation configured"
+  if !podspec_found
+    puts "  ⚠️  No BoringSSL-GRPC podspec files found in expected locations"
+  elsif !podspec_cleaned
+    puts "  ℹ️  No -G flags found in podspec files"
+  end
+  
+  # ✅ 최후의 수단: BoringSSL-GRPC Pod의 compiler_flags 직접 제거
+  puts "🔧 [post_install] Directly modifying BoringSSL-GRPC Pod compiler_flags..."
+  
+  installer.pod_targets.each do |pod_target|
+    if pod_target.name.include?('BoringSSL-GRPC')
+      puts "  📦 Processing pod: #{pod_target.name}"
+      
+      # Pod의 모든 파일 스펙에서 compiler_flags 수정
+      pod_target.file_accessors.each do |file_accessor|
+        spec_consumer = file_accessor.spec_consumer
+        
+        # compiler_flags가 있는지 확인하고 -G 제거
+        if spec_consumer.compiler_flags
+          original_flags = spec_consumer.compiler_flags.join(' ')
+          
+          if original_flags.include?('-G')
+            puts "    🔍 Found -G in compiler_flags: #{original_flags}"
+            
+            # -G 플래그 제거
+            new_flags = original_flags.split(' ').reject { |f| f == '-G' || f.start_with?('-G') }.join(' ')
+            
+            # 반영 (spec_consumer는 read-only이므로 build_settings를 통해 재설정)
+            pod_target.native_target.build_configurations.each do |config|
+              existing = config.build_settings['OTHER_CFLAGS'] || []
+              config.build_settings['OTHER_CFLAGS'] = (existing.to_s + ' ' + new_flags).split(' ').uniq.join(' ')
+              
+              existing_cpp = config.build_settings['OTHER_CPLUSPLUSFLAGS'] || []
+              config.build_settings['OTHER_CPLUSPLUSFLAGS'] = (existing_cpp.to_s + ' ' + new_flags).split(' ').uniq.join(' ')
+            end
+            
+            puts "    ✅ Replaced compiler_flags"
+          end
+        end
+      end
+    end
+  end
   
   # ✅ 중요: Pods 프로젝트를 저장하여 Xcode가 변경사항을 인식하도록 함
   puts "💾 [post_install] Saving Pods project to apply all changes..."
