@@ -66,9 +66,6 @@ target 'PickPlay' do
   pod 'FirebaseAuth', firebase_version
   pod 'FirebaseFirestore', firebase_version
   pod 'FirebaseFunctions', firebase_version
-  
-  # ✅ BoringSSL-GRPC 버전 강제 (0.0.32의 -G 플래그 버그 회피)
-  pod 'BoringSSL-GRPC', '0.0.24', :modular_headers => false
 end
 
 post_install do |installer|
@@ -184,12 +181,52 @@ post_install do |installer|
   
   puts "📊 [post_install] Scanned #{scanned_count} xcconfig files, cleaned #{cleaned_count} files"
   
-  # ✅ 중요: Pods 프로젝트를 저장하여 Xcode가 변경사항을 인식하도록 함
-  if cleaned_count > 0
-    puts "💾 [post_install] Saving Pods project to apply xcconfig changes..."
-    installer.pods_project.save
-    puts "✅ [post_install] Pods project saved successfully"
+  # ✅ BoringSSL-GRPC.podspec 파일에서 -G 플래그 제거
+  puts "🔍 [post_install] Patching BoringSSL-GRPC.podspec file..."
+  
+  podspec_path = File.join(Dir.pwd, 'Pods', 'Local Podspecs', 'BoringSSL-GRPC.podspec.json')
+  if File.exist?(podspec_path)
+    podspec_content = File.read(podspec_path)
+    original_podspec = podspec_content.dup
+    
+    if podspec_content.include?('-G')
+      puts "  🔍 Found -G in BoringSSL-GRPC.podspec.json"
+      
+      # JSON 파일에서 -G 플래그 제거
+      podspec_content.gsub!(/ -G /, ' ')
+      podspec_content.gsub!(/ -G"/, '"')
+      podspec_content.gsub!(/" -G /, '" ')
+      podspec_content.gsub!(/-G /, '')
+      podspec_content.gsub!(/ -G/, '')
+      
+      File.write(podspec_path, podspec_content)
+      puts "  ✅ Patched BoringSSL-GRPC.podspec.json"
+    else
+      puts "  ℹ️  No -G flags found in podspec"
+    end
+  else
+    puts "  ⚠️  BoringSSL-GRPC.podspec.json not found at: #{podspec_path}"
   end
+  
+  # ✅ Response 파일 캐시 무효화: DerivedData 삭제 강제
+  puts "🧹 [post_install] Forcing DerivedData cleanup for response file cache..."
+  
+  # Xcode 빌드 시 깨끗한 상태에서 시작하도록 강제
+  installer.pods_project.targets.each do |target|
+    if target.name.include?('BoringSSL') || target.name.include?('gRPC')
+      target.build_configurations.each do |config|
+        # Response 파일 재생성 강제를 위한 설정
+        config.build_settings['COMPILER_INDEX_STORE_ENABLE'] = 'NO'
+      end
+    end
+  end
+  
+  puts "✅ [post_install] Response file cache invalidation configured"
+  
+  # ✅ 중요: Pods 프로젝트를 저장하여 Xcode가 변경사항을 인식하도록 함
+  puts "💾 [post_install] Saving Pods project to apply all changes..."
+  installer.pods_project.save
+  puts "✅ [post_install] Pods project saved successfully"
     
   puts "✅ [post_install] Custom build settings applied successfully"
 end`;
