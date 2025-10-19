@@ -4,9 +4,6 @@
     "appVersionSource": "remote"
   },
   "build": {
-    "hooks": {
-      "postInstall": ".eas/build/eas-build-post-install.sh"
-    },
     "development": {
       "developmentClient": true,
       "distribution": "internal",

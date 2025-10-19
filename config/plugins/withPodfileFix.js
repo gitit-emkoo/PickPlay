@@ -125,6 +125,32 @@ post_install do |installer|
       config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
     end
   end
+  
+  # ✅ 추가: .xcconfig 파일에서도 -G 플래그 제거
+  puts "🧹 [post_install] Cleaning -G flags from xcconfig files..."
+  
+  xcconfig_path = File.join(Dir.pwd, 'Pods', 'Target Support Files')
+  
+  if Dir.exist?(xcconfig_path)
+    Dir.glob("#{xcconfig_path}/**/*.xcconfig").each do |file|
+      if file.include?('BoringSSL') || file.include?('gRPC')
+        content = File.read(file)
+        original_content = content.dup
+        
+        # -G 플래그 제거
+        content.gsub!(/ -G /, ' ')
+        content.gsub!(/ -G$/, '')
+        content.gsub!(/^-G /, '')
+        
+        if content != original_content
+          File.write(file, content)
+          puts "  🧹 Cleaned: #{File.basename(file)}"
+        end
+      end
+    end
+    
+    puts "✅ [post_install] xcconfig files cleaned"
+  end
     
   puts "✅ [post_install] Custom build settings applied successfully"
 end`;
