@@ -77,195 +77,108 @@ post_install do |installer|
   # Expo post install (must be after RN)
   Expo::PostInstall.install!(installer)
 
-  # ✅ BoringSSL-GRPC: -G 플래그 제거 (iOS arm64 타겟에서 에러)
+  # ✅ 3단계 방어: BoringSSL-GRPC -G 플래그 완전 제거
+  puts "🔧 [post_install] Applying 3-layer defense against -G flag..."
+  
+  # 🛡️ LAYER 1: Build Settings 수정
+  puts "🛡️  [Layer 1/3] Patching build_settings..."
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
       name = target.name.to_s
 
       if name.include?('BoringSSL') || name.include?('gRPC')
-        puts "🧩 [#{name}] Removing -G flags from compiler settings (#{config.name})"
+        puts "  🧩 [#{name}] (#{config.name})"
         
-        # GitHub Issue #36888 해결책: 기존 플래그 유지하면서 -G만 제거
+        # OTHER_CFLAGS, OTHER_CPLUSPLUSFLAGS에서 -GCC_WARN_INHIBIT_ALL_WARNINGS 제거
         ['OTHER_CFLAGS', 'OTHER_CPLUSPLUSFLAGS', 'WARNING_CFLAGS'].each do |key|
-          if config.build_settings[key]
-            original_flags = config.build_settings[key].to_s
-            
-            # -G 플래그가 있는지 확인
-            if original_flags.include?('-G')
-              puts "  🔍 Found -G in #{key}: #{original_flags}"
-              
-              # 문자열로 변환 후 -G 플래그만 제거 (공백 포함 모든 변형 처리)
-              flags = original_flags.dup
-              flags.gsub!(/ -G /, ' ')
-              flags.gsub!(/ -G$/, '')
-              flags.gsub!(/^-G /, '')
-              flags.gsub!(/\s+-G\s+/, ' ')
-              flags.gsub!(/-G\s/, ' ')
-              flags.gsub!(/\s-G/, '')
-              
-              config.build_settings[key] = flags.strip
-              puts "  ✅ Cleaned #{key}: #{flags.strip}"
+          current = config.build_settings[key]
+          
+          if current
+            # 배열 → 문자열 변환
+            if current.is_a?(Array)
+              current = current.join(' ')
             end
+            
+            # -GCC_WARN_INHIBIT_ALL_WARNINGS와 -G 제거
+            cleaned = current.to_s
+              .gsub('-GCC_WARN_INHIBIT_ALL_WARNINGS', '')
+              .gsub(/ -G /, ' ')
+              .gsub(/^-G /, '')
+              .gsub(/ -G$/, '')
+              .squeeze(' ')
+              .strip
+            
+            config.build_settings[key] = cleaned.empty? ? '$(inherited)' : cleaned
           end
         end
         
-        # SDK별 플래그도 동일하게 처리
-        ['OTHER_CFLAGS[sdk=iphoneos*]', 'OTHER_CPLUSPLUSFLAGS[sdk=iphoneos*]', 'WARNING_CFLAGS[sdk=iphoneos*]',
-         'OTHER_CFLAGS[sdk=iphonesimulator*]', 'OTHER_CPLUSPLUSFLAGS[sdk=iphonesimulator*]', 'WARNING_CFLAGS[sdk=iphonesimulator*]'].each do |key|
-          if config.build_settings[key]
-            original_flags = config.build_settings[key].to_s
-            
-            if original_flags.include?('-G')
-              puts "  🔍 Found -G in #{key}: #{original_flags}"
-              
-              flags = original_flags.dup
-              flags.gsub!(/ -G /, ' ')
-              flags.gsub!(/ -G$/, '')
-              flags.gsub!(/^-G /, '')
-              flags.gsub!(/\s+-G\s+/, ' ')
-              flags.gsub!(/-G\s/, ' ')
-              flags.gsub!(/\s-G/, '')
-              
-              config.build_settings[key] = flags.strip
-              puts "  ✅ Cleaned #{key}: #{flags.strip}"
-            end
-          end
-        end
+        # GCC_WARN_INHIBIT_ALL_WARNINGS는 별도 설정
+        config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
       end
 
-      # iOS 15.1+ deployment target 강제
+      # iOS 15.1+ deployment target
       config.build_settings.delete 'IPHONEOS_DEPLOYMENT_TARGET'
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
 
-      # ✅ 전역 빌드 안정성 설정
+      # 전역 빌드 안정성
       config.build_settings['ENABLE_BITCODE'] = 'NO'
       config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
     end
   end
+  puts "  ✅ Layer 1 complete"
   
-  # ✅ .xcconfig 파일에서 -G 플래그 완전 제거 (전수조사 방식)
-  puts "🧹 [post_install] Scanning ALL xcconfig files for -G flags..."
-  
-  pods_path = File.join(Dir.pwd, 'Pods')
-  cleaned_count = 0
-  scanned_count = 0
-  
-  if Dir.exist?(pods_path)
-    # Pods 디렉토리 전체에서 .xcconfig 파일 검색
-    Dir.glob("#{pods_path}/**/*.xcconfig").each do |xcconfig_file|
-      scanned_count += 1
-      
-      # BoringSSL 또는 gRPC 관련 파일만 처리
-      if xcconfig_file.include?('BoringSSL') || xcconfig_file.include?('gRPC')
-        content = File.read(xcconfig_file)
-        original = content.dup
-        
-        # 파일에 -G 플래그가 있는지 확인
-        if content.include?('-G')
-          puts "  🔍 Found -G in: #{File.basename(xcconfig_file)}"
-          
-          # 모든 형태의 -G 플래그 제거
-          content.gsub!(/ -G /, ' ')
-          content.gsub!(/ -G$/, '')
-          content.gsub!(/^-G /, '')
-          content.gsub!(/-G\s/, '')
-          content.gsub!(/\s-G/, '')
-          
-          File.write(xcconfig_file, content)
-          cleaned_count += 1
-          puts "  ✅ Cleaned: #{File.basename(xcconfig_file)}"
-        end
-      end
-    end
-  end
-  
-  puts "📊 [post_install] Scanned #{scanned_count} xcconfig files, cleaned #{cleaned_count} files"
-  
-  # ✅ BoringSSL-GRPC.podspec 파일에서 -G 플래그 제거 (모든 가능한 위치 검색)
-  puts "🔍 [post_install] Searching for BoringSSL-GRPC podspec files..."
-  
-  podspec_found = false
-  podspec_cleaned = false
-  
-  # 가능한 모든 podspec 파일 경로 검색
-  [
-    File.join(Dir.pwd, 'Pods', 'Local Podspecs', 'BoringSSL-GRPC.podspec.json'),
-    File.join(Dir.pwd, 'Pods', 'BoringSSL-GRPC', 'BoringSSL-GRPC.podspec'),
-    File.join(Dir.pwd, 'Pods', 'BoringSSL-GRPC', 'BoringSSL-GRPC.podspec.json')
-  ].each do |podspec_path|
-    if File.exist?(podspec_path)
-      podspec_found = true
-      puts "  📄 Found podspec at: #{podspec_path}"
-      
-      podspec_content = File.read(podspec_path)
-      
-      if podspec_content.include?('-G')
-        puts "  🔍 Found -G in podspec file"
-        
-        # 모든 형태의 -G 플래그 제거
-        podspec_content.gsub!(/ -G /, ' ')
-        podspec_content.gsub!(/ -G"/, '"')
-        podspec_content.gsub!(/" -G /, '" ')
-        podspec_content.gsub!(/-G /, '')
-        podspec_content.gsub!(/ -G/, '')
-        podspec_content.gsub!(/'-G'/, "''")
-        podspec_content.gsub!(/"-G"/, '""')
-        
-        File.write(podspec_path, podspec_content)
-        podspec_cleaned = true
-        puts "  ✅ Patched podspec file"
-      end
-    end
-  end
-  
-  if !podspec_found
-    puts "  ⚠️  No BoringSSL-GRPC podspec files found in expected locations"
-  elsif !podspec_cleaned
-    puts "  ℹ️  No -G flags found in podspec files"
-  end
-  
-  # ✅ 최후의 수단: -GCC_WARN_INHIBIT_ALL_WARNINGS를 안전한 형태로 변경
-  puts "🔧 [post_install] Fixing -GCC_WARN_INHIBIT_ALL_WARNINGS in BoringSSL-GRPC..."
-  
-  # installer.pods_project.targets가 실제 네이티브 타겟
-  installer.pods_project.targets.each do |target|
-    if target.name.include?('BoringSSL') || target.name.include?('gRPC')
-      target.build_configurations.each do |config|
-        # -GCC_WARN_INHIBIT_ALL_WARNINGS를 GCC_WARN_INHIBIT_ALL_WARNINGS=YES로 변경
-        ['OTHER_CFLAGS', 'OTHER_CPLUSPLUSFLAGS', 'WARNING_CFLAGS'].each do |key|
-          if config.build_settings[key]
-            flags = config.build_settings[key].to_s
-            
-            if flags.include?('-GCC_WARN_INHIBIT_ALL_WARNINGS')
-              puts "  🔍 Found -GCC_WARN_INHIBIT_ALL_WARNINGS in #{target.name}/#{key}"
-              
-              # -GCC_WARN_INHIBIT_ALL_WARNINGS 플래그 제거
-              flags.gsub!('-GCC_WARN_INHIBIT_ALL_WARNINGS', '')
-              flags.gsub!(/\s+/, ' ')
-              config.build_settings[key] = flags.strip
-              
-              # 대신 build_settings로 직접 설정
-              config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
-              
-              puts "  ✅ Replaced with GCC_WARN_INHIBIT_ALL_WARNINGS=YES"
-            end
-          end
-        end
-      end
-    end
-  end
-  
-  # ✅ 중요: Pods 프로젝트를 저장하여 Xcode가 변경사항을 인식하도록 함
-  puts "💾 [post_install] Saving Pods project to apply all changes..."
-  installer.pods_project.save
-  puts "✅ [post_install] Pods project saved successfully"
+  # 🛡️ LAYER 2: .xcconfig 파일 수정
+  puts "🛡️  [Layer 2/3] Cleaning .xcconfig files..."
+  xcconfig_count = 0
+  Dir.glob(File.join(Dir.pwd, 'Pods', '**', '*.xcconfig')).each do |file|
+    next unless file.include?('BoringSSL') || file.include?('gRPC')
     
-  puts "✅ [post_install] Custom build settings applied successfully"
+    content = File.read(file)
+    if content.include?('-GCC_WARN_INHIBIT_ALL_WARNINGS') || content.include?(' -G ')
+      original = content.dup
+      content.gsub!(/-GCC_WARN_INHIBIT_ALL_WARNINGS/, '')
+      content.gsub!(/ -G /, ' ')
+      content.gsub!(/^-G /, '')
+      content.gsub!(/ -G$/, '')
+      
+      if content != original
+        File.write(file, content)
+        xcconfig_count += 1
+        puts "  🧹 Cleaned: #{File.basename(file)}"
+      end
+    end
+  end
+  puts "  ✅ Layer 2 complete (#{xcconfig_count} files cleaned)"
+  
+  # 🛡️ LAYER 3: Xcode 프로젝트 파일 직접 수정
+  puts "🛡️  [Layer 3/3] Patching Xcode project build settings..."
+  
+  # Pods.xcodeproj/project.pbxproj에서 -GCC_WARN_INHIBIT_ALL_WARNINGS 제거
+  project_file = File.join(Dir.pwd, 'Pods', 'Pods.xcodeproj', 'project.pbxproj')
+  if File.exist?(project_file)
+    pbxproj = File.read(project_file)
+    original_pbx = pbxproj.dup
+    
+    # buildSettings 섹션에서 -GCC_WARN_INHIBIT_ALL_WARNINGS 제거
+    pbxproj.gsub!(/"(-GCC_WARN_INHIBIT_ALL_WARNINGS|\\s-G\\s)"/, '""')
+    pbxproj.gsub!(/-GCC_WARN_INHIBIT_ALL_WARNINGS/, '')
+    
+    if pbxproj != original_pbx
+      File.write(project_file, pbxproj)
+      puts "  🧹 Cleaned: project.pbxproj"
+    end
+  end
+  puts "  ✅ Layer 3 complete"
+  
+  # ✅ Pods 프로젝트 저장
+  puts "💾 Saving Pods project..."
+  installer.pods_project.save
+  puts "✅ 3-layer defense applied successfully!"
 end`;
         
         // 새로운 Podfile 저장
         fs.writeFileSync(podfilePath, newPodfileContent);
-        console.log('✅ [withPodfileFix] Podfile completely replaced with fixed version');
+        console.log('✅ [withPodfileFix] Podfile replaced with 3-layer defense against -G flag');
         
         // 검증
         const updatedContent = fs.readFileSync(podfilePath, 'utf8');
