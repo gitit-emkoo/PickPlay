@@ -185,26 +185,54 @@ post_install do |installer|
            end
          end
          
-         # 3. Xcode 프로젝트 파일에서도 -G 플래그 제거
-         project_path = File.join(Dir.pwd, 'Pods', 'Pods.xcodeproj', 'project.pbxproj')
-         if File.exist?(project_path)
-           puts "🔍 [post_install] Checking Xcode project file for -G flags..."
-           content = File.read(project_path)
-           original_content = content.dup
-           
-           # project.pbxproj에서 -G 플래그 제거
-           content.gsub!(/-G\s+/, '')
-           content.gsub!(/\s+-G\s+/, ' ')
-           content.gsub!(/\s+-G(?=\s|;|$)/, ' ')
-           
-           if content != original_content
-             File.write(project_path, content)
-             cleaned_files += 1
-             puts "  ✅ Cleaned Xcode project file"
-           end
-         end
-         
-         puts "✅ [post_install] ALL sources cleaned (#{cleaned_files} files modified)"
+  # 3. Xcode 프로젝트 파일에서도 -G 플래그 제거
+  project_path = File.join(Dir.pwd, 'Pods', 'Pods.xcodeproj', 'project.pbxproj')
+  if File.exist?(project_path)
+    puts "🔍 [post_install] Checking Xcode project file for -G flags..."
+    content = File.read(project_path)
+    original_content = content.dup
+    
+    # project.pbxproj에서 -G 플래그 제거
+    content.gsub!(/-G\s+/, '')
+    content.gsub!(/\s+-G\s+/, ' ')
+    content.gsub!(/\s+-G(?=\s|;|$)/, ' ')
+    
+    if content != original_content
+      File.write(project_path, content)
+      cleaned_files += 1
+      puts "  ✅ Cleaned Xcode project file"
+    end
+  end
+  
+  # 4. 추가: 모든 Pods 하위 디렉토리에서 -G 플래그 검색 및 제거
+  puts "🔍 [post_install] Deep scanning ALL Pods files for -G flags..."
+  Dir.glob("#{pods_path}/**/*").each do |file|
+    next unless File.file?(file)
+    next unless file.include?('BoringSSL') || file.include?('gRPC')
+    
+    # 텍스트 파일만 처리 (바이너리 파일 제외)
+    begin
+      content = File.read(file)
+      original_content = content.dup
+      
+      # -G 플래그 제거
+      content.gsub!(/-G\s+/, '')
+      content.gsub!(/\s+-G\s+/, ' ')
+      content.gsub!(/\s+-G$/, '')
+      content.gsub!(/-G$/, '')
+      
+      if content != original_content
+        File.write(file, content)
+        cleaned_files += 1
+        puts "  ✅ Cleaned: #{File.basename(file)}"
+      end
+    rescue => e
+      # 바이너리 파일이나 읽기 불가능한 파일은 무시
+      next
+    end
+  end
+  
+  puts "✅ [post_install] ALL sources cleaned (#{cleaned_files} files modified)"
     
   puts "✅ [post_install] Custom build settings applied successfully"
 end`;
