@@ -50,3 +50,21 @@ module.exports = (config) => {
   ]);
 };
 
+
+          console.log('✅ [withCustomPodfile] BoringSSL-GRPC version pinning VERIFIED');
+        } else {
+          console.warn('⚠️  [withCustomPodfile] BoringSSL-GRPC pinning NOT FOUND in copied Podfile!');
+        }
+      } else {
+        console.error('❌ [withCustomPodfile] Podfile template not found at', src);
+        throw new Error(`Podfile template not found: ${src}`);
+      }
+      
+      console.log('\n========================================');
+      console.log('✅ [withCustomPodfile] PLUGIN COMPLETED');
+      console.log('========================================\n');
+      
+      return config;
+    },
+  ]);
+};

@@ -48,3 +48,21 @@ else
 fi
 
 echo "✅ [eas-build-post-install] Hook completed successfully"
+
+  sed -i '' 's/ -G$//g' "$file" || true
+  sed -i '' 's/^-G //g' "$file" || true
+  echo "✅ Cleaned: $file"
+done
+
+echo "✅ [eas-build-post-install] -G flags removed from all xcconfig files"
+
+# 검증: -G 플래그가 남아있는지 확인
+echo "🔍 Verifying: Checking for remaining -G flags..."
+if grep -r " -G " Pods/Target\ Support\ Files/BoringSSL-GRPC/*.xcconfig 2>/dev/null || \
+   grep -r " -G " Pods/Target\ Support\ Files/gRPC*/*.xcconfig 2>/dev/null; then
+  echo "⚠️  Warning: Some -G flags may still remain"
+else
+  echo "✅ Verification passed: No -G flags found"
+fi
+
+echo "✅ [eas-build-post-install] Hook completed successfully"

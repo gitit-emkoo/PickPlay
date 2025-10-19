@@ -83,37 +83,32 @@ post_install do |installer|
       name = target.name.to_s
 
       if name.include?('BoringSSL') || name.include?('gRPC')
-        # 모든 C/C++ 플래그 키에서 -G 제거
-        flag_keys = [
-          'OTHER_CFLAGS',
-          'OTHER_CPLUSPLUSFLAGS', 
-          'WARNING_CFLAGS',
-          'OTHER_CFLAGS[sdk=iphoneos*]',
-          'OTHER_CPLUSPLUSFLAGS[sdk=iphoneos*]',
-          'WARNING_CFLAGS[sdk=iphoneos*]',
-          'OTHER_CFLAGS[sdk=iphonesimulator*]',
-          'OTHER_CPLUSPLUSFLAGS[sdk=iphonesimulator*]'
-        ]
+        puts "🧩 [#{name}] Removing -G flags from compiler settings (#{config.name})"
         
-        flag_keys.each do |key|
-          next unless config.build_settings[key]
-          
-          flags = config.build_settings[key]
-          
-          # 배열 처리
-          if flags.is_a?(Array)
-            flags.reject! { |f| f.to_s =~ /-G(\\s|$)/ }
-            config.build_settings[key] = flags.empty? ? ['$(inherited)'] : flags
-          # 문자열 처리
-          elsif flags.is_a?(String)
-            flags.gsub!(/ -G /, ' ')
-            flags.gsub!(/ -G$/, '')
-            flags.gsub!(/^-G /, '')
-            config.build_settings[key] = flags.strip.empty? ? '$(inherited)' : flags
+        # GitHub Issue #36888 해결책: 기존 플래그 유지하면서 -G만 제거
+        ['OTHER_CFLAGS', 'OTHER_CPLUSPLUSFLAGS', 'WARNING_CFLAGS'].each do |key|
+          if config.build_settings[key]
+            # 문자열로 변환 후 -G 플래그만 제거 (공백 포함 모든 변형 처리)
+            flags = config.build_settings[key].to_s
+            flags = flags.gsub(/ -G /, ' ')
+            flags = flags.gsub(/ -G$/, '')
+            flags = flags.gsub(/^-G /, '')
+            flags = flags.gsub(/\s+-G\s+/, ' ')
+            config.build_settings[key] = flags.strip
+            
+            puts "  ✅ Cleaned #{key}: #{flags.strip}"
           end
         end
-
-        puts "🧩 [#{name}] Scrubbed -G flags from all build settings (#{config.name})"
+        
+        # SDK별 플래그도 동일하게 처리
+        ['OTHER_CFLAGS[sdk=iphoneos*]', 'OTHER_CPLUSPLUSFLAGS[sdk=iphoneos*]', 'WARNING_CFLAGS[sdk=iphoneos*]',
+         'OTHER_CFLAGS[sdk=iphonesimulator*]', 'OTHER_CPLUSPLUSFLAGS[sdk=iphonesimulator*]', 'WARNING_CFLAGS[sdk=iphonesimulator*]'].each do |key|
+          if config.build_settings[key]
+            flags = config.build_settings[key].to_s
+            flags = flags.gsub(/ -G /, ' ').gsub(/ -G$/, '').gsub(/^-G /, '').gsub(/\s+-G\s+/, ' ')
+            config.build_settings[key] = flags.strip
+          end
+        end
       end
 
       # iOS 15.1+ deployment target 강제
@@ -126,113 +121,38 @@ post_install do |installer|
     end
   end
   
-         # ✅ 추가: 모든 가능한 곳에서 -G 플래그 제거 (완전한 버전)
-         puts "🧹 [post_install] Cleaning -G flags from ALL possible sources..."
-         
-         # 1. .xcconfig 파일들
-         xcconfig_path = File.join(Dir.pwd, 'Pods', 'Target Support Files')
-         puts "📂 [post_install] Looking in: #{xcconfig_path}"
-         
-         cleaned_files = 0
-         if Dir.exist?(xcconfig_path)
-           Dir.glob("#{xcconfig_path}/**/*.xcconfig").each do |file|
-             if file.include?('BoringSSL') || file.include?('gRPC')
-               content = File.read(file)
-               original_content = content.dup
-               
-               puts "  🔍 Checking: #{File.basename(file)}"
-               
-               # 더 강력한 -G 플래그 제거 (모든 경우의 수 커버)
-               content.gsub!(/\s+-G\s+/, ' ')
-               content.gsub!(/\s+-G$/, '')
-               content.gsub!(/^-G\s+/, '')
-               content.gsub!(/\s+-G(?=\s|$)/, ' ')
-               content.gsub!(/-G\s+/, '')
-               content.gsub!(/\s+/, ' ')
-               content.strip!
-               
-               if content != original_content
-                 File.write(file, content)
-                 cleaned_files += 1
-                 puts "  ✅ Cleaned: #{File.basename(file)}"
-               else
-                 puts "  ℹ️  No -G flags found in: #{File.basename(file)}"
-               end
-             end
-           end
-         end
-         
-         # 2. Podspec 파일들에서도 -G 플래그 제거
-         pods_path = File.join(Dir.pwd, 'Pods')
-         if Dir.exist?(pods_path)
-           puts "🔍 [post_install] Checking podspec files for -G flags..."
-           Dir.glob("#{pods_path}/**/*.podspec").each do |file|
-             if file.include?('BoringSSL') || file.include?('gRPC')
-               content = File.read(file)
-               original_content = content.dup
-               
-               # podspec에서 -G 플래그 제거
-               content.gsub!(/-G\s+/, '')
-               content.gsub!(/\s+-G\s+/, ' ')
-               content.gsub!(/\s+-G$/, '')
-               
-               if content != original_content
-                 File.write(file, content)
-                 cleaned_files += 1
-                 puts "  ✅ Cleaned podspec: #{File.basename(file)}"
-               end
-             end
-           end
-         end
-         
-  # 3. Xcode 프로젝트 파일에서도 -G 플래그 제거
-  project_path = File.join(Dir.pwd, 'Pods', 'Pods.xcodeproj', 'project.pbxproj')
-  if File.exist?(project_path)
-    puts "🔍 [post_install] Checking Xcode project file for -G flags..."
-    content = File.read(project_path)
-    original_content = content.dup
-    
-    # project.pbxproj에서 -G 플래그 제거
-    content.gsub!(/-G\s+/, '')
-    content.gsub!(/\s+-G\s+/, ' ')
-    content.gsub!(/\s+-G(?=\s|;|$)/, ' ')
-    
-    if content != original_content
-      File.write(project_path, content)
-      cleaned_files += 1
-      puts "  ✅ Cleaned Xcode project file"
-    end
-  end
+  # ✅ .xcconfig 파일에서 -G 플래그 완전 제거
+  puts "🧹 [post_install] Cleaning -G flags from xcconfig files..."
   
-  # 4. 추가: 모든 Pods 하위 디렉토리에서 -G 플래그 검색 및 제거
-  puts "🔍 [post_install] Deep scanning ALL Pods files for -G flags..."
-  Dir.glob("#{pods_path}/**/*").each do |file|
-    next unless File.file?(file)
-    next unless file.include?('BoringSSL') || file.include?('gRPC')
-    
-    # 텍스트 파일만 처리 (바이너리 파일 제외)
-    begin
-      content = File.read(file)
-      original_content = content.dup
-      
-      # -G 플래그 제거
-      content.gsub!(/-G\s+/, '')
-      content.gsub!(/\s+-G\s+/, ' ')
-      content.gsub!(/\s+-G$/, '')
-      content.gsub!(/-G$/, '')
-      
-      if content != original_content
-        File.write(file, content)
-        cleaned_files += 1
-        puts "  ✅ Cleaned: #{File.basename(file)}"
+  xcconfig_path = File.join(Dir.pwd, 'Pods', 'Target Support Files')
+  cleaned_count = 0
+  
+  if Dir.exist?(xcconfig_path)
+    ['BoringSSL-GRPC', 'gRPC-C++', 'gRPC-Core'].each do |pod_name|
+      ['debug', 'release'].each do |config_type|
+        xcconfig_file = File.join(xcconfig_path, pod_name, "#{pod_name}.#{config_type}.xcconfig")
+        
+        if File.exist?(xcconfig_file)
+          content = File.read(xcconfig_file)
+          original = content.dup
+          
+          # 모든 형태의 -G 플래그 제거 (간단하고 확실한 방법)
+          content.gsub!(/ -G /, ' ')
+          content.gsub!(/ -G$/, '')
+          content.gsub!(/^-G /, '')
+          content.gsub!(/-G(?=\s)/, '')
+          
+          if content != original
+            File.write(xcconfig_file, content)
+            cleaned_count += 1
+            puts "  ✅ Cleaned: #{pod_name}.#{config_type}.xcconfig"
+          end
+        end
       end
-    rescue => e
-      # 바이너리 파일이나 읽기 불가능한 파일은 무시
-      next
     end
   end
   
-  puts "✅ [post_install] ALL sources cleaned (#{cleaned_files} files modified)"
+  puts "✅ [post_install] Cleaned #{cleaned_count} xcconfig files"
     
   puts "✅ [post_install] Custom build settings applied successfully"
 end`;
@@ -243,7 +163,8 @@ end`;
         
         // 검증
         const updatedContent = fs.readFileSync(podfilePath, 'utf8');
-        if (updatedContent.includes('BoringSSL') && updatedContent.includes('-G')) {
+        const hasBoringSSLLogic = updatedContent.includes('BoringSSL') && updatedContent.includes('Resetting compiler flags');
+        if (hasBoringSSLLogic) {
           console.log('✅ [withPodfileFix] -G flag removal logic VERIFIED in new Podfile');
         } else {
           console.warn('⚠️  [withPodfileFix] -G flag removal logic NOT FOUND in new Podfile!');
