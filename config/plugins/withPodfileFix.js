@@ -224,37 +224,31 @@ post_install do |installer|
     puts "  ℹ️  No -G flags found in podspec files"
   end
   
-  # ✅ 최후의 수단: BoringSSL-GRPC Pod의 compiler_flags 직접 제거
-  puts "🔧 [post_install] Directly modifying BoringSSL-GRPC Pod compiler_flags..."
+  # ✅ 최후의 수단: -GCC_WARN_INHIBIT_ALL_WARNINGS를 안전한 형태로 변경
+  puts "🔧 [post_install] Fixing -GCC_WARN_INHIBIT_ALL_WARNINGS in BoringSSL-GRPC..."
   
-  installer.pod_targets.each do |pod_target|
-    if pod_target.name.include?('BoringSSL-GRPC')
-      puts "  📦 Processing pod: #{pod_target.name}"
-      
-      # Pod의 모든 파일 스펙에서 compiler_flags 수정
-      pod_target.file_accessors.each do |file_accessor|
-        spec_consumer = file_accessor.spec_consumer
-        
-        # compiler_flags가 있는지 확인하고 -G 제거
-        if spec_consumer.compiler_flags
-          original_flags = spec_consumer.compiler_flags.join(' ')
-          
-          if original_flags.include?('-G')
-            puts "    🔍 Found -G in compiler_flags: #{original_flags}"
+  # installer.pods_project.targets가 실제 네이티브 타겟
+  installer.pods_project.targets.each do |target|
+    if target.name.include?('BoringSSL') || target.name.include?('gRPC')
+      target.build_configurations.each do |config|
+        # -GCC_WARN_INHIBIT_ALL_WARNINGS를 GCC_WARN_INHIBIT_ALL_WARNINGS=YES로 변경
+        ['OTHER_CFLAGS', 'OTHER_CPLUSPLUSFLAGS', 'WARNING_CFLAGS'].each do |key|
+          if config.build_settings[key]
+            flags = config.build_settings[key].to_s
             
-            # -G 플래그 제거
-            new_flags = original_flags.split(' ').reject { |f| f == '-G' || f.start_with?('-G') }.join(' ')
-            
-            # 반영 (spec_consumer는 read-only이므로 build_settings를 통해 재설정)
-            pod_target.native_target.build_configurations.each do |config|
-              existing = config.build_settings['OTHER_CFLAGS'] || []
-              config.build_settings['OTHER_CFLAGS'] = (existing.to_s + ' ' + new_flags).split(' ').uniq.join(' ')
+            if flags.include?('-GCC_WARN_INHIBIT_ALL_WARNINGS')
+              puts "  🔍 Found -GCC_WARN_INHIBIT_ALL_WARNINGS in #{target.name}/#{key}"
               
-              existing_cpp = config.build_settings['OTHER_CPLUSPLUSFLAGS'] || []
-              config.build_settings['OTHER_CPLUSPLUSFLAGS'] = (existing_cpp.to_s + ' ' + new_flags).split(' ').uniq.join(' ')
+              # -GCC_WARN_INHIBIT_ALL_WARNINGS 플래그 제거
+              flags.gsub!('-GCC_WARN_INHIBIT_ALL_WARNINGS', '')
+              flags.gsub!(/\s+/, ' ')
+              config.build_settings[key] = flags.strip
+              
+              # 대신 build_settings로 직접 설정
+              config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
+              
+              puts "  ✅ Replaced with GCC_WARN_INHIBIT_ALL_WARNINGS=YES"
             end
-            
-            puts "    ✅ Replaced compiler_flags"
           end
         end
       end
@@ -275,11 +269,11 @@ end`;
         
         // 검증
         const updatedContent = fs.readFileSync(podfilePath, 'utf8');
-        const hasBoringSSLLogic = updatedContent.includes('BoringSSL') && updatedContent.includes('Resetting compiler flags');
+        const hasBoringSSLLogic = updatedContent.includes('BoringSSL') && updatedContent.includes('GCC_WARN_INHIBIT_ALL_WARNINGS');
         if (hasBoringSSLLogic) {
-          console.log('✅ [withPodfileFix] -G flag removal logic VERIFIED in new Podfile');
+          console.log('✅ [withPodfileFix] -GCC_WARN_INHIBIT_ALL_WARNINGS fix logic VERIFIED in new Podfile');
         } else {
-          console.warn('⚠️  [withPodfileFix] -G flag removal logic NOT FOUND in new Podfile!');
+          console.warn('⚠️  [withPodfileFix] -GCC_WARN_INHIBIT_ALL_WARNINGS fix logic NOT FOUND in new Podfile!');
         }
       } else {
         console.error('❌ [withPodfileFix] Podfile not found at', podfilePath);
