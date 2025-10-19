@@ -88,15 +88,24 @@ post_install do |installer|
         # GitHub Issue #36888 해결책: 기존 플래그 유지하면서 -G만 제거
         ['OTHER_CFLAGS', 'OTHER_CPLUSPLUSFLAGS', 'WARNING_CFLAGS'].each do |key|
           if config.build_settings[key]
-            # 문자열로 변환 후 -G 플래그만 제거 (공백 포함 모든 변형 처리)
-            flags = config.build_settings[key].to_s
-            flags = flags.gsub(/ -G /, ' ')
-            flags = flags.gsub(/ -G$/, '')
-            flags = flags.gsub(/^-G /, '')
-            flags = flags.gsub(/\s+-G\s+/, ' ')
-            config.build_settings[key] = flags.strip
+            original_flags = config.build_settings[key].to_s
             
-            puts "  ✅ Cleaned #{key}: #{flags.strip}"
+            # -G 플래그가 있는지 확인
+            if original_flags.include?('-G')
+              puts "  🔍 Found -G in #{key}: #{original_flags}"
+              
+              # 문자열로 변환 후 -G 플래그만 제거 (공백 포함 모든 변형 처리)
+              flags = original_flags.dup
+              flags.gsub!(/ -G /, ' ')
+              flags.gsub!(/ -G$/, '')
+              flags.gsub!(/^-G /, '')
+              flags.gsub!(/\s+-G\s+/, ' ')
+              flags.gsub!(/-G\s/, ' ')
+              flags.gsub!(/\s-G/, '')
+              
+              config.build_settings[key] = flags.strip
+              puts "  ✅ Cleaned #{key}: #{flags.strip}"
+            end
           end
         end
         
@@ -104,9 +113,22 @@ post_install do |installer|
         ['OTHER_CFLAGS[sdk=iphoneos*]', 'OTHER_CPLUSPLUSFLAGS[sdk=iphoneos*]', 'WARNING_CFLAGS[sdk=iphoneos*]',
          'OTHER_CFLAGS[sdk=iphonesimulator*]', 'OTHER_CPLUSPLUSFLAGS[sdk=iphonesimulator*]', 'WARNING_CFLAGS[sdk=iphonesimulator*]'].each do |key|
           if config.build_settings[key]
-            flags = config.build_settings[key].to_s
-            flags = flags.gsub(/ -G /, ' ').gsub(/ -G$/, '').gsub(/^-G /, '').gsub(/\s+-G\s+/, ' ')
-            config.build_settings[key] = flags.strip
+            original_flags = config.build_settings[key].to_s
+            
+            if original_flags.include?('-G')
+              puts "  🔍 Found -G in #{key}: #{original_flags}"
+              
+              flags = original_flags.dup
+              flags.gsub!(/ -G /, ' ')
+              flags.gsub!(/ -G$/, '')
+              flags.gsub!(/^-G /, '')
+              flags.gsub!(/\s+-G\s+/, ' ')
+              flags.gsub!(/-G\s/, ' ')
+              flags.gsub!(/\s-G/, '')
+              
+              config.build_settings[key] = flags.strip
+              puts "  ✅ Cleaned #{key}: #{flags.strip}"
+            end
           end
         end
       end
@@ -121,38 +143,43 @@ post_install do |installer|
     end
   end
   
-  # ✅ .xcconfig 파일에서 -G 플래그 완전 제거
-  puts "🧹 [post_install] Cleaning -G flags from xcconfig files..."
+  # ✅ .xcconfig 파일에서 -G 플래그 완전 제거 (전수조사 방식)
+  puts "🧹 [post_install] Scanning ALL xcconfig files for -G flags..."
   
-  xcconfig_path = File.join(Dir.pwd, 'Pods', 'Target Support Files')
+  pods_path = File.join(Dir.pwd, 'Pods')
   cleaned_count = 0
+  scanned_count = 0
   
-  if Dir.exist?(xcconfig_path)
-    ['BoringSSL-GRPC', 'gRPC-C++', 'gRPC-Core'].each do |pod_name|
-      ['debug', 'release'].each do |config_type|
-        xcconfig_file = File.join(xcconfig_path, pod_name, "#{pod_name}.#{config_type}.xcconfig")
+  if Dir.exist?(pods_path)
+    # Pods 디렉토리 전체에서 .xcconfig 파일 검색
+    Dir.glob("#{pods_path}/**/*.xcconfig").each do |xcconfig_file|
+      scanned_count += 1
+      
+      # BoringSSL 또는 gRPC 관련 파일만 처리
+      if xcconfig_file.include?('BoringSSL') || xcconfig_file.include?('gRPC')
+        content = File.read(xcconfig_file)
+        original = content.dup
         
-        if File.exist?(xcconfig_file)
-          content = File.read(xcconfig_file)
-          original = content.dup
+        # 파일에 -G 플래그가 있는지 확인
+        if content.include?('-G')
+          puts "  🔍 Found -G in: #{File.basename(xcconfig_file)}"
           
-          # 모든 형태의 -G 플래그 제거 (간단하고 확실한 방법)
+          # 모든 형태의 -G 플래그 제거
           content.gsub!(/ -G /, ' ')
           content.gsub!(/ -G$/, '')
           content.gsub!(/^-G /, '')
-          content.gsub!(/-G(?=\s)/, '')
+          content.gsub!(/-G\s/, '')
+          content.gsub!(/\s-G/, '')
           
-          if content != original
-            File.write(xcconfig_file, content)
-            cleaned_count += 1
-            puts "  ✅ Cleaned: #{pod_name}.#{config_type}.xcconfig"
-          end
+          File.write(xcconfig_file, content)
+          cleaned_count += 1
+          puts "  ✅ Cleaned: #{File.basename(xcconfig_file)}"
         end
       end
     end
   end
   
-  puts "✅ [post_install] Cleaned #{cleaned_count} xcconfig files"
+  puts "📊 [post_install] Scanned #{scanned_count} xcconfig files, cleaned #{cleaned_count} files"
     
   puts "✅ [post_install] Custom build settings applied successfully"
 end`;
