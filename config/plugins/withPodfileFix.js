@@ -180,6 +180,13 @@ post_install do |installer|
   end
   
   puts "📊 [post_install] Scanned #{scanned_count} xcconfig files, cleaned #{cleaned_count} files"
+  
+  # ✅ 중요: Pods 프로젝트를 저장하여 Xcode가 변경사항을 인식하도록 함
+  if cleaned_count > 0
+    puts "💾 [post_install] Saving Pods project to apply xcconfig changes..."
+    installer.pods_project.save
+    puts "✅ [post_install] Pods project saved successfully"
+  end
     
   puts "✅ [post_install] Custom build settings applied successfully"
 end`;
