@@ -77,14 +77,14 @@ post_install do |installer|
   # Expo post install (must be after RN)
   Expo::PostInstall.install!(installer)
 
-  # ✅ 4단계 방어: BoringSSL-GRPC -G 플래그 완전 제거
+  # ✅ 3단계 방어: BoringSSL-GRPC -G 플래그 완전 제거
   puts "=" * 80
-  puts "🔧 [post_install] Applying 4-LAYER DEFENSE against -G flag..."
+  puts "🔧 [post_install] Applying 3-LAYER DEFENSE against -G flag..."
   puts "=" * 80
   
   # 🛡️ LAYER 1: xcconfig 파일 정화 (Pass 1 - save 전, 최우선!)
   begin
-    puts "🛡️  [Layer 1/4] Cleaning xcconfig files (Pass 1)..."
+    puts "🛡️  [Layer 1/3] Cleaning xcconfig files (Pass 1)..."
     
     xcconfig_count = 0
     # CWD가 이미 ios 폴더이므로 'ios' 제거
@@ -123,7 +123,7 @@ post_install do |installer|
   
   # 🛡️ LAYER 2: pbxproj 정화
   begin
-    puts "🛡️  [Layer 2/4] Cleaning project.pbxproj..."
+    puts "🛡️  [Layer 2/3] Cleaning project.pbxproj..."
     
     # CWD가 이미 ios 폴더이므로 'ios' 제거
     project_file = File.join(Dir.pwd, 'Pods', 'Pods.xcodeproj', 'project.pbxproj')
@@ -157,7 +157,7 @@ post_install do |installer|
   
   # 🛡️ LAYER 3: xcconfig 재정화 (Pass 2 - save 후)
   begin
-    puts "🛡️  [Layer 3/4] Re-cleaning xcconfig files (Pass 2)..."
+    puts "🛡️  [Layer 3/3] Re-cleaning xcconfig files (Pass 2)..."
     
     xcconfig_count = 0
     # CWD가 이미 ios 폴더이므로 'ios' 제거
@@ -183,32 +183,16 @@ post_install do |installer|
     puts "❌ [Layer 3] ERROR: #{e.message}"
   end
   
-  # 🛡️ LAYER 4: Response 캐시 무효화
-  begin
-    puts "🛡️  [Layer 4/4] Invalidating response cache..."
-    
-    # CWD가 이미 ios 폴더이므로 'ios' 제거
-    build_dir = File.join(Dir.pwd, 'build')
-    if Dir.exist?(build_dir)
-      require 'fileutils'
-      FileUtils.rm_rf(build_dir)
-      puts "  🧹 Deleted ios/build"
-    end
-    
-    puts "  ✅ Layer 4 complete"
-    
-  rescue => e
-    puts "⚠️  [Layer 4] Non-critical: #{e.message}"
-  end
+  # ✅ Response 캐시는 EAS가 자동으로 clean build 제공하므로 삭제 불필요!
   
   puts "=" * 80
-  puts "✅ 4-LAYER DEFENSE COMPLETED (xcconfig-focused)"
+  puts "✅ 3-LAYER DEFENSE COMPLETED (xcconfig-focused)"
   puts "=" * 80
 end`;
         
         // 새로운 Podfile 저장
         fs.writeFileSync(podfilePath, newPodfileContent);
-        console.log('✅ [withPodfileFix] Podfile replaced with 4-LAYER xcconfig-focused defense');
+        console.log('✅ [withPodfileFix] Podfile replaced with 3-LAYER xcconfig defense (pbxproj only)');
         
         // 검증
         const updatedContent = fs.readFileSync(podfilePath, 'utf8');

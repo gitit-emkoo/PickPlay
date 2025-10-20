@@ -48,12 +48,7 @@ else
   echo "  ✅ All clean - no GCC_WARN_INHIBIT_ALL_WARNINGS found"
 fi
 
-# Response 캐시 삭제 (옵션)
-if [ -d "ios/build" ]; then
-  echo "🧹 Deleting ios/build cache..."
-  rm -rf ios/build
-  echo "  ✅ Deleted"
-fi
+# Response 캐시는 삭제하지 않음 (Codegen 파일이 여기 있음!)
 
 echo "========================================"
 echo "✅ [EAS Hook] Cleanup Complete"
