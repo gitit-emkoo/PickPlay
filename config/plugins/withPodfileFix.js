@@ -77,55 +77,59 @@ post_install do |installer|
   # Expo post install (must be after RN)
   Expo::PostInstall.install!(installer)
 
-  # ✅ 3단계 방어: BoringSSL-GRPC -G 플래그 완전 제거
+  # ✅ 4단계 방어: BoringSSL-GRPC -G 플래그 완전 제거
   puts "=" * 80
-  puts "🔧 [post_install] Applying 3-LAYER DEFENSE against -G flag..."
+  puts "🔧 [post_install] Applying 4-LAYER DEFENSE against -G flag..."
   puts "=" * 80
+  puts "ℹ️  CWD: #{Dir.pwd}"
   
-  # 🛡️ LAYER 1: xcconfig 파일 정화 (Pass 1 - save 전, 최우선!)
+  # 🛡️ LAYER 1: xcconfig 파일 정화 (Pass 1 - save 전, 가장 중요!)
   begin
-    puts "🛡️  [Layer 1/3] Cleaning xcconfig files (Pass 1)..."
+    puts "🛡️  [Layer 1/4] Cleaning xcconfig files (Pass 1 - before save)..."
     
     xcconfig_count = 0
-    # CWD가 이미 ios 폴더이므로 'ios' 제거
-    xcconfig_pattern = File.join(Dir.pwd, 'Pods', '**', '*.xcconfig')
+    target_support = File.join(Dir.pwd, 'Pods', 'Target Support Files')
     
-    Dir.glob(xcconfig_pattern).each do |file|
-      next unless file.include?('BoringSSL') || file.include?('gRPC')
+    puts "  📂 Target Support path: #{target_support}"
+    puts "  📂 Exists: #{Dir.exist?(target_support)}"
+    
+    if Dir.exist?(target_support)
+      # 먼저 모든 xcconfig 파일 찾기 - glob 패턴을 문자열로 직접 생성
+      glob_pattern = "#{target_support}/*/*.xcconfig"
+      all_xcconfigs = Dir.glob(glob_pattern)
+      puts "  📝 Glob pattern: #{glob_pattern}"
+      puts "  📝 Found #{all_xcconfigs.length} total xcconfig files"
       
-      content = File.read(file)
-      original = content.dup
-      
-      content.gsub!('-GCC_WARN_INHIBIT_ALL_WARNINGS', '')
-      content.gsub!(/ -G /, ' ')
-      
-      if content != original
-        File.write(file, content)
-        xcconfig_count += 1
-        puts "  🧹 #{File.basename(file)}"
+      all_xcconfigs.each do |file|
+        if file.include?('BoringSSL') || file.include?('gRPC')
+          content = File.read(file)
+          original = content.dup
+          
+          content.gsub!('-GCC_WARN_INHIBIT_ALL_WARNINGS', '')
+          content.gsub!(/\s*-G\s+/, ' ')
+          
+          if content != original
+            File.write(file, content)
+            xcconfig_count += 1
+            puts "  🧹 Cleaned: #{File.basename(File.dirname(file))}/#{File.basename(file)}"
+          end
+        end
       end
+    else
+      puts "  ❌ Target Support Files directory not found!"
     end
     
     puts "  ✅ Layer 1 complete (#{xcconfig_count} files cleaned)"
     
-    if xcconfig_count == 0
-      puts "  ❌ CRITICAL: No xcconfig files found!"
-      puts "     Pattern: #{xcconfig_pattern}"
-      puts "     CWD: #{Dir.pwd}"
-      puts "     Listing Pods dir:"
-      Dir.glob(File.join(Dir.pwd, 'Pods', '*')).each { |d| puts "       - #{File.basename(d)}" }
-    end
-    
   rescue => e
     puts "❌ [Layer 1] ERROR: #{e.message}"
-    # Layer 1 실패해도 계속
+    puts "     #{e.backtrace.first}"
   end
   
   # 🛡️ LAYER 2: pbxproj 정화
   begin
-    puts "🛡️  [Layer 2/3] Cleaning project.pbxproj..."
+    puts "🛡️  [Layer 2/4] Cleaning project.pbxproj..."
     
-    # CWD가 이미 ios 폴더이므로 'ios' 제거
     project_file = File.join(Dir.pwd, 'Pods', 'Pods.xcodeproj', 'project.pbxproj')
     
     if File.exist?(project_file)
@@ -133,21 +137,61 @@ post_install do |installer|
       original = pbxproj.dup
       
       pbxproj.gsub!('-GCC_WARN_INHIBIT_ALL_WARNINGS', '')
-      pbxproj.gsub!(/ -G /, ' ')
+      pbxproj.gsub!(/\s*-G\s+/, ' ')
       
       if pbxproj != original
         File.write(project_file, pbxproj)
         puts "  🧹 Cleaned project.pbxproj"
+      else
+        puts "  ℹ️  No changes needed in pbxproj"
       end
     else
-      puts "  ⚠️  project.pbxproj not found at: #{project_file}"
+      puts "  ❌ project.pbxproj not found at: #{project_file}"
     end
     
     puts "  ✅ Layer 2 complete"
     
   rescue => e
     puts "❌ [Layer 2] ERROR: #{e.message}"
-    # Layer 2 실패해도 계속
+    puts "     #{e.backtrace.first}"
+  end
+  
+  # 🛡️ LAYER 3: installer API를 통한 build_settings 직접 수정 (가장 강력!)
+  begin
+    puts "🛡️  [Layer 3/4] Modifying build_settings via installer API..."
+    
+    modified_count = 0
+    installer.pods_project.targets.each do |target|
+      if target.name.include?('BoringSSL-GRPC') || target.name.include?('gRPC')
+        target.build_configurations.each do |config|
+          # OTHER_CFLAGS와 OTHER_CPLUSPLUSFLAGS에서 -G 제거
+          ['OTHER_CFLAGS', 'OTHER_CPLUSPLUSFLAGS', 'WARNING_CFLAGS'].each do |setting_name|
+            if config.build_settings[setting_name]
+              original = config.build_settings[setting_name].dup
+              
+              if config.build_settings[setting_name].is_a?(String)
+                config.build_settings[setting_name].gsub!('-GCC_WARN_INHIBIT_ALL_WARNINGS', '')
+                config.build_settings[setting_name].gsub!(/\s*-G\s+/, ' ')
+              elsif config.build_settings[setting_name].is_a?(Array)
+                config.build_settings[setting_name].delete('-GCC_WARN_INHIBIT_ALL_WARNINGS')
+                config.build_settings[setting_name].delete('-G')
+              end
+              
+              if original != config.build_settings[setting_name]
+                modified_count += 1
+                puts "  🧹 Modified #{target.name}/#{config.name}/#{setting_name}"
+              end
+            end
+          end
+        end
+      end
+    end
+    
+    puts "  ✅ Layer 3 complete (#{modified_count} settings modified)"
+    
+  rescue => e
+    puts "❌ [Layer 3] ERROR: #{e.message}"
+    puts "     #{e.backtrace.first}"
   end
   
   # 💾 저장
@@ -155,44 +199,51 @@ post_install do |installer|
   installer.pods_project.save
   puts "✅ Pods project saved"
   
-  # 🛡️ LAYER 3: xcconfig 재정화 (Pass 2 - save 후)
+  # 🛡️ LAYER 4: xcconfig 재정화 (Pass 2 - save 후, 최종 방어선)
   begin
-    puts "🛡️  [Layer 3/3] Re-cleaning xcconfig files (Pass 2)..."
+    puts "🛡️  [Layer 4/4] Re-cleaning xcconfig files (Pass 2 - after save)..."
     
     xcconfig_count = 0
-    # CWD가 이미 ios 폴더이므로 'ios' 제거
-    xcconfig_pattern = File.join(Dir.pwd, 'Pods', '**', '*.xcconfig')
+    target_support = File.join(Dir.pwd, 'Pods', 'Target Support Files')
     
-    Dir.glob(xcconfig_pattern).each do |file|
-      next unless file.include?('BoringSSL') || file.include?('gRPC')
+    if Dir.exist?(target_support)
+      glob_pattern = "#{target_support}/*/*.xcconfig"
+      all_xcconfigs = Dir.glob(glob_pattern)
       
-      content = File.read(file)
-      
-      if content.include?('-GCC_WARN_INHIBIT_ALL_WARNINGS')
-        content.gsub!('-GCC_WARN_INHIBIT_ALL_WARNINGS', '')
-        content.gsub!(/ -G /, ' ')
-        File.write(file, content)
-        xcconfig_count += 1
-        puts "  🔒 Re-cleaned: #{File.basename(file)}"
+      all_xcconfigs.each do |file|
+        if file.include?('BoringSSL') || file.include?('gRPC')
+          content = File.read(file)
+          
+          if content.include?('-GCC_WARN_INHIBIT_ALL_WARNINGS') || content =~ /\s-G\s/
+            content.gsub!('-GCC_WARN_INHIBIT_ALL_WARNINGS', '')
+            content.gsub!(/\s*-G\s+/, ' ')
+            File.write(file, content)
+            xcconfig_count += 1
+            puts "  🔒 Re-cleaned: #{File.basename(File.dirname(file))}/#{File.basename(file)}"
+          end
+        end
       end
     end
     
-    puts "  ✅ Layer 3 complete (#{xcconfig_count} files re-cleaned)"
+    puts "  ✅ Layer 4 complete (#{xcconfig_count} files re-cleaned)"
     
   rescue => e
-    puts "❌ [Layer 3] ERROR: #{e.message}"
+    puts "❌ [Layer 4] ERROR: #{e.message}"
+    puts "     #{e.backtrace.first}"
   end
   
-  # ✅ Response 캐시는 EAS가 자동으로 clean build 제공하므로 삭제 불필요!
-  
   puts "=" * 80
-  puts "✅ 3-LAYER DEFENSE COMPLETED (xcconfig-focused)"
+  puts "✅ 4-LAYER DEFENSE COMPLETED"
+  puts "  - Layer 1: xcconfig 파일 정화 (save 전)"
+  puts "  - Layer 2: pbxproj 정화"
+  puts "  - Layer 3: build_settings 직접 수정 (installer API)"
+  puts "  - Layer 4: xcconfig 재정화 (save 후)"
   puts "=" * 80
 end`;
         
         // 새로운 Podfile 저장
         fs.writeFileSync(podfilePath, newPodfileContent);
-        console.log('✅ [withPodfileFix] Podfile replaced with 3-LAYER xcconfig defense (pbxproj only)');
+        console.log('✅ [withPodfileFix] Podfile replaced with 4-LAYER defense (xcconfig + pbxproj + build_settings)');
         
         // 검증
         const updatedContent = fs.readFileSync(podfilePath, 'utf8');
