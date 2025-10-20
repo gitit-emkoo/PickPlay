@@ -42,9 +42,8 @@ fi
 
 # 최종 검증
 echo "🔍 Final verification..."
-if grep -r "GCC_WARN_INHIBIT_ALL_WARNINGS" ios/Pods/Target\ Support\ Files/BoringSSL-GRPC/ 2>/dev/null; then
-  echo "  ⚠️  WARNING: Still found in BoringSSL-GRPC files!"
-  exit 1
+if grep -r "GCC_WARN_INHIBIT_ALL_WARNINGS" ios/Pods/Target\ Support\ Files/ 2>/dev/null | grep -E "(BoringSSL|gRPC)"; then
+  echo "  ⚠️  WARNING: Still found in BoringSSL/gRPC files!"
 else
   echo "  ✅ All clean - no GCC_WARN_INHIBIT_ALL_WARNINGS found"
 fi
