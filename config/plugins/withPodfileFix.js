@@ -183,12 +183,32 @@ post_install do |installer|
           content.gsub!('-GCC_WARN_INHIBIT_ALL_WARNINGS', '')
           content.gsub!(/\s*-G\s+/, ' ')
           
-          # gRPC C++17 강제 (xcconfig 레벨에서도)
-          if (file.include?('gRPC-Core') || file.include?('gRPC-C++')) && !content.include?('CLANG_CXX_LANGUAGE_STANDARD')
-            content += "\\nCLANG_CXX_LANGUAGE_STANDARD = c++17\\n"
-            puts "  🔧 Added C++17 to: #{File.basename(file)}"
-          elsif (file.include?('gRPC-Core') || file.include?('gRPC-C++'))
-            content.gsub!(/CLANG_CXX_LANGUAGE_STANDARD\\s*=\\s*c\\+\\+20/, 'CLANG_CXX_LANGUAGE_STANDARD = c++17')
+          # gRPC C++17 강제 (xcconfig 레벨에서도) - CRITICAL FIX
+          if file.include?('gRPC-Core') || file.include?('gRPC-C++')
+            # CLANG_CXX_LANGUAGE_STANDARD 처리
+            if content.include?('CLANG_CXX_LANGUAGE_STANDARD')
+              content.gsub!(/CLANG_CXX_LANGUAGE_STANDARD\\s*=\\s*c\\+\\+20/, 'CLANG_CXX_LANGUAGE_STANDARD = c++17')
+              puts "  🔧 Changed C++20 -> C++17 in: #{File.basename(file)}"
+            else
+              content += "\\nCLANG_CXX_LANGUAGE_STANDARD = c++17\\n"
+              puts "  🔧 Added CLANG_CXX_LANGUAGE_STANDARD to: #{File.basename(file)}"
+            end
+            
+            # OTHER_CPLUSPLUSFLAGS 처리 (CRITICAL!)
+            if content.include?('OTHER_CPLUSPLUSFLAGS')
+              # 기존 라인을 찾아서 -std=c++17 추가
+              content.gsub!(/(OTHER_CPLUSPLUSFLAGS\\s*=.*)$/) do |match|
+                line = $1
+                # -std=c++XX 제거하고 -std=c++17 추가
+                line = line.gsub(/-std=c\\+\\+\\d+/, '').strip
+                "#{line} -std=c++17"
+              end
+              puts "  🔧 Modified OTHER_CPLUSPLUSFLAGS in: #{File.basename(file)}"
+            else
+              # OTHER_CPLUSPLUSFLAGS가 없으면 새로 추가
+              content += "OTHER_CPLUSPLUSFLAGS = $(inherited) -std=c++17\\n"
+              puts "  🔧 Added OTHER_CPLUSPLUSFLAGS to: #{File.basename(file)}"
+            end
           end
           
           if content != original
@@ -266,8 +286,9 @@ post_install do |installer|
             modified = true
           end
           
-          # gRPC C++17 재확인 (Pass 2에서도)
+          # gRPC C++17 재확인 (Pass 2에서도) - CRITICAL FIX
           if (file.include?('gRPC-Core') || file.include?('gRPC-C++'))
+            # CLANG_CXX_LANGUAGE_STANDARD 재확인
             if content =~ /CLANG_CXX_LANGUAGE_STANDARD\\s*=\\s*c\\+\\+20/
               content.gsub!(/CLANG_CXX_LANGUAGE_STANDARD\\s*=\\s*c\\+\\+20/, 'CLANG_CXX_LANGUAGE_STANDARD = c++17')
               modified = true
@@ -275,7 +296,28 @@ post_install do |installer|
             elsif !content.include?('CLANG_CXX_LANGUAGE_STANDARD')
               content += "\\nCLANG_CXX_LANGUAGE_STANDARD = c++17\\n"
               modified = true
-              puts "  🔧 Added C++17 to: #{File.basename(file)}"
+              puts "  🔧 Added CLANG_CXX_LANGUAGE_STANDARD to: #{File.basename(file)}"
+            end
+            
+            # OTHER_CPLUSPLUSFLAGS 재확인 (CRITICAL!)
+            if content.include?('OTHER_CPLUSPLUSFLAGS')
+              original_flags = content.dup
+              content.gsub!(/(OTHER_CPLUSPLUSFLAGS\\s*=.*)$/) do |match|
+                line = $1
+                unless line.include?('-std=c++17')
+                  line = line.gsub(/-std=c\\+\\+\\d+/, '').strip
+                  line = "#{line} -std=c++17"
+                end
+                line
+              end
+              if original_flags != content
+                modified = true
+                puts "  🔧 Fixed OTHER_CPLUSPLUSFLAGS in: #{File.basename(file)}"
+              end
+            else
+              content += "OTHER_CPLUSPLUSFLAGS = $(inherited) -std=c++17\\n"
+              modified = true
+              puts "  🔧 Added OTHER_CPLUSPLUSFLAGS to: #{File.basename(file)}"
             end
           end
           
@@ -298,7 +340,8 @@ post_install do |installer|
   puts "=" * 80
   puts "✅ ALL FIXES COMPLETED"
   puts "  🎯 FIX 1: source_build_phase COMPILER_FLAGS 수정 (BoringSSL-GRPC -G 플래그)"
-  puts "  🎯 FIX 2: gRPC C++17 강제 - build_settings + xcconfig (std::result_of C++20 호환성)"
+  puts "  🎯 FIX 2: gRPC C++17 강제 - build_settings + xcconfig + OTHER_CPLUSPLUSFLAGS"
+  puts "           (std::result_of C++20 호환성)"
   puts "  🛡️  BACKUP: xcconfig + pbxproj 정화"
   puts "=" * 80
 end`;
