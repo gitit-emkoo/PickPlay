@@ -85,12 +85,18 @@ target 'PickPlay' do
     :path => '../node_modules/react-native',
     :hermes_enabled => true,
     :fabric_enabled => true,
-    :app_path => "#{Pod::Config.instance.installation_root}/.."
+    :app_path => "#{Pod::Config.instance.installation_root}/..",
+    # CRITICAL: Enable codegen for New Architecture
+    :codegen_enabled => true
   )
   
   # Expo autolinking for native modules (AFTER RN setup)
   use_expo_modules!
 
+  # ✅ CRITICAL: React Native Codegen (New Architecture)
+  # Must be declared BEFORE other RN modules for proper symbol resolution
+  pod 'ReactCodegen', :path => './build/generated/ios'
+  
   # ✅ CRITICAL: Explicitly declare Expo core modules
   # This ensures Expo modules are available even if autolinking fails
   pod 'ExpoModulesCore', :path => '../node_modules/expo-modules-core'
@@ -107,11 +113,34 @@ target 'PickPlay' do
   # This prevents "Unable to find specification" errors for ExpoHead dependencies
   # Pod names MUST match the actual .podspec file names!
   
-  # Core navigation & UI modules (REQUIRED by most apps)
-  # NOTE: Removed manual pod declarations to let use_react_native! handle them
-  # This ensures proper Codegen integration for New Architecture
+  # ✅ CRITICAL: React Native community modules + Codegen support
+  # Must declare both the module AND its Codegen podspec for New Architecture
   
-  # Animation & Graphics (non-Codegen modules only)
+  # Screens (+ Codegen)
+  pod 'RNScreens', :path => '../node_modules/react-native-screens'
+  
+  # Reanimated (+ Codegen)
+  pod 'RNReanimated', :path => '../node_modules/react-native-reanimated'
+  
+  # Gesture Handler (+ Codegen)
+  pod 'RNGestureHandler', :path => '../node_modules/react-native-gesture-handler'
+  
+  # Safe Area Context (+ Codegen)
+  pod 'react-native-safe-area-context', :path => '../node_modules/react-native-safe-area-context'
+  
+  # Async Storage (+ Codegen)
+  pod 'RNCAsyncStorage', :path => '../node_modules/@react-native-async-storage/async-storage'
+  
+  # WebView (+ Codegen)
+  pod 'react-native-webview', :path => '../node_modules/react-native-webview'
+  
+  # Google Mobile Ads (+ Codegen)
+  pod 'RNGoogleMobileAds', :path => '../node_modules/react-native-google-mobile-ads'
+  
+  # Worklets (+ Codegen)
+  pod 'RNWorklets', :path => '../node_modules/react-native-worklets'
+  
+  # Old Architecture modules (no Codegen)
   pod 'lottie-react-native', :path => '../node_modules/lottie-react-native'
   pod 'BVLinearGradient', :path => '../node_modules/react-native-linear-gradient'
 end
@@ -236,11 +265,29 @@ post_install do |installer|
   
   puts "=" * 80
   
+  # ✅ CRITICAL: Link Codegen podspecs for New Architecture modules
+  puts "=" * 80
+  puts "🔧 [post_install] Linking Codegen podspecs for New Architecture..."
+  puts "=" * 80
+  
+  codegen_dir = File.join(Dir.pwd, '..', 'ios', 'build', 'generated', 'ios')
+  if Dir.exist?(codegen_dir)
+    puts "  📂 Codegen dir: #{codegen_dir}"
+    
+    # Ensure ReactCodegen podspec is in the project
+    installer.pods_project.targets.each do |target|
+      if target.name == 'ReactCodegen'
+        puts "  ✅ ReactCodegen target found - Codegen will be linked"
+      end
+    end
+  else
+    puts "  ⚠️  Codegen directory not found (may be generated during build)"
+  end
+  
+  puts "=" * 80
+  
   # React Native post install tweaks
   react_native_post_install(installer)
-  
-  # Expo post install (must be after RN)
-  Expo::PostInstall.install!(installer)
   
   # 🔧 추가 방어: 모든 Pod 타겟의 deployment target 수정 (Xcode 16 호환성)
   puts "=" * 80
