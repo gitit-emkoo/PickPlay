@@ -96,8 +96,12 @@ target 'PickPlay' do
   pod 'ExpoModulesCore', :path => '../node_modules/expo-modules-core'
   pod 'Expo', :path => '../node_modules/expo'
   
-  # NOTE: Firebase pods are auto-managed by @react-native-firebase/app
-  # No manual pod declarations needed - RNFB handles versions automatically
+  # ✅ CRITICAL: Firebase pods (required by RNFB)
+  # Let CocoaPods resolve the version (no manual version pinning)
+  pod 'Firebase/Core'
+  pod 'Firebase/Auth'
+  pod 'Firebase/Firestore'
+  pod 'Firebase/Functions'
   
   # ✅ CRITICAL: Explicitly declare ALL React Native community modules
   # This prevents "Unable to find specification" errors for ExpoHead dependencies
