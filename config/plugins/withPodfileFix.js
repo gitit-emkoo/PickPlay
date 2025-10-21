@@ -65,6 +65,18 @@ rescue LoadError => e1
   end
 end
 
+# ✅ CRITICAL: Always define Expo::PostInstall stub
+# CocoaPods expects this to exist, but Expo SDK may not define it
+unless defined?(Expo::PostInstall)
+  module Expo
+    module PostInstall
+      def self.install!(installer)
+        Pod::UI.puts '✅ Expo::PostInstall stub - no additional config needed (Expo modules configured via use_expo_modules!)'
+      end
+    end
+  end
+end
+
 use_frameworks! :linkage => :static
 
 target 'PickPlay' do
