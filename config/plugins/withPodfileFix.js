@@ -509,13 +509,17 @@ post_install do |installer|
   puts "🔧 POST-INSTALL HOOKS:"
   puts "  ✅ react_native_post_install"
   
-  # ✅ CRITICAL: Call Expo's post_install hook
+  # ✅ OPTIONAL: Call Expo's post_install hook (if available)
   begin
-    Expo::PostInstall.install!(installer)
-    puts "  ✅ Expo::PostInstall.install!"
+    if defined?(Expo::PostInstall)
+      Expo::PostInstall.install!(installer)
+      puts "  ✅ Expo::PostInstall.install!"
+    else
+      puts "  ℹ️  Expo::PostInstall not available (OK - using manual configuration)"
+    end
   rescue => e
     puts "  ⚠️  Expo::PostInstall.install! failed: #{e.message}"
-    puts "      (This may be OK if using stub)"
+    puts "      (This may be OK - Expo modules already configured)"
   end
   
   puts ""
