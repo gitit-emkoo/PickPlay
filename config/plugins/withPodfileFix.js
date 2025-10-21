@@ -507,20 +507,8 @@ post_install do |installer|
   puts "  ✅ Firebase auto-managed by RNFB"
   puts ""
   puts "🔧 POST-INSTALL HOOKS:"
-  puts "  ✅ react_native_post_install"
-  
-  # ✅ OPTIONAL: Call Expo's post_install hook (if available)
-  begin
-    if defined?(Expo::PostInstall)
-      Expo::PostInstall.install!(installer)
-      puts "  ✅ Expo::PostInstall.install!"
-    else
-      puts "  ℹ️  Expo::PostInstall not available (OK - using manual configuration)"
-    end
-  rescue => e
-    puts "  ⚠️  Expo::PostInstall.install! failed: #{e.message}"
-    puts "      (This may be OK - Expo modules already configured)"
-  end
+  puts "  ✅ react_native_post_install completed"
+  puts "  ℹ️  Expo::PostInstall skipped (not required - Expo modules configured via use_expo_modules!)"
   
   puts ""
   puts "=" * 80
