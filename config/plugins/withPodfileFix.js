@@ -33,14 +33,22 @@ require_relative '../node_modules/react-native/scripts/react_native_pods'
 begin
   require_relative '../node_modules/expo-modules-autolinking/scripts/ios/autolinking_manager'
   Pod::UI.puts '✅ Expo autolinking loaded successfully'
+  
+  # Define the global use_expo_modules! function
+  # This creates an AutolinkingManager and calls use_expo_modules! on it
+  def use_expo_modules!(options = {})
+    Pod::UI.puts '📦 Calling use_expo_modules! (SDK 54)'
+    manager = Expo::AutolinkingManager.new(self, current_target_definition, options)
+    manager.use_expo_modules!
+  end
+  
 rescue LoadError => e
   Pod::UI.warn "❌ Expo autolinking failed to load: #{e.message}"
   Pod::UI.warn "   Path tried: ../node_modules/expo-modules-autolinking/scripts/ios/autolinking_manager"
-  Pod::UI.warn "   This means Expo modules won't be automatically linked!"
-  Pod::UI.warn "   Falling back to manual module linking..."
+  Pod::UI.warn "   Falling back to stub..."
   
   # Define stub functions to prevent Podfile crash
-  def use_expo_modules!
+  def use_expo_modules!(options = {})
     Pod::UI.warn '⚠️  use_expo_modules! stub called (autolinking unavailable)'
   end
   
