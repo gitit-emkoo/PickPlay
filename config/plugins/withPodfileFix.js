@@ -43,38 +43,24 @@ platform :ios, '15.1'
 require_relative '../node_modules/react-native/scripts/react_native_pods'
 
 # Expo modules autolinking (SDK 54)
+# NOTE: expo-modules-autolinking removed from package.json to avoid conflicts
+# Expo SDK will auto-install the correct version as a transitive dependency
 begin
-  require_relative '../node_modules/expo-modules-autolinking/scripts/ios/autolinking_manager'
-  Pod::UI.puts '✅ Expo autolinking loaded successfully'
-  
-  # Define the global use_expo_modules! function
-  # This creates an AutolinkingManager and calls use_expo_modules! on it
-  def use_expo_modules!(options = {})
-    Pod::UI.puts '📦 Calling use_expo_modules! (SDK 54)'
+  require_relative '../node_modules/expo/scripts/autolinking'
+  Pod::UI.puts '✅ Expo autolinking loaded from expo package'
+rescue LoadError => e1
+  begin
+    require_relative '../node_modules/expo-modules-core/scripts/autolinking'
+    Pod::UI.puts '✅ Expo autolinking loaded from expo-modules-core'
+  rescue LoadError => e2
+    Pod::UI.warn "⚠️  Expo autolinking not available:"
+    Pod::UI.warn "   Path 1: ../node_modules/expo/scripts/autolinking (#{e1.message})"
+    Pod::UI.warn "   Path 2: ../node_modules/expo-modules-core/scripts/autolinking (#{e2.message})"
+    Pod::UI.warn "   Continuing without Expo autolinking - pods will be declared manually"
     
-    # Ensure searchpaths includes node_modules for RN modules
-    options[:searchpaths] ||= []
-    options[:searchpaths] << '../node_modules'
-    
-    manager = Expo::AutolinkingManager.new(self, current_target_definition, options)
-    manager.use_expo_modules!
-  end
-  
-rescue LoadError => e
-  Pod::UI.warn "❌ Expo autolinking failed to load: #{e.message}"
-  Pod::UI.warn "   Path tried: ../node_modules/expo-modules-autolinking/scripts/ios/autolinking_manager"
-  Pod::UI.warn "   Falling back to stub..."
-  
-  # Define stub functions to prevent Podfile crash
-  def use_expo_modules!(options = {})
-    Pod::UI.warn '⚠️  use_expo_modules! stub called (autolinking unavailable)'
-  end
-  
-  module Expo
-    module PostInstall
-      def self.install!(installer)
-        Pod::UI.warn '⚠️  Expo::PostInstall stub called (autolinking unavailable)'
-      end
+    # Stub to prevent crashes
+    def use_expo_modules!(options = {})
+      Pod::UI.warn '⚠️  use_expo_modules! stub - Expo modules not auto-linked'
     end
   end
 end
@@ -93,6 +79,11 @@ target 'PickPlay' do
   # Expo autolinking for native modules (AFTER RN setup)
   use_expo_modules!
 
+  # ✅ CRITICAL: Explicitly declare Expo core modules
+  # This ensures Expo modules are available even if autolinking fails
+  pod 'ExpoModulesCore', :path => '../node_modules/expo-modules-core'
+  pod 'Expo', :path => '../node_modules/expo'
+  
   # NOTE: Firebase pods are auto-managed by @react-native-firebase/app
   # No manual pod declarations needed - RNFB handles versions automatically
   
