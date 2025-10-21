@@ -110,9 +110,29 @@ post_install do |installer|
           end
         end
         
-        # gRPC C++20 호환성: CLANG_CXX_LANGUAGE_STANDARD을 c++17로 다운그레이드
-        if target.name.include?('gRPC')
+        # ⚠️ CRITICAL: gRPC C++17 강제 (std::result_of는 C++20에서 제거됨)
+        if target.name == 'gRPC-Core' || target.name == 'gRPC-C++'
+          puts "  🔧 FORCING C++17 for #{target.name}/#{config.name}"
+          
+          # Method 1: build_settings로 설정
           config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+          config.build_settings['GCC_C_LANGUAGE_STANDARD'] = 'c17'
+          
+          # Method 2: OTHER_CPLUSPLUSFLAGS에 직접 -std=c++17 추가 (CRITICAL!)
+          # Xcode가 response file 생성 시 이 플래그를 사용함
+          cxxflags = config.build_settings['OTHER_CPLUSPLUSFLAGS'] || '$(inherited)'
+          cxxflags = cxxflags.is_a?(Array) ? cxxflags.join(' ') : cxxflags.to_s
+          
+          # 기존 -std=c++XX 플래그 제거하고 -std=c++17 추가
+          cxxflags = cxxflags.gsub(/-std=c\+\+\d+/, '').strip
+          cxxflags = "#{cxxflags} -std=c++17".strip
+          
+          config.build_settings['OTHER_CPLUSPLUSFLAGS'] = cxxflags
+          
+          puts "     └─ CLANG_CXX_LANGUAGE_STANDARD = c++17"
+          puts "     └─ OTHER_CPLUSPLUSFLAGS = #{cxxflags}"
+          
+          modified_count += 1
         end
       end
       
@@ -162,6 +182,14 @@ post_install do |installer|
           
           content.gsub!('-GCC_WARN_INHIBIT_ALL_WARNINGS', '')
           content.gsub!(/\s*-G\s+/, ' ')
+          
+          # gRPC C++17 강제 (xcconfig 레벨에서도)
+          if (file.include?('gRPC-Core') || file.include?('gRPC-C++')) && !content.include?('CLANG_CXX_LANGUAGE_STANDARD')
+            content += "\\nCLANG_CXX_LANGUAGE_STANDARD = c++17\\n"
+            puts "  🔧 Added C++17 to: #{File.basename(file)}"
+          elsif (file.include?('gRPC-Core') || file.include?('gRPC-C++'))
+            content.gsub!(/CLANG_CXX_LANGUAGE_STANDARD\\s*=\\s*c\\+\\+20/, 'CLANG_CXX_LANGUAGE_STANDARD = c++17')
+          end
           
           if content != original
             File.write(file, content)
@@ -230,10 +258,28 @@ post_install do |installer|
       all_xcconfigs.each do |file|
         if file.include?('BoringSSL') || file.include?('gRPC')
           content = File.read(file)
+          modified = false
           
           if content.include?('-GCC_WARN_INHIBIT_ALL_WARNINGS') || content =~ /\s-G\s/
             content.gsub!('-GCC_WARN_INHIBIT_ALL_WARNINGS', '')
             content.gsub!(/\s*-G\s+/, ' ')
+            modified = true
+          end
+          
+          # gRPC C++17 재확인 (Pass 2에서도)
+          if (file.include?('gRPC-Core') || file.include?('gRPC-C++'))
+            if content =~ /CLANG_CXX_LANGUAGE_STANDARD\\s*=\\s*c\\+\\+20/
+              content.gsub!(/CLANG_CXX_LANGUAGE_STANDARD\\s*=\\s*c\\+\\+20/, 'CLANG_CXX_LANGUAGE_STANDARD = c++17')
+              modified = true
+              puts "  🔧 Fixed C++20 -> C++17 in: #{File.basename(file)}"
+            elsif !content.include?('CLANG_CXX_LANGUAGE_STANDARD')
+              content += "\\nCLANG_CXX_LANGUAGE_STANDARD = c++17\\n"
+              modified = true
+              puts "  🔧 Added C++17 to: #{File.basename(file)}"
+            end
+          end
+          
+          if modified
             File.write(file, content)
             xcconfig_count += 1
             puts "  🔒 Re-cleaned: #{File.basename(File.dirname(file))}/#{File.basename(file)}"
@@ -252,7 +298,7 @@ post_install do |installer|
   puts "=" * 80
   puts "✅ ALL FIXES COMPLETED"
   puts "  🎯 FIX 1: source_build_phase COMPILER_FLAGS 수정 (BoringSSL-GRPC -G 플래그)"
-  puts "  🎯 FIX 2: gRPC C++17 강제 (std::result_of C++20 호환성)"
+  puts "  🎯 FIX 2: gRPC C++17 강제 - build_settings + xcconfig (std::result_of C++20 호환성)"
   puts "  🛡️  BACKUP: xcconfig + pbxproj 정화"
   puts "=" * 80
 end`;
