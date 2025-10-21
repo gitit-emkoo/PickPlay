@@ -68,37 +68,6 @@ target 'PickPlay' do
   pod 'FirebaseFunctions', firebase_version
 end
 
-pre_install do |installer|
-  puts "=" * 80
-  puts "🔧 [pre_install] CRITICAL: Modifying BoringSSL-GRPC.podspec BEFORE pod install"
-  puts "=" * 80
-  
-  # BoringSSL-GRPC podspec 파일 직접 수정
-  podspec_path = File.join(Dir.pwd, '..', 'node_modules', 'BoringSSL-GRPC', 'BoringSSL-GRPC.podspec')
-  
-  if File.exist?(podspec_path)
-    puts "📄 Found podspec at: #{podspec_path}"
-    
-    content = File.read(podspec_path)
-    original = content.dup
-    
-    # compiler_flags에서 -GCC_WARN_INHIBIT_ALL_WARNINGS 제거
-    content.gsub!('-GCC_WARN_INHIBIT_ALL_WARNINGS', '')
-    content.gsub!(/\s*-G\s+/, ' ')
-    
-    if content != original
-      File.write(podspec_path, content)
-      puts "✅ Removed -GCC_WARN_INHIBIT_ALL_WARNINGS from podspec"
-    else
-      puts "ℹ️  No -GCC_WARN_INHIBIT_ALL_WARNINGS found in podspec"
-    end
-  else
-    puts "❌ Podspec not found at: #{podspec_path}"
-  end
-  
-  puts "=" * 80
-end
-
 post_install do |installer|
   puts "🔧 [post_install] Custom Podfile post_install hook executing..."
   
@@ -109,7 +78,8 @@ post_install do |installer|
   
   modified_count = 0
   installer.pods_project.targets.each do |target|
-    if target.name == 'BoringSSL-GRPC'
+    # BoringSSL-GRPC와 gRPC-Core 모두 처리
+    if target.name == 'BoringSSL-GRPC' || target.name == 'gRPC-Core' || target.name == 'gRPC-C++'
       puts "🎯 Found target: #{target.name}"
       
       # Stack Overflow 검증된 방법: source_build_phase.files의 COMPILER_FLAGS 수정
@@ -122,9 +92,6 @@ post_install do |installer|
           
           if original != file.settings['COMPILER_FLAGS']
             modified_count += 1
-            puts "  🧹 Modified COMPILER_FLAGS in source file"
-            puts "     Before: #{original}"
-            puts "     After:  #{file.settings['COMPILER_FLAGS']}"
           end
         end
       end
@@ -139,13 +106,17 @@ post_install do |installer|
             if original != cleaned
               config.build_settings[setting] = cleaned
               modified_count += 1
-              puts "  🧹 Cleaned #{config.name}/#{setting}"
             end
           end
         end
+        
+        # gRPC C++20 호환성: CLANG_CXX_LANGUAGE_STANDARD을 c++17로 다운그레이드
+        if target.name.include?('gRPC')
+          config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+        end
       end
       
-      puts "  ✅ Modified #{modified_count} flags in BoringSSL-GRPC"
+      puts "  ✅ Modified #{target.name} (#{modified_count} flags)"
     end
   end
   
@@ -279,13 +250,10 @@ post_install do |installer|
   end
   
   puts "=" * 80
-  puts "✅ ALL DEFENSE LAYERS COMPLETED"
-  puts "  🎯 PRE-INSTALL: podspec 직접 수정 (pod install 전)"
-  puts "  🎯 POST-INSTALL: source_build_phase COMPILER_FLAGS 수정 (Stack Overflow)"
-  puts "  🎯 POST-INSTALL: build_settings 수정 (추가 방어)"
-  puts "  🛡️  BACKUP 1: xcconfig 파일 정화"
-  puts "  🛡️  BACKUP 2: pbxproj 정화"
-  puts "  🛡️  BACKUP 3: xcconfig 재정화"
+  puts "✅ ALL FIXES COMPLETED"
+  puts "  🎯 FIX 1: source_build_phase COMPILER_FLAGS 수정 (BoringSSL-GRPC -G 플래그)"
+  puts "  🎯 FIX 2: gRPC C++17 강제 (std::result_of C++20 호환성)"
+  puts "  🛡️  BACKUP: xcconfig + pbxproj 정화"
   puts "=" * 80
 end`;
         
