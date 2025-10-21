@@ -68,10 +68,41 @@ target 'PickPlay' do
   pod 'FirebaseFunctions', firebase_version
 end
 
+pre_install do |installer|
+  puts "=" * 80
+  puts "🔧 [pre_install] CRITICAL: Modifying BoringSSL-GRPC.podspec BEFORE pod install"
+  puts "=" * 80
+  
+  # BoringSSL-GRPC podspec 파일 직접 수정
+  podspec_path = File.join(Dir.pwd, '..', 'node_modules', 'BoringSSL-GRPC', 'BoringSSL-GRPC.podspec')
+  
+  if File.exist?(podspec_path)
+    puts "📄 Found podspec at: #{podspec_path}"
+    
+    content = File.read(podspec_path)
+    original = content.dup
+    
+    # compiler_flags에서 -GCC_WARN_INHIBIT_ALL_WARNINGS 제거
+    content.gsub!('-GCC_WARN_INHIBIT_ALL_WARNINGS', '')
+    content.gsub!(/\s*-G\s+/, ' ')
+    
+    if content != original
+      File.write(podspec_path, content)
+      puts "✅ Removed -GCC_WARN_INHIBIT_ALL_WARNINGS from podspec"
+    else
+      puts "ℹ️  No -GCC_WARN_INHIBIT_ALL_WARNINGS found in podspec"
+    end
+  else
+    puts "❌ Podspec not found at: #{podspec_path}"
+  end
+  
+  puts "=" * 80
+end
+
 post_install do |installer|
   puts "🔧 [post_install] Custom Podfile post_install hook executing..."
   
-  # ✅ 최우선: BoringSSL-GRPC의 WARNING_CFLAGS 직접 제거 (GitHub 공식 해결책)
+  # ✅ CRITICAL FIX: BoringSSL-GRPC COMPILER_FLAGS 제거 (Stack Overflow 검증된 방법)
   puts "=" * 80
   puts "🔧 [post_install] CRITICAL FIX: Removing -GCC_WARN_INHIBIT_ALL_WARNINGS from BoringSSL-GRPC"
   puts "=" * 80
@@ -81,22 +112,26 @@ post_install do |installer|
     if target.name == 'BoringSSL-GRPC'
       puts "🎯 Found target: #{target.name}"
       
-      target.build_configurations.each do |config|
-        # WARNING_CFLAGS에서 -GCC_WARN_INHIBIT_ALL_WARNINGS 제거 (공식 해결책)
-        if config.build_settings['WARNING_CFLAGS']
-          original = config.build_settings['WARNING_CFLAGS'].to_s
-          config.build_settings['WARNING_CFLAGS'] = original.gsub('-GCC_WARN_INHIBIT_ALL_WARNINGS', '').strip
+      # Stack Overflow 검증된 방법: source_build_phase.files의 COMPILER_FLAGS 수정
+      target.source_build_phase.files.each do |file|
+        if file.settings && file.settings['COMPILER_FLAGS']
+          original = file.settings['COMPILER_FLAGS']
+          flags = original.split
+          flags.reject! { |flag| flag == '-GCC_WARN_INHIBIT_ALL_WARNINGS' || flag == '-G' }
+          file.settings['COMPILER_FLAGS'] = flags.join(' ')
           
-          if original != config.build_settings['WARNING_CFLAGS']
+          if original != file.settings['COMPILER_FLAGS']
             modified_count += 1
-            puts "  🧹 Removed from #{config.name}/WARNING_CFLAGS"
+            puts "  🧹 Modified COMPILER_FLAGS in source file"
             puts "     Before: #{original}"
-            puts "     After:  #{config.build_settings['WARNING_CFLAGS']}"
+            puts "     After:  #{file.settings['COMPILER_FLAGS']}"
           end
         end
-        
-        # OTHER_CFLAGS와 OTHER_CPLUSPLUSFLAGS도 정화
-        ['OTHER_CFLAGS', 'OTHER_CPLUSPLUSFLAGS'].each do |setting|
+      end
+      
+      # build_settings도 정화 (추가 방어)
+      target.build_configurations.each do |config|
+        ['WARNING_CFLAGS', 'OTHER_CFLAGS', 'OTHER_CPLUSPLUSFLAGS'].each do |setting|
           if config.build_settings[setting]
             original = config.build_settings[setting].to_s
             cleaned = original.gsub('-GCC_WARN_INHIBIT_ALL_WARNINGS', '').gsub(/\s*-G\s+/, ' ').strip
@@ -110,12 +145,12 @@ post_install do |installer|
         end
       end
       
-      puts "  ✅ Modified #{modified_count} build settings in BoringSSL-GRPC"
+      puts "  ✅ Modified #{modified_count} flags in BoringSSL-GRPC"
     end
   end
   
   if modified_count == 0
-    puts "  ⚠️  WARNING: No build_settings were modified! This might indicate a problem."
+    puts "  ⚠️  WARNING: No flags were modified!"
   end
   
   puts "=" * 80
@@ -245,7 +280,9 @@ post_install do |installer|
   
   puts "=" * 80
   puts "✅ ALL DEFENSE LAYERS COMPLETED"
-  puts "  🎯 PRIMARY: WARNING_CFLAGS 직접 제거 (GitHub 공식 솔루션)"
+  puts "  🎯 PRE-INSTALL: podspec 직접 수정 (pod install 전)"
+  puts "  🎯 POST-INSTALL: source_build_phase COMPILER_FLAGS 수정 (Stack Overflow)"
+  puts "  🎯 POST-INSTALL: build_settings 수정 (추가 방어)"
   puts "  🛡️  BACKUP 1: xcconfig 파일 정화"
   puts "  🛡️  BACKUP 2: pbxproj 정화"
   puts "  🛡️  BACKUP 3: xcconfig 재정화"
@@ -254,7 +291,7 @@ end`;
         
         // 새로운 Podfile 저장
         fs.writeFileSync(podfilePath, newPodfileContent);
-        console.log('✅ [withPodfileFix] Podfile replaced with PRIMARY (WARNING_CFLAGS) + 3 BACKUP layers');
+        console.log('✅ [withPodfileFix] Podfile replaced with VERIFIED SOLUTION (Stack Overflow + GitHub)');
         
         // 검증
         const updatedContent = fs.readFileSync(podfilePath, 'utf8');
