@@ -87,7 +87,15 @@ post_install do |installer|
         if file.settings && file.settings['COMPILER_FLAGS']
           original = file.settings['COMPILER_FLAGS']
           flags = original.split
+          
+          # BoringSSL-GRPC: -G 플래그 제거
           flags.reject! { |flag| flag == '-GCC_WARN_INHIBIT_ALL_WARNINGS' || flag == '-G' }
+          
+          # gRPC-Core/C++: -std=c++20 제거 (CRITICAL!)
+          if target.name == 'gRPC-Core' || target.name == 'gRPC-C++'
+            flags.reject! { |flag| flag =~ /-std=c\+\+20/ }
+          end
+          
           file.settings['COMPILER_FLAGS'] = flags.join(' ')
           
           if original != file.settings['COMPILER_FLAGS']
@@ -102,6 +110,11 @@ post_install do |installer|
           if config.build_settings[setting]
             original = config.build_settings[setting].to_s
             cleaned = original.gsub('-GCC_WARN_INHIBIT_ALL_WARNINGS', '').gsub(/\s*-G\s+/, ' ').strip
+            
+            # gRPC: -std=c++20 제거 (CRITICAL!)
+            if (target.name == 'gRPC-Core' || target.name == 'gRPC-C++') && setting == 'OTHER_CPLUSPLUSFLAGS'
+              cleaned = cleaned.gsub(/-std=c\+\+20/, '').strip
+            end
             
             if original != cleaned
               config.build_settings[setting] = cleaned
@@ -123,14 +136,43 @@ post_install do |installer|
           cxxflags = config.build_settings['OTHER_CPLUSPLUSFLAGS'] || '$(inherited)'
           cxxflags = cxxflags.is_a?(Array) ? cxxflags.join(' ') : cxxflags.to_s
           
-          # 기존 -std=c++XX 플래그 제거하고 -std=c++17 추가
+          # 모든 -std=c++XX 플래그 제거 (c++20 포함)
           cxxflags = cxxflags.gsub(/-std=c\+\+\d+/, '').strip
-          cxxflags = "#{cxxflags} -std=c++17".strip
+          # -std=c++17만 추가 + template warning 억제
+          cxxflags = "#{cxxflags} -std=c++17 -Wno-missing-template-arg-list-after-template-kw".strip
           
           config.build_settings['OTHER_CPLUSPLUSFLAGS'] = cxxflags
           
+          # WARNING_CFLAGS 수정 - 여러 warning 억제
+          warning_flags = config.build_settings['WARNING_CFLAGS'] || '$(inherited)'
+          warning_flags = warning_flags.is_a?(Array) ? warning_flags.join(' ') : warning_flags.to_s
+          
+          # 빌드를 막을 수 있는 warning들 억제
+          suppressed_warnings = [
+            '-Wno-missing-template-arg-list-after-template-kw',  # gRPC template 이슈
+            '-Wno-shorten-64-to-32',                             # gRPC/BoringSSL 일반적 warning
+            '-Wno-comma',                                        # gRPC warning
+            '-Wno-unreachable-code'                              # gRPC warning
+          ]
+          
+          suppressed_warnings.each do |flag|
+            warning_flags = warning_flags.gsub(flag, '').strip  # 중복 제거
+          end
+          
+          warning_flags = "#{warning_flags} #{suppressed_warnings.join(' ')}".strip
+          config.build_settings['WARNING_CFLAGS'] = warning_flags
+          
+          # Deployment target 수정 (Xcode 16 호환성)
+          deployment_target = config.build_settings['IPHONEOS_DEPLOYMENT_TARGET']
+          if deployment_target && deployment_target.to_f < 12.0
+            config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '12.0'
+            puts "     └─ Updated IPHONEOS_DEPLOYMENT_TARGET: #{deployment_target} -> 12.0"
+          end
+          
+          puts "     └─ Removed all -std=c++XX flags"
           puts "     └─ CLANG_CXX_LANGUAGE_STANDARD = c++17"
           puts "     └─ OTHER_CPLUSPLUSFLAGS = #{cxxflags}"
+          puts "     └─ WARNING_CFLAGS with #{suppressed_warnings.length} suppressions"
           
           modified_count += 1
         end
@@ -151,6 +193,26 @@ post_install do |installer|
   
   # Expo post install (must be after RN)
   Expo::PostInstall.install!(installer)
+  
+  # 🔧 추가 방어: 모든 Pod 타겟의 deployment target 수정 (Xcode 16 호환성)
+  puts "=" * 80
+  puts "🔧 [post_install] Fixing deployment targets for Xcode 16..."
+  puts "=" * 80
+  
+  deployment_fix_count = 0
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      deployment_target = config.build_settings['IPHONEOS_DEPLOYMENT_TARGET']
+      if deployment_target && deployment_target.to_f < 12.0
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '12.0'
+        deployment_fix_count += 1
+        puts "  📱 #{target.name}: #{deployment_target} -> 12.0"
+      end
+    end
+  end
+  
+  puts "  ✅ Fixed #{deployment_fix_count} deployment targets"
+  puts "=" * 80
 
   # ✅ 추가 방어: xcconfig/pbxproj 백업 정화
   puts "=" * 80
@@ -185,6 +247,12 @@ post_install do |installer|
           
           # gRPC C++17 강제 (xcconfig 레벨에서도) - CRITICAL FIX
           if file.include?('gRPC-Core') || file.include?('gRPC-C++')
+            # STEP 1: -std=c++20 완전 제거 (CRITICAL!)
+            content.gsub!(/-std=c\+\+20/, '')
+            content.gsub!(/'-std=c\+\+20'/, '')
+          end
+          
+          if file.include?('gRPC-Core') || file.include?('gRPC-C++')
             # CLANG_CXX_LANGUAGE_STANDARD 처리
             if content.include?('CLANG_CXX_LANGUAGE_STANDARD')
               content.gsub!(/CLANG_CXX_LANGUAGE_STANDARD\\s*=\\s*c\\+\\+20/, 'CLANG_CXX_LANGUAGE_STANDARD = c++17')
@@ -196,17 +264,19 @@ post_install do |installer|
             
             # OTHER_CPLUSPLUSFLAGS 처리 (CRITICAL!)
             if content.include?('OTHER_CPLUSPLUSFLAGS')
-              # 기존 라인을 찾아서 -std=c++17 추가
+              # 기존 라인을 찾아서 -std=c++17 + warning 억제 추가
               content.gsub!(/(OTHER_CPLUSPLUSFLAGS\\s*=.*)$/) do |match|
                 line = $1
                 # -std=c++XX 제거하고 -std=c++17 추가
                 line = line.gsub(/-std=c\\+\\+\\d+/, '').strip
-                "#{line} -std=c++17"
+                # template warning 억제도 추가
+                line = line.gsub(/-Wno-missing-template-arg-list-after-template-kw/, '').strip
+                "#{line} -std=c++17 -Wno-missing-template-arg-list-after-template-kw"
               end
               puts "  🔧 Modified OTHER_CPLUSPLUSFLAGS in: #{File.basename(file)}"
             else
               # OTHER_CPLUSPLUSFLAGS가 없으면 새로 추가
-              content += "OTHER_CPLUSPLUSFLAGS = $(inherited) -std=c++17\\n"
+              content += "OTHER_CPLUSPLUSFLAGS = $(inherited) -std=c++17 -Wno-missing-template-arg-list-after-template-kw\\n"
               puts "  🔧 Added OTHER_CPLUSPLUSFLAGS to: #{File.basename(file)}"
             end
           end
@@ -288,6 +358,16 @@ post_install do |installer|
           
           # gRPC C++17 재확인 (Pass 2에서도) - CRITICAL FIX
           if (file.include?('gRPC-Core') || file.include?('gRPC-C++'))
+            # STEP 1: -std=c++20 완전 제거 (save 후에도!)
+            if content.include?('-std=c++20') || content.include?("'-std=c++20'")
+              content.gsub!(/-std=c\+\+20/, '')
+              content.gsub!(/'-std=c\+\+20'/, '')
+              modified = true
+              puts "  🗑️  Removed -std=c++20 from: #{File.basename(file)}"
+            end
+          end
+          
+          if (file.include?('gRPC-Core') || file.include?('gRPC-C++'))
             # CLANG_CXX_LANGUAGE_STANDARD 재확인
             if content =~ /CLANG_CXX_LANGUAGE_STANDARD\\s*=\\s*c\\+\\+20/
               content.gsub!(/CLANG_CXX_LANGUAGE_STANDARD\\s*=\\s*c\\+\\+20/, 'CLANG_CXX_LANGUAGE_STANDARD = c++17')
@@ -304,9 +384,10 @@ post_install do |installer|
               original_flags = content.dup
               content.gsub!(/(OTHER_CPLUSPLUSFLAGS\\s*=.*)$/) do |match|
                 line = $1
-                unless line.include?('-std=c++17')
+                unless line.include?('-std=c++17') && line.include?('-Wno-missing-template-arg-list-after-template-kw')
                   line = line.gsub(/-std=c\\+\\+\\d+/, '').strip
-                  line = "#{line} -std=c++17"
+                  line = line.gsub(/-Wno-missing-template-arg-list-after-template-kw/, '').strip
+                  line = "#{line} -std=c++17 -Wno-missing-template-arg-list-after-template-kw"
                 end
                 line
               end
@@ -315,7 +396,7 @@ post_install do |installer|
                 puts "  🔧 Fixed OTHER_CPLUSPLUSFLAGS in: #{File.basename(file)}"
               end
             else
-              content += "OTHER_CPLUSPLUSFLAGS = $(inherited) -std=c++17\\n"
+              content += "OTHER_CPLUSPLUSFLAGS = $(inherited) -std=c++17 -Wno-missing-template-arg-list-after-template-kw\\n"
               modified = true
               puts "  🔧 Added OTHER_CPLUSPLUSFLAGS to: #{File.basename(file)}"
             end
@@ -339,10 +420,14 @@ post_install do |installer|
   
   puts "=" * 80
   puts "✅ ALL FIXES COMPLETED"
-  puts "  🎯 FIX 1: source_build_phase COMPILER_FLAGS 수정 (BoringSSL-GRPC -G 플래그)"
-  puts "  🎯 FIX 2: gRPC C++17 강제 - build_settings + xcconfig + OTHER_CPLUSPLUSFLAGS"
-  puts "           (std::result_of C++20 호환성)"
-  puts "  🛡️  BACKUP: xcconfig + pbxproj 정화"
+  puts "  🎯 FIX 1: source_build_phase COMPILER_FLAGS 수정"
+  puts "           - BoringSSL-GRPC: -G 플래그 제거"
+  puts "           - gRPC-Core/C++: -std=c++20 완전 제거"
+  puts "  🎯 FIX 2: gRPC C++17 강제 적용"
+  puts "           - CLANG_CXX_LANGUAGE_STANDARD = c++17"
+  puts "           - OTHER_CPLUSPLUSFLAGS = ... -std=c++17"
+  puts "           - WARNING_CFLAGS += -Wno-missing-template-arg-list-after-template-kw"
+  puts "  🛡️  BACKUP: xcconfig + pbxproj 정화 (3-layer defense)"
   puts "=" * 80
 end`;
         
