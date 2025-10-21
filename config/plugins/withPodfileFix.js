@@ -98,17 +98,17 @@ target 'PickPlay' do
   
   # ✅ CRITICAL: Explicitly declare ALL React Native community modules
   # This prevents "Unable to find specification" errors for ExpoHead dependencies
-  # These paths MUST match the actual package names in node_modules
+  # Pod names MUST match the actual .podspec file names!
   
   # Core navigation & UI modules (REQUIRED by most apps)
   pod 'RNScreens', :path => '../node_modules/react-native-screens'
   pod 'RNReanimated', :path => '../node_modules/react-native-reanimated'
   pod 'RNGestureHandler', :path => '../node_modules/react-native-gesture-handler'
-  pod 'RNSafeAreaContext', :path => '../node_modules/react-native-safe-area-context'
+  pod 'react-native-safe-area-context', :path => '../node_modules/react-native-safe-area-context'
   
   # Storage & Web modules
   pod 'RNCAsyncStorage', :path => '../node_modules/@react-native-async-storage/async-storage'
-  pod 'RNCWebView', :path => '../node_modules/react-native-webview'
+  pod 'react-native-webview', :path => '../node_modules/react-native-webview'
   
   # Animation & Graphics
   pod 'lottie-react-native', :path => '../node_modules/lottie-react-native'
