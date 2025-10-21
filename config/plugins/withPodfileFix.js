@@ -28,19 +28,26 @@ module.exports = (config) => {
         const newPodfileContent = `platform :ios, '15.1'
 
 require_relative '../node_modules/react-native/scripts/react_native_pods'
-# Expo autolinking (handle path variations across versions)
+
+# Expo modules autolinking (SDK 54)
 begin
-  require_relative '../node_modules/expo-modules-autolinking/scripts/autolinking'
-rescue LoadError
-  begin
-    require_relative '../node_modules/expo-modules-autolinking/build/scripts/autolinking'
-  rescue LoadError
-    Pod::UI.puts '⚠️  expo-modules-autolinking not found; continuing without it'
-    # Fallback no-ops to avoid Podfile crash (keeps build going)
-    def use_expo_modules!(*args); end
-    module Expo
-      module PostInstall
-        def self.install!(*args); end
+  require_relative '../node_modules/expo-modules-autolinking/scripts/ios/autolinking_manager'
+  Pod::UI.puts '✅ Expo autolinking loaded successfully'
+rescue LoadError => e
+  Pod::UI.warn "❌ Expo autolinking failed to load: #{e.message}"
+  Pod::UI.warn "   Path tried: ../node_modules/expo-modules-autolinking/scripts/ios/autolinking_manager"
+  Pod::UI.warn "   This means Expo modules won't be automatically linked!"
+  Pod::UI.warn "   Falling back to manual module linking..."
+  
+  # Define stub functions to prevent Podfile crash
+  def use_expo_modules!
+    Pod::UI.warn '⚠️  use_expo_modules! stub called (autolinking unavailable)'
+  end
+  
+  module Expo
+    module PostInstall
+      def self.install!(installer)
+        Pod::UI.warn '⚠️  Expo::PostInstall stub called (autolinking unavailable)'
       end
     end
   end
