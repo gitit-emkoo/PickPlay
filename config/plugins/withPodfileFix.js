@@ -51,6 +51,11 @@ begin
   # This creates an AutolinkingManager and calls use_expo_modules! on it
   def use_expo_modules!(options = {})
     Pod::UI.puts '📦 Calling use_expo_modules! (SDK 54)'
+    
+    # Ensure searchpaths includes node_modules for RN modules
+    options[:searchpaths] ||= []
+    options[:searchpaths] << '../node_modules'
+    
     manager = Expo::AutolinkingManager.new(self, current_target_definition, options)
     manager.use_expo_modules!
   end
@@ -77,7 +82,7 @@ end
 use_frameworks! :linkage => :static
 
 target 'PickPlay' do
-  # React Native setup (MUST be before use_expo_modules!)
+  # React Native setup (FIRST - registers RN modules)
   use_react_native!(
     :path => '../node_modules/react-native',
     :hermes_enabled => true,
@@ -85,11 +90,37 @@ target 'PickPlay' do
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
   
-  # Expo autolinking for native modules (MUST be after use_react_native!)
+  # Expo autolinking for native modules (AFTER RN setup)
   use_expo_modules!
 
   # NOTE: Firebase pods are auto-managed by @react-native-firebase/app
   # No manual pod declarations needed - RNFB handles versions automatically
+  
+  # ✅ CRITICAL: Explicitly declare ALL React Native community modules
+  # This prevents "Unable to find specification" errors for ExpoHead dependencies
+  # These paths MUST match the actual package names in node_modules
+  
+  # Core navigation & UI modules (REQUIRED by most apps)
+  pod 'RNScreens', :path => '../node_modules/react-native-screens'
+  pod 'RNReanimated', :path => '../node_modules/react-native-reanimated'
+  pod 'RNGestureHandler', :path => '../node_modules/react-native-gesture-handler'
+  pod 'RNSafeAreaContext', :path => '../node_modules/react-native-safe-area-context'
+  
+  # Storage & Web modules
+  pod 'RNCAsyncStorage', :path => '../node_modules/@react-native-async-storage/async-storage'
+  pod 'RNCWebView', :path => '../node_modules/react-native-webview'
+  
+  # Animation & Graphics
+  pod 'lottie-react-native', :path => '../node_modules/lottie-react-native'
+  
+  # Ads (Google Mobile Ads)
+  pod 'RNGoogleMobileAds', :path => '../node_modules/react-native-google-mobile-ads'
+  
+  # Worklets (required by Reanimated)
+  pod 'RNWorklets', :path => '../node_modules/react-native-worklets'
+  
+  # Linear Gradient
+  pod 'BVLinearGradient', :path => '../node_modules/react-native-linear-gradient'
 end
 
 post_install do |installer|
