@@ -108,25 +108,11 @@ target 'PickPlay' do
   # Pod names MUST match the actual .podspec file names!
   
   # Core navigation & UI modules (REQUIRED by most apps)
-  pod 'RNScreens', :path => '../node_modules/react-native-screens'
-  pod 'RNReanimated', :path => '../node_modules/react-native-reanimated'
-  pod 'RNGestureHandler', :path => '../node_modules/react-native-gesture-handler'
-  pod 'react-native-safe-area-context', :path => '../node_modules/react-native-safe-area-context'
+  # NOTE: Removed manual pod declarations to let use_react_native! handle them
+  # This ensures proper Codegen integration for New Architecture
   
-  # Storage & Web modules
-  pod 'RNCAsyncStorage', :path => '../node_modules/@react-native-async-storage/async-storage'
-  pod 'react-native-webview', :path => '../node_modules/react-native-webview'
-  
-  # Animation & Graphics
+  # Animation & Graphics (non-Codegen modules only)
   pod 'lottie-react-native', :path => '../node_modules/lottie-react-native'
-  
-  # Ads (Google Mobile Ads)
-  pod 'RNGoogleMobileAds', :path => '../node_modules/react-native-google-mobile-ads'
-  
-  # Worklets (required by Reanimated)
-  pod 'RNWorklets', :path => '../node_modules/react-native-worklets'
-  
-  # Linear Gradient
   pod 'BVLinearGradient', :path => '../node_modules/react-native-linear-gradient'
 end
 
