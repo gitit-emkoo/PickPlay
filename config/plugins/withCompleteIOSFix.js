@@ -271,8 +271,8 @@ module.exports = (config) => {
         firebase_ldflags << '-framework' << 'FirebaseFirestore'
         config.build_settings['OTHER_LDFLAGS'] = firebase_ldflags
         
-      # ===================================================
-      # FIX 12: Additional C++ Libraries Prevention
+        puts "  🔗 Firebase Linking: #{target.name}"
+      end
       # ===================================================
       # Prevent C++ issues for other libraries
       if target.name.include?('lottie') || target.name.include?('Lottie') ||
@@ -314,6 +314,9 @@ module.exports = (config) => {
         
         puts "  🔧 Google Ads C++ Fix: #{target.name}"
       end
+      
+    end
+  end
   
   puts "=" * 80
   puts "🎉 Complete iOS Fix Applied Successfully!"
