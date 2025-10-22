@@ -11,11 +11,11 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.pickplay.kwcc",
+      "buildNumber": "10",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSUserTrackingUsageDescription": "이 정보를 사용하여 더 관련성 높은 맞춤형 광고를 제공합니다.",
         "UIBackgroundModes": [
-          "remote-notification",
           "remote-notification"
         ],
         "ITSAppUsesNonExemptEncryption": false
@@ -43,14 +43,11 @@
         "android.permission.VIBRATE",
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.WAKE_LOCK",
-        "android.permission.FOREGROUND_SERVICE",
-        "android.permission.INTERNET",
-        "android.permission.VIBRATE",
-        "android.permission.RECEIVE_BOOT_COMPLETED",
-        "android.permission.WAKE_LOCK",
         "android.permission.FOREGROUND_SERVICE"
       ],
-      "runtimeVersion": "1.0.0"
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "web": {
       "bundler": "metro",

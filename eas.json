@@ -32,9 +32,7 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-        "EXPO_NO_CACHE": "1",
-        "EAS_BUILD_SKIP_CACHE": "1"
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
       },
       "ios": {
         "buildConfiguration": "Release"
