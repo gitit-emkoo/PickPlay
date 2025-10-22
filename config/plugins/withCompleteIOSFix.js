@@ -216,12 +216,10 @@ module.exports = (config) => {
       # FIX 9: Linking Error Prevention
       # ===================================================
       # Prevent common linking errors
-      config.build_settings['OTHER_LDFLAGS'] = (config.build_settings['OTHER_LDFLAGS'] || []) + [
-        '-ObjC',
-        '-lc++',
-        '-lz',
-        '-lsqlite3'
-      ]
+      other_ldflags = config.build_settings['OTHER_LDFLAGS'] || []
+      other_ldflags = [other_ldflags] unless other_ldflags.is_a?(Array)
+      other_ldflags += ['-ObjC', '-lc++', '-lz', '-lsqlite3']
+      config.build_settings['OTHER_LDFLAGS'] = other_ldflags
       
       # Ensure proper library search paths
       library_search_paths = config.build_settings['LIBRARY_SEARCH_PATHS'] || ['$(inherited)']
