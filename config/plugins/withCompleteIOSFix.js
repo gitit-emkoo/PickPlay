@@ -57,10 +57,16 @@ module.exports = (config) => {
   
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
-      # Enable modular headers for all targets
-      config.build_settings['DEFINES_MODULE'] = 'YES'
-      config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
-      config.build_settings['USE_HEADERMAP'] = 'YES'
+      # Enable modular headers for compatible targets only
+      # Exclude problematic libraries like libdav1d
+      unless target.name.start_with?('libdav1d') || 
+             target.name.start_with?('hermes-engine') ||
+             target.name.include?('dav1d')
+        
+        config.build_settings['DEFINES_MODULE'] = 'YES'
+        config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
+        config.build_settings['USE_HEADERMAP'] = 'YES'
+      end
     end
   end
   
@@ -159,6 +165,43 @@ module.exports = (config) => {
       
       # Xcode 16 compatibility
       config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+      
+      # ===================================================
+      # FIX 6: C++ Standard Library (libdav1d fix)
+      # ===================================================
+      if target.name.start_with?('libdav1d') || target.name.include?('dav1d')
+        config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
+        config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+        
+        # Add C++ standard library headers path
+        header_paths = config.build_settings['HEADER_SEARCH_PATHS'] || ['$(inherited)']
+        header_paths = [header_paths] unless header_paths.is_a?(Array)
+        header_paths << '/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1'
+        config.build_settings['HEADER_SEARCH_PATHS'] = header_paths
+        
+        puts "  🔧 C++ Library Fix: #{target.name}"
+      end
+      
+      # ===================================================
+      # FIX 7: Hermes Engine Script Issues (Prevention)
+      # ===================================================
+      if target.name == 'hermes-engine'
+        config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+        config.build_settings['SKIP_INSTALL'] = 'YES'
+        config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+        
+        puts "  🔧 Hermes Script Fix: #{target.name}"
+      end
+      
+      # ===================================================
+      # FIX 8: React Native Dependencies Script Issues
+      # ===================================================
+      if target.name == 'ReactNativeDependencies'
+        config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+        config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+        
+        puts "  🔧 RNDeps Script Fix: #{target.name}"
+      end
       
     end
   end
