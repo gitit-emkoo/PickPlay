@@ -13,9 +13,10 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "build:ios": "eas build --platform ios",
+    "build:ios": "echo 'iOS 빌드는 GitHub Actions에서 자동으로 실행됩니다'",
     "build:android": "eas build --platform android",
-    "submit:ios": "eas submit --platform ios",
+    "build:ios-local": "eas build --platform ios",
+    "submit:ios": "echo 'iOS 제출은 GitHub Actions에서 자동으로 실행됩니다'",
     "submit:android": "eas submit --platform android",
     "deploy:tag": "git tag v$(node -p \"require('./package.json').version\") && git push origin v$(node -p \"require('./package.json').version\")",
     "push:send-daily": "node ./scripts/send-daily-push.js"
