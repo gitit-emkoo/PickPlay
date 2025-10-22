@@ -85,18 +85,12 @@ target 'PickPlay' do
     :path => '../node_modules/react-native',
     :hermes_enabled => true,
     :fabric_enabled => true,
-    :app_path => "#{Pod::Config.instance.installation_root}/..",
-    # CRITICAL: Enable codegen for New Architecture
-    :codegen_enabled => true
+    :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
   
   # Expo autolinking for native modules (AFTER RN setup)
   use_expo_modules!
 
-  # ✅ CRITICAL: React Native Codegen (New Architecture)
-  # Must be declared BEFORE other RN modules for proper symbol resolution
-  pod 'ReactCodegen', :path => './build/generated/ios'
-  
   # ✅ CRITICAL: Explicitly declare Expo core modules
   # This ensures Expo modules are available even if autolinking fails
   pod 'ExpoModulesCore', :path => '../node_modules/expo-modules-core'
