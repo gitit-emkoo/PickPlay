@@ -65,6 +65,7 @@
           }
         }
       ],
+      "./config/plugins/withCompleteIOSFix",
       [
         "react-native-google-mobile-ads",
         {
