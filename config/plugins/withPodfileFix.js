@@ -283,27 +283,45 @@ module.exports = (config) => {
   puts "=" * 80
   puts "🚀 Podfile post_install completed successfully!"
   puts "=" * 80
+  
+  # ✅ Define Expo::PostInstall stub if not defined
+  unless defined?(Expo::PostInstall)
+    module Expo
+      class PostInstall
+        def self.run(installer)
+          puts "⚠️  Expo::PostInstall stub called (no-op)"
+        end
+      end
+    end
+  end
 `;
 
-      // post_install 블록 찾아서 수정
-      const postInstallRegex = /post_install\s+do\s+\|installer\|([\s\S]*?)^end$/m;
-      const hasPostInstall = postInstallRegex.test(podfileContent);
+      // post_install 블록 찾아서 수정 (더 강력한 regex)
+      // Ruby의 do...end 블록은 중첩될 수 있으므로 간단한 regex로는 부족
+      // 대신 post_install 시작부터 파일 끝까지 교체
+      const postInstallStart = podfileContent.indexOf('post_install do |installer|');
       
-      if (hasPostInstall) {
+      if (postInstallStart !== -1) {
         console.log('✅ [withPodfileFix] Found existing post_install block - replacing...');
         
-        // 기존 post_install 블록을 새로운 것으로 교체
-        podfileContent = podfileContent.replace(
-          postInstallRegex,
-          `post_install do |installer|${customPostInstall}\nend`
-        );
+        // post_install 이전까지 유지
+        const beforePostInstall = podfileContent.substring(0, postInstallStart);
         
-        // 교체 확인
-        if (!podfileContent.includes('CUSTOM POST INSTALL')) {
-          console.log('⚠️  [withPodfileFix] WARNING: post_install replacement may have failed');
-          console.log('⚠️  [withPodfileFix] Appending instead...');
-          podfileContent += `\n\npost_install do |installer|${customPostInstall}\nend\n`;
+        // post_install의 끝 찾기 (마지막 end)
+        // Podfile의 마지막 end는 보통 post_install의 end
+        const afterPostInstall = podfileContent.substring(postInstallStart);
+        const postInstallEndMatch = afterPostInstall.match(/\nend\s*$/);
+        
+        let finalContent;
+        if (postInstallEndMatch) {
+          // 마지막 end를 우리 post_install의 end로 대체
+          finalContent = beforePostInstall + `post_install do |installer|${customPostInstall}\nend\n`;
+        } else {
+          // end가 없으면 추가
+          finalContent = beforePostInstall + `post_install do |installer|${customPostInstall}\nend\n`;
         }
+        
+        podfileContent = finalContent;
       } else {
         console.log('✅ [withPodfileFix] No post_install found - appending...');
         

@@ -65,7 +65,6 @@
           }
         }
       ],
-      "./config/plugins/withPodfileFix",
       [
         "react-native-google-mobile-ads",
         {
