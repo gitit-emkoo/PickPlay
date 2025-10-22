@@ -11,8 +11,14 @@ const path = require('path');
  * 3. gRPC C++17/C++20 충돌
  * 4. Deployment target 경고
  * 5. Swift 호환성
- * 
- * 방식: Expo가 생성한 Podfile의 post_install 블록 내부에 코드 삽입
+ * 6. libdav1d C++ 헤더 문제
+ * 7. leveldb C++ 헤더 문제
+ * 8. Hermes Engine 스크립트 문제
+ * 9. React Native Dependencies 스크립트 문제
+ * 10. 링킹 에러 예방 (Codegen, Firebase)
+ * 11. 라이브러리 검색 경로 설정
+ * 12. 추가 C++ 라이브러리 예방 (Lottie, Reanimated, Worklets, Linear Gradient)
+ * 13. Google Mobile Ads C++ 예방
  */
 module.exports = (config) => {
   console.log('\n========================================');
@@ -58,10 +64,12 @@ module.exports = (config) => {
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
       # Enable modular headers for compatible targets only
-      # Exclude problematic libraries like libdav1d
+      # Exclude problematic libraries like libdav1d, leveldb
       unless target.name.start_with?('libdav1d') || 
              target.name.start_with?('hermes-engine') ||
-             target.name.include?('dav1d')
+             target.name.start_with?('leveldb') ||
+             target.name.include?('dav1d') ||
+             target.name.include?('leveldb')
         
         config.build_settings['DEFINES_MODULE'] = 'YES'
         config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
@@ -167,9 +175,10 @@ module.exports = (config) => {
       config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
       
       # ===================================================
-      # FIX 6: C++ Standard Library (libdav1d fix)
+      # FIX 6: C++ Standard Library (libdav1d + leveldb fix)
       # ===================================================
-      if target.name.start_with?('libdav1d') || target.name.include?('dav1d')
+      if target.name.start_with?('libdav1d') || target.name.include?('dav1d') ||
+         target.name.start_with?('leveldb') || target.name.include?('leveldb')
         config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
         config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
         
@@ -203,8 +212,108 @@ module.exports = (config) => {
         puts "  🔧 RNDeps Script Fix: #{target.name}"
       end
       
-    end
-  end
+      # ===================================================
+      # FIX 9: Linking Error Prevention
+      # ===================================================
+      # Prevent common linking errors
+      config.build_settings['OTHER_LDFLAGS'] = (config.build_settings['OTHER_LDFLAGS'] || []) + [
+        '-ObjC',
+        '-lc++',
+        '-lz',
+        '-lsqlite3'
+      ]
+      
+      # Ensure proper library search paths
+      library_search_paths = config.build_settings['LIBRARY_SEARCH_PATHS'] || ['$(inherited)']
+      library_search_paths = [library_search_paths] unless library_search_paths.is_a?(Array)
+      library_search_paths << '$(SDKROOT)/usr/lib'
+      library_search_paths << '$(TOOLCHAIN_DIR)/usr/lib'
+      config.build_settings['LIBRARY_SEARCH_PATHS'] = library_search_paths
+      
+      # Prevent duplicate symbol errors
+      config.build_settings['GCC_NO_COMMON_BLOCKS'] = 'YES'
+      config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'NO'
+      
+      # Ensure proper framework search paths
+      framework_search_paths = config.build_settings['FRAMEWORK_SEARCH_PATHS'] || ['$(inherited)']
+      framework_search_paths = [framework_search_paths] unless framework_search_paths.is_a?(Array)
+      framework_search_paths << '$(SDKROOT)/System/Library/Frameworks'
+      config.build_settings['FRAMEWORK_SEARCH_PATHS'] = framework_search_paths
+      
+      # ===================================================
+      # FIX 10: Codegen Linking Error Prevention
+      # ===================================================
+      # Ensure ReactCodegen and related modules link properly
+      if target.name.include?('React') || target.name.include?('RCT') || target.name.include?('Codegen')
+        config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
+        config.build_settings['CLANG_MODULES_AUTOLINK'] = 'YES'
+        config.build_settings['CLANG_MODULES_BUILD_SESSION_FILE'] = '$(DERIVED_FILE_DIR)/modules.session'
+        
+        # Ensure proper module map generation
+        config.build_settings['CLANG_MODULE_MAP_FILE'] = '$(DERIVED_FILE_DIR)/module.modulemap'
+        
+        puts "  🔗 Codegen Linking: #{target.name}"
+      end
+      
+      # ===================================================
+      # FIX 11: Firebase Linking Error Prevention
+      # ===================================================
+      # Ensure Firebase modules link properly
+      if target.name.start_with?('RNFB') || target.name.include?('Firebase')
+        config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
+        config.build_settings['CLANG_MODULES_AUTOLINK'] = 'YES'
+        
+        # Add Firebase-specific linking flags
+        firebase_ldflags = config.build_settings['OTHER_LDFLAGS'] || []
+        firebase_ldflags = [firebase_ldflags] unless firebase_ldflags.is_a?(Array)
+        firebase_ldflags << '-framework' << 'FirebaseCore'
+        firebase_ldflags << '-framework' << 'FirebaseAuth'
+        firebase_ldflags << '-framework' << 'FirebaseFirestore'
+        config.build_settings['OTHER_LDFLAGS'] = firebase_ldflags
+        
+      # ===================================================
+      # FIX 12: Additional C++ Libraries Prevention
+      # ===================================================
+      # Prevent C++ issues for other libraries
+      if target.name.include?('lottie') || target.name.include?('Lottie') ||
+         target.name.include?('reanimated') || target.name.include?('Reanimated') ||
+         target.name.include?('worklets') || target.name.include?('Worklets') ||
+         target.name.include?('linear') || target.name.include?('Linear') ||
+         target.name.include?('protobuf') || target.name.include?('Protobuf')
+        
+        config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
+        config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+        
+        # Add C++ standard library headers path
+        header_paths = config.build_settings['HEADER_SEARCH_PATHS'] || ['$(inherited)']
+        header_paths = [header_paths] unless header_paths.is_a?(Array)
+        header_paths << '/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1'
+        config.build_settings['HEADER_SEARCH_PATHS'] = header_paths
+        
+        # Prevent C++ header issues
+        config.build_settings['GCC_C_LANGUAGE_STANDARD'] = 'c17'
+        config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+        
+        puts "  🔧 C++ Library Fix: #{target.name}"
+      end
+      
+      # ===================================================
+      # FIX 13: Google Mobile Ads C++ Prevention
+      # ===================================================
+      if target.name.include?('GoogleMobileAds') || target.name.include?('GAD') ||
+         target.name.include?('google') || target.name.include?('Google')
+        
+        config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
+        config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+        
+        # Add protobuf and gRPC specific settings
+        cxxflags = config.build_settings['OTHER_CPLUSPLUSFLAGS'] || '$(inherited)'
+        cxxflags = cxxflags.is_a?(Array) ? cxxflags.join(' ') : cxxflags.to_s
+        cxxflags = "#{cxxflags} -std=c++17 -Wno-missing-template-arg-list-after-template-kw".strip
+        config.build_settings['OTHER_CPLUSPLUSFLAGS'] = cxxflags
+        
+        puts "  🔧 Google Ads C++ Fix: #{target.name}"
+      end
   
   puts "=" * 80
   puts "🎉 Complete iOS Fix Applied Successfully!"
