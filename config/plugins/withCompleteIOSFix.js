@@ -50,6 +50,22 @@ module.exports = (config) => {
   puts "🔧 Applying Complete iOS Build Fixes..."
   puts "=" * 80
   
+  # ===================================================
+  # CRITICAL: Enable modular headers for all pods
+  # ===================================================
+  puts "🔧 Enabling modular headers for all pods..."
+  
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      # Enable modular headers for all targets
+      config.build_settings['DEFINES_MODULE'] = 'YES'
+      config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
+      config.build_settings['USE_HEADERMAP'] = 'YES'
+    end
+  end
+  
+  puts "  ✅ Modular headers enabled for all pods"
+  
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
       
@@ -81,7 +97,7 @@ module.exports = (config) => {
           original = config.build_settings['COMPILER_FLAGS']
           config.build_settings['COMPILER_FLAGS'] = original
             .gsub('-GCC_WARN_INHIBIT_ALL_WARNINGS', '')
-            .gsub(/(?<!-)\\bG\\b/, '')
+            .gsub(/(?<![^-])\\b-G\\b/, '')
             .strip
         end
         
@@ -157,11 +173,11 @@ module.exports = (config) => {
       // post_install 블록 찾아서 내용 삽입
       // ===================================================
       
-      // post_install do |installer| 다음 줄에 삽입
-      const postInstallMatch = podfileContent.match(/(post_install do \|installer\|\n)/);
+      // react_native_post_install 호출 후에 삽입 (Expo 기본 설정 완료 후)
+      const reactNativePostInstallMatch = podfileContent.match(/(react_native_post_install\([^)]*\))/);
       
-      if (postInstallMatch) {
-        const insertPosition = postInstallMatch.index + postInstallMatch[0].length;
+      if (reactNativePostInstallMatch) {
+        const insertPosition = reactNativePostInstallMatch.index + reactNativePostInstallMatch[0].length;
         
         podfileContent = 
           podfileContent.slice(0, insertPosition) +
@@ -170,8 +186,8 @@ module.exports = (config) => {
         
         fs.writeFileSync(podfilePath, podfileContent, 'utf8');
         
-        console.log('✅ Applied complete iOS fix to post_install hook');
-        console.log('✅ All fixes injected into existing post_install block');
+        console.log('✅ Applied complete iOS fix AFTER react_native_post_install');
+        console.log('✅ Expo 기본 설정 완료 후 우리 수정 적용');
         console.log('✅ Expo autolinking preserved');
         console.log('✅ React Native post_install preserved');
         
@@ -179,7 +195,7 @@ module.exports = (config) => {
         console.log('✅ [CompleteIOSFix] COMPLETED');
         console.log('========================================\n');
       } else {
-        console.log('❌ Could not find post_install block!');
+        console.log('❌ Could not find react_native_post_install call!');
         console.log('⚠️  This should not happen with Expo prebuild');
       }
       
