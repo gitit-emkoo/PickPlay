@@ -54,11 +54,10 @@ module.exports = (config) => {
     target.build_configurations.each do |config|
       
       # ===================================================
-      # FIX 1: RNFB Non-Modular Headers
+      # FIX 1: RNFB Non-Modular Headers (RNFB ONLY!)
       # ===================================================
-      if target.name.start_with?('RNFB') || 
-         target.name.start_with?('React') || 
-         target.name.start_with?('RCT')
+      # CRITICAL: Only apply to RNFB targets, NOT React/Expo core!
+      if target.name.start_with?('RNFB')
         
         config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
         config.build_settings['CLANG_WARN_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
