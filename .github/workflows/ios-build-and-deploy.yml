@@ -87,6 +87,19 @@ jobs:
           ls -la certificate.p12
           echo "📋 인증서 파일 형식 확인:"
           file certificate.p12
+          echo "📋 Base64 문자열 길이 확인:"
+          echo "${{ secrets.IOS_CERTIFICATE_P12 }}" | wc -c
+          echo "📋 Base64 문자열 시작 부분:"
+          echo "${{ secrets.IOS_CERTIFICATE_P12 }}" | head -c 50
+          echo ""
+          echo "📋 Base64 문자열 끝 부분:"
+          echo "${{ secrets.IOS_CERTIFICATE_P12 }}" | tail -c 50
+          echo ""
+          echo "📋 CERTIFICATE_PASSWORD 길이 확인:"
+          echo "${{ secrets.CERTIFICATE_PASSWORD }}" | wc -c
+          echo "📋 CERTIFICATE_PASSWORD 값 확인 (마스킹):"
+          echo "${{ secrets.CERTIFICATE_PASSWORD }}" | sed 's/./*/g'
+          echo "📋 security import 명령어 실행 중..."
           security import certificate.p12 -k build.keychain -P "${{ secrets.CERTIFICATE_PASSWORD }}" -T /usr/bin/codesign
           
           # 프로비저닝 프로파일 설치
