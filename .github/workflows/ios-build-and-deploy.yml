@@ -22,22 +22,37 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
         
-      - name: Install EAS CLI
-        run: npm install -g eas-cli@latest
-        
       - name: Setup Expo
         uses: expo/expo-github-action@v8
         with:
           expo-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
           
-      - name: Build and Submit to TestFlight
-        run: eas build --platform ios --profile production --non-interactive --auto-submit
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APP_STORE_CONNECT_APP_ID: ${{ secrets.APP_STORE_CONNECT_APP_ID }}
+      - name: Prebuild iOS
+        run: npx expo prebuild --platform ios --clean
+        
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install --repo-update
+          
+      - name: Build iOS
+        run: |
+          cd ios
+          xcodebuild -workspace PickPlay.xcworkspace -scheme PickPlay -configuration Release -destination generic/platform=iOS -archivePath PickPlay.xcarchive archive
+          
+      - name: Export IPA
+        run: |
+          cd ios
+          xcodebuild -exportArchive -archivePath PickPlay.xcarchive -exportPath . -exportOptionsPlist ExportOptions.plist
+          
+      - name: Upload to TestFlight
+        uses: apple-actions/upload-testflight-build@v1
+        with:
+          app-path: ios/PickPlay.ipa
+          issuer-id: ${{ secrets.APPLE_ID }}
+          api-key-id: ${{ secrets.APP_STORE_CONNECT_APP_ID }}
+          api-private-key: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           
       - name: Build Status
         if: always()
