@@ -39,12 +39,12 @@ jobs:
       - name: Build iOS
         run: |
           cd ios
-          xcodebuild -workspace PickPlay.xcworkspace -scheme PickPlay -configuration Release -destination generic/platform=iOS -archivePath PickPlay.xcarchive archive
+          xcodebuild -workspace PickPlay.xcworkspace -scheme PickPlay -configuration Release -destination generic/platform=iOS -archivePath PickPlay.xcarchive archive DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }}
           
       - name: Export IPA
         run: |
           cd ios
-          xcodebuild -exportArchive -archivePath PickPlay.xcarchive -exportPath . -exportOptionsPlist ExportOptions.plist
+          xcodebuild -exportArchive -archivePath PickPlay.xcarchive -exportPath . -exportOptionsPlist ExportOptions.plist DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }}
           
       - name: Upload to TestFlight
         uses: apple-actions/upload-testflight-build@v1
