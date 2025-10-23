@@ -11,18 +11,19 @@ jobs:
     
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
           
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: npm ci --legacy-peer-deps
         
       - name: Install EAS CLI
-        run: npm install -g @expo/eas-cli@latest
+        run: npm install -g eas-cli@latest
         
       - name: Setup Expo
         uses: expo/expo-github-action@v8
@@ -34,3 +35,16 @@ jobs:
         run: eas build --platform ios --non-interactive --auto-submit
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APP_STORE_CONNECT_APP_ID: ${{ secrets.APP_STORE_CONNECT_APP_ID }}
+          
+      - name: Build Status
+        if: always()
+        run: |
+          if [ ${{ job.status }} == 'success' ]; then
+            echo "✅ iOS 빌드 및 TestFlight 제출 성공!"
+          else
+            echo "❌ iOS 빌드 또는 TestFlight 제출 실패"
+            exit 1
+          fi
