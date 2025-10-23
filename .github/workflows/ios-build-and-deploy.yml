@@ -105,14 +105,14 @@ jobs:
           echo "📋 CERTIFICATE_PASSWORD 값 확인 (마스킹):"
           echo "${{ secrets.CERTIFICATE_PASSWORD }}" | sed 's/./*/g'
           echo "📋 security import 명령어 실행 중..."
-          # 모든 공백 및 제어 문자 제거 (tr -d '[:space:]' 사용)
-          CLEAN_PASSWORD=$(echo "${{ secrets.CERTIFICATE_PASSWORD }}" | tr -d '[:space:]')
-          echo "📋 정리된 비밀번호 길이:"
-          echo "$CLEAN_PASSWORD" | wc -c
-          echo "📋 정리된 비밀번호 hexdump:"
-          echo "$CLEAN_PASSWORD" | hexdump -C
+          # echo -n과 tr -d 조합으로 줄바꿈 문자 완전 제거
+          CLEAN_PASSWORD=$(echo -n "${{ secrets.CERTIFICATE_PASSWORD }}" | tr -d '[:space:]')
+          echo "📋 정리된 비밀번호 길이 (최종 확인):"
+          echo -n "$CLEAN_PASSWORD" | wc -c
+          echo "📋 정리된 비밀번호 hexdump (최종 확인):"
+          echo -n "$CLEAN_PASSWORD" | hexdump -C
           echo "📋 정리된 비밀번호 문자별:"
-          echo "$CLEAN_PASSWORD" | sed 's/./& /g'
+          echo -n "$CLEAN_PASSWORD" | sed 's/./& /g'
           security import certificate.p12 -k build.keychain -P "$CLEAN_PASSWORD" -T /usr/bin/codesign
           
           # 프로비저닝 프로파일 설치
