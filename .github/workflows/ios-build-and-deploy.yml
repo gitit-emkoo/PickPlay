@@ -95,10 +95,19 @@ jobs:
           echo "📋 Base64 문자열 끝 부분:"
           echo "${{ secrets.IOS_CERTIFICATE_P12 }}" | tail -c 50
           echo ""
-          echo "📋 CERTIFICATE_PASSWORD 길이 확인:"
+          echo "📋 CERTIFICATE_PASSWORD 길이 확인 (wc -c):"
           echo "${{ secrets.CERTIFICATE_PASSWORD }}" | wc -c
+          echo "📋 CERTIFICATE_PASSWORD 길이 확인 (wc -m):"
+          echo "${{ secrets.CERTIFICATE_PASSWORD }}" | wc -m
+          echo "📋 CERTIFICATE_PASSWORD 길이 확인 (${#변수}):"
+          PASSWORD="${{ secrets.CERTIFICATE_PASSWORD }}"
+          echo "길이: ${#PASSWORD}"
           echo "📋 CERTIFICATE_PASSWORD 값 확인 (마스킹):"
           echo "${{ secrets.CERTIFICATE_PASSWORD }}" | sed 's/./*/g'
+          echo "📋 CERTIFICATE_PASSWORD 실제 값 (디버깅용):"
+          echo "${{ secrets.CERTIFICATE_PASSWORD }}" | hexdump -C
+          echo "📋 CERTIFICATE_PASSWORD 문자별 확인:"
+          echo "${{ secrets.CERTIFICATE_PASSWORD }}" | sed 's/./& /g'
           echo "📋 security import 명령어 실행 중..."
           security import certificate.p12 -k build.keychain -P "${{ secrets.CERTIFICATE_PASSWORD }}" -T /usr/bin/codesign
           
