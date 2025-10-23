@@ -32,7 +32,7 @@ jobs:
           token: ${{ secrets.EXPO_TOKEN }}
           
       - name: Build and Submit to TestFlight
-        run: eas build --platform ios --non-interactive --auto-submit
+        run: eas build --platform ios --profile production --non-interactive --auto-submit
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           APPLE_ID: ${{ secrets.APPLE_ID }}

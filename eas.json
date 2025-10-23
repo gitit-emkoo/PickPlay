@@ -35,7 +35,8 @@
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
       },
       "ios": {
-        "buildConfiguration": "Release"
+        "buildConfiguration": "Release",
+        "cocoapods": "1.15.2"
       }
     }
   },
