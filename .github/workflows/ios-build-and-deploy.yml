@@ -113,6 +113,12 @@ jobs:
           echo -n "$CLEAN_PASSWORD" | hexdump -C
           echo "📋 정리된 비밀번호 문자별:"
           echo -n "$CLEAN_PASSWORD" | sed 's/./& /g'
+          echo "📋 security import 명령어 디버깅:"
+          echo "명령어: security import certificate.p12 -k build.keychain -P \"$CLEAN_PASSWORD\" -T /usr/bin/codesign"
+          echo "파일 존재 확인:"
+          ls -la certificate.p12
+          echo "파일 내용 확인 (처음 100바이트):"
+          head -c 100 certificate.p12 | hexdump -C
           security import certificate.p12 -k build.keychain -P "$CLEAN_PASSWORD" -T /usr/bin/codesign
           
           # 프로비저닝 프로파일 설치
