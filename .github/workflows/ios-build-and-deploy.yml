@@ -76,12 +76,6 @@ jobs:
       # 7단계: 수동 서명을 위한 인증서 및 프로파일 설정
       - name: Setup Manual Code Signing
         run: |
-          # 키체인 생성 및 설정
-          security create-keychain -p "" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "" build.keychain
-          security set-keychain-settings -t 3600 -u build.keychain
-          
           # 인증서 (.p12) 설치 - 분할된 Secret 사용
           echo "🔐 iOS 인증서 설치 중..."
           
@@ -100,6 +94,7 @@ jobs:
           security create-keychain -p "$CLEAN_PASSWORD" build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p "$CLEAN_PASSWORD" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
           
           # -A (Allow access) 옵션을 추가하여 권한 오류 최소화
           security import certificate.p12 -k build.keychain -P "$CLEAN_PASSWORD" -A -T /usr/bin/codesign
@@ -108,7 +103,7 @@ jobs:
           
           # 프로비저닝 프로파일 설치
           echo "📋 프로비저닝 프로파일 설치 중..."
-          echo "${{ secrets.IOS_PROVISIONING_PROFILE }}" | base64 -d > provisioning_profile.mobileprovision
+          echo "${{ secrets.IOS_PROVISIONING_PROFILE }}" | base64 -D > provisioning_profile.mobileprovision
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp provisioning_profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
           
