@@ -81,12 +81,16 @@ jobs:
           
           # 인증서 (.p12) 설치
           echo "🔐 iOS 인증서 설치 중..."
-          echo "${{ secrets.IOS_CERTIFICATE_P12 }}" | base64 --decode > certificate.p12
+          echo "${{ secrets.IOS_CERTIFICATE_P12 }}" | base64 -d > certificate.p12
+          echo "📋 인증서 파일 크기 확인:"
+          ls -la certificate.p12
+          echo "📋 인증서 파일 형식 확인:"
+          file certificate.p12
           security import certificate.p12 -k build.keychain -P "" -T /usr/bin/codesign
           
           # 프로비저닝 프로파일 설치
           echo "📋 프로비저닝 프로파일 설치 중..."
-          echo "${{ secrets.IOS_PROVISIONING_PROFILE }}" | base64 --decode > provisioning_profile.mobileprovision
+          echo "${{ secrets.IOS_PROVISIONING_PROFILE }}" | base64 -d > provisioning_profile.mobileprovision
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp provisioning_profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
           
