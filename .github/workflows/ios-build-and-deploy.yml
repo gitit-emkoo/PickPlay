@@ -12,7 +12,7 @@
 # 빌드 과정:
 # 1. Expo prebuild로 iOS 프로젝트 생성
 # 2. CocoaPods로 의존성 설치
-# 3. Apple 계정 로그인 및 키체인 설정
+# 3. 수동 서명을 위한 인증서 및 프로파일 설정
 # 4. xcodebuild로 직접 빌드 및 아카이브
 # 5. IPA 내보내기 및 TestFlight 업로드
 #
@@ -22,11 +22,8 @@
 # - APPLE_APP_SPECIFIC_PASSWORD: 앱별 비밀번호
 # - APPLE_TEAM_ID: Apple Developer 팀 ID
 # - APP_STORE_CONNECT_APP_ID: App Store Connect 앱 ID
-# - IOS_CERTIFICATE: iOS 개발자 인증서 (.p12 파일을 base64로 인코딩)
-# - CERTIFICATE_PASSWORD: 인증서 비밀번호
-# - IOS_PROVISIONING_PROFILE: 프로비저닝 프로파일 (.mobileprovision 파일을 base64로 인코딩)
-# - PROVISIONING_PROFILE_NAME: 프로비저닝 프로파일 이름
-# - CODE_SIGN_IDENTITY: 코드 서명 인증서 이름 (예: "iPhone Developer: Your Name")
+# - IOS_CERTIFICATE_P12: iOS Distribution 인증서 (.p12 파일을 base64로 인코딩)
+# - IOS_PROVISIONING_PROFILE: App Store 프로비저닝 프로파일 (.mobileprovision 파일을 base64로 인코딩)
 # ========================================
 
 name: iOS Build and Deploy to TestFlight
@@ -73,8 +70,8 @@ jobs:
           cd ios
           pod install --repo-update
           
-      # 7단계: Apple 계정 로그인 및 Xcode 계정 설정
-      - name: Setup Apple Account
+      # 7단계: 수동 서명을 위한 인증서 및 프로파일 설정
+      - name: Setup Manual Code Signing
         run: |
           # 키체인 생성 및 설정
           security create-keychain -p "" build.keychain
@@ -82,57 +79,43 @@ jobs:
           security unlock-keychain -p "" build.keychain
           security set-keychain-settings -t 3600 -u build.keychain
           
-          # Apple 계정 로그인
-          echo "🔐 Apple 계정 로그인 중..."
-          xcrun altool --list-providers -u "${{ secrets.APPLE_ID }}" -p "${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}"
+          # 인증서 (.p12) 설치
+          echo "🔐 iOS 인증서 설치 중..."
+          echo "${{ secrets.IOS_CERTIFICATE_P12 }}" | base64 --decode > certificate.p12
+          security import certificate.p12 -k build.keychain -P "" -T /usr/bin/codesign
           
-          # Xcode 계정 설정 (자동 서명을 위해 필수)
-          echo "📱 Xcode 계정 설정 중..."
-          
-          # Apple 계정을 Xcode에 추가하는 시도
-          echo "🔑 Apple 계정을 Xcode에 추가 시도..."
-          xcrun altool --upload-app -f /dev/null -u "${{ secrets.APPLE_ID }}" -p "${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}" --verbose || echo "⚠️ 업로드 테스트 실패 (정상)"
-          
-          # 프로비저닝 프로파일 자동 생성 시도
-          echo "📋 프로비저닝 프로파일 생성 시도..."
-          xcrun altool --list-providers -u "${{ secrets.APPLE_ID }}" -p "${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}" --output-format json || echo "⚠️ 프로바이더 목록 조회 실패"
+          # 프로비저닝 프로파일 설치
+          echo "📋 프로비저닝 프로파일 설치 중..."
+          echo "${{ secrets.IOS_PROVISIONING_PROFILE }}" | base64 --decode > provisioning_profile.mobileprovision
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp provisioning_profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
           
           # 인증서 확인
           echo "📋 설치된 인증서 확인:"
           security find-identity -v -p codesigning
           
-          # Xcode 계정 설정 파일 생성 시도
-          echo "🔧 Xcode 계정 설정 파일 생성 시도..."
-          mkdir -p ~/Library/Developer/Xcode/UserData
-          echo '<?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>AppleID</key>
-              <string>${{ secrets.APPLE_ID }}</string>
-              <key>TeamID</key>
-              <string>${{ secrets.APPLE_TEAM_ID }}</string>
-          </dict>
-          </plist>' > ~/Library/Developer/Xcode/UserData/IDEFindNavigatorScopes.plist || echo "⚠️ 설정 파일 생성 실패"
+          # 프로비저닝 프로파일 확인
+          echo "📋 설치된 프로비저닝 프로파일 확인:"
+          ls -la ~/Library/MobileDevice/Provisioning\ Profiles/
           
-      # 8단계: Xcode 빌드 및 아카이브 (자동 서명 방식)
+      # 8단계: Xcode 빌드 및 아카이브 (수동 서명 방식)
       - name: Build iOS
         run: |
           cd ios
-          echo "🔨 iOS 빌드 시작 (자동 서명 방식)..."
+          echo "🔨 iOS 빌드 시작 (수동 서명 방식)..."
           echo "🏢 팀 ID: ${{ secrets.APPLE_TEAM_ID }}"
           
-          # 자동 서명으로 빌드 (더 강력한 설정)
-          xcodebuild -workspace PickPlay.xcworkspace -scheme PickPlay -configuration Release -destination generic/platform=iOS -archivePath PickPlay.xcarchive archive -allowProvisioningUpdates -allowProvisioningDeviceRegistration DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }} CODE_SIGN_STYLE=Automatic
+          # 수동 서명으로 빌드
+          xcodebuild -workspace PickPlay.xcworkspace -scheme PickPlay -configuration Release -destination generic/platform=iOS -archivePath PickPlay.xcarchive archive DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }} CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="iPhone Distribution" PROVISIONING_PROFILE_SPECIFIER="*[expo]*com.pickplay.kwcc*App Store*"
           
-      # 9단계: IPA 파일 내보내기 (자동 서명 방식)
+      # 9단계: IPA 파일 내보내기 (수동 서명 방식)
       - name: Export IPA
         run: |
           cd ios
           echo "📦 IPA 파일 내보내기 중..."
           
-          # 자동 서명으로 IPA 내보내기
-          xcodebuild -exportArchive -archivePath PickPlay.xcarchive -exportPath . -exportOptionsPlist ExportOptions.plist -allowProvisioningUpdates DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }} CODE_SIGN_STYLE=Automatic
+          # 수동 서명으로 IPA 내보내기
+          xcodebuild -exportArchive -archivePath PickPlay.xcarchive -exportPath . -exportOptionsPlist ExportOptions.plist DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }} CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="iPhone Distribution" PROVISIONING_PROFILE_SPECIFIER="*[expo]*com.pickplay.kwcc*App Store*"
           
       # 10단계: TestFlight 자동 업로드
       - name: Upload to TestFlight
