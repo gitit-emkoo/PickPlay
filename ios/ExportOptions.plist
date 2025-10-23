@@ -15,6 +15,6 @@
     <key>signingStyle</key>
     <string>automatic</string>
     <key>signingCertificate</key>
-    <string>Apple Distribution</string>
+    <string>Apple Development</string>
 </dict>
 </plist>
