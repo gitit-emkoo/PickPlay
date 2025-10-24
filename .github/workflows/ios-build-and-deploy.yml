@@ -62,17 +62,26 @@ jobs:
           expo-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
           
-      # 5단계: iOS 프로젝트 생성 (prebuild)
-      - name: Prebuild iOS
-        run: npx expo prebuild --platform ios --clean
+      # 5단계: Xcode 버전 설정 및 iOS 프로젝트 생성
+      - name: Setup Xcode and Prebuild iOS
+        run: |
+          # Xcode 16.3 사용 (호환성 문제 해결)
+          sudo xcode-select -s /Applications/Xcode_16.3.app
+          xcodebuild -version
+          
+          # iOS 프로젝트 생성
+          npx expo prebuild --platform ios --clean
         
       # 6단계: CocoaPods 의존성 설치 및 SwiftLint 설정
       - name: Install CocoaPods and SwiftLint
         run: |
           cd ios
-          # 기존 Pods 캐시 정리
+          # 기존 Pods 캐시 정리 (더 강력한 정리)
           rm -rf Pods/
           rm -f Podfile.lock
+          rm -rf build/
+          rm -rf DerivedData/
+          
           # 새로 설치
           pod install --repo-update
           

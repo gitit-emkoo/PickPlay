@@ -6,6 +6,10 @@ default_platform(:ios)
 platform :ios do
   desc "Build and upload to TestFlight"
   lane :beta do
+    # Xcode 버전 명시적 설정 (안정적인 버전 사용)
+    # Xcode 16.4는 일부 라이브러리와 호환성 문제가 있어 16.3 사용
+    xcode_select("/Applications/Xcode_16.3.app")
+    
     # 인증서 및 프로파일 설정
     create_keychain(
       name: "build",
@@ -37,13 +41,24 @@ platform :ios do
       path: "../provisioning_profile.mobileprovision"
     )
     
-    # 빌드 및 아카이브
+    # 빌드 및 아카이브 (안정성 개선)
     build_app(
       workspace: "PickPlay.xcworkspace",
       scheme: "PickPlay",
       configuration: "Release",
       export_method: "app-store",
-      export_options: "ExportOptions.plist"
+      export_options: "ExportOptions.plist",
+      # 빌드 안정성 설정
+      clean: true,
+      skip_codesigning: false,
+      skip_package_dependencies_resolution: false,
+      # 빌드 타임아웃 설정
+      build_timeout: 1200,
+      # 추가 빌드 설정
+      build_settings: {
+        "CODE_SIGN_STYLE" => "Manual",
+        "DEVELOPMENT_TEAM" => ENV["APPLE_TEAM_ID"]
+      }
     )
     
     # TestFlight 업로드
