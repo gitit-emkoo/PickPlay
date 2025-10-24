@@ -78,18 +78,17 @@ jobs:
           echo "🚀 Fastlane 설치 중..."
           sudo gem install fastlane
           
-      # 8단계: Fastlane 초기화 및 설정
-      - name: Initialize Fastlane
+      # 8단계: Fastlane 설정 확인
+      - name: Verify Fastlane Setup
         run: |
-          echo "🔧 Fastlane 초기화 중..."
+          echo "🔧 Fastlane 설정 확인 중..."
           cd ios
           
-          # Fastlane 초기화 (비대화형)
-          echo "y" | fastlane init || true
-          
-          # Fastfile이 이미 존재하는지 확인
+          # Fastfile 존재 확인
           if [ -f "fastlane/Fastfile" ]; then
-            echo "✅ Fastfile이 이미 존재합니다."
+            echo "✅ Fastfile이 존재합니다."
+            echo "📋 Fastfile 내용 확인:"
+            head -10 fastlane/Fastfile
           else
             echo "❌ Fastfile이 없습니다. 수동으로 생성해야 합니다."
             exit 1
