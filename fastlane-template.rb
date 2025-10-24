@@ -15,13 +15,22 @@ platform :ios do
       timeout: 3600
     )
     
-    # 인증서 가져오기 (비밀번호 정제)
+    # 인증서 가져오기 (비밀번호 정제 및 에러 처리)
     clean_password = ENV["P12_PASSWORD"].to_s.strip.gsub(/[\r\n\t]/, '')
-    import_certificate(
-      certificate_path: "../certificate.p12",
-      certificate_password: clean_password,
-      keychain_name: "build"
-    )
+    
+    begin
+      import_certificate(
+        certificate_path: "../certificate.p12",
+        certificate_password: clean_password,
+        keychain_name: "build"
+      )
+      puts "✅ 인증서 설치 성공"
+    rescue => e
+      puts "❌ 인증서 설치 실패: #{e.message}"
+      puts "🔍 비밀번호 길이: #{clean_password.length}"
+      puts "🔍 비밀번호 첫 3자: #{clean_password[0..2]}***"
+      raise "인증서 설치에 실패했습니다. 비밀번호를 확인해주세요."
+    end
     
     # 프로비저닝 프로파일 설치
     install_provisioning_profile(
@@ -43,5 +52,16 @@ platform :ios do
       app_identifier: "com.kwcc.pickplay",
       skip_waiting_for_build_processing: true
     )
+    
+    puts "✅ TestFlight 업로드 완료"
+    
+    # Firebase App Distribution (성공 사례에서 권장)
+    firebase_app_distribution(
+      app: ENV["FIREBASE_APP_ID"],
+      groups: "testers",
+      release_notes: "Automated build from GitHub Actions"
+    )
+    
+    puts "✅ Firebase App Distribution 업로드 완료"
   end
 end
