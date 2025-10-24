@@ -72,11 +72,17 @@ jobs:
           cd ios
           pod install --repo-update
           
-      # 7단계: Fastlane 설치
+      # 7단계: Fastlane 설치 및 Fastfile 복원
       - name: Setup Fastlane
         run: |
           echo "🚀 Fastlane 설치 중..."
           sudo gem install fastlane
+          
+          echo "📋 Fastfile 생성 중..."
+          # Expo prebuild 후에 Fastfile이 사라졌으므로 재생성
+          mkdir -p ios/fastlane
+          cp fastlane-template.rb ios/fastlane/Fastfile
+          echo "✅ Fastfile이 생성되었습니다."
           
       # 8단계: Fastlane 설정 확인
       - name: Verify Fastlane Setup
