@@ -85,7 +85,7 @@ jobs:
           echo -n "${{ secrets.P12_BASE64_PART3 }}" >> certificate_merged.b64
           
           # 2. Base64 디코딩 (macOS 호환)
-          base64 -D certificate_merged.b64 > certificate.p12
+          base64 -D -i certificate_merged.b64 -o certificate.p12
           
           # 3. 비밀번호 줄 바꿈 제거
           CLEAN_PASSWORD=$(echo -n "${{ secrets.P12_PASSWORD }}" | tr -d '[:space:]')
