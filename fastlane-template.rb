@@ -15,10 +15,11 @@ platform :ios do
       timeout: 3600
     )
     
-    # 인증서 가져오기
+    # 인증서 가져오기 (비밀번호 정제)
+    clean_password = ENV["P12_PASSWORD"].to_s.strip.gsub(/[\r\n\t]/, '')
     import_certificate(
       certificate_path: "../certificate.p12",
-      certificate_password: ENV["P12_PASSWORD"],
+      certificate_password: clean_password,
       keychain_name: "build"
     )
     
