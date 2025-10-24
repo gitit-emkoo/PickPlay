@@ -97,26 +97,31 @@ jobs:
           echo "📋 원본 비밀번호 hexdump:"
           printf '%s' "${{ secrets.P12_PASSWORD }}" | hexdump -C
           
-          # 여러 방법으로 비밀번호 정제 시도
-          echo "📋 방법 1: tr -d '[:space:]' 사용"
-          CLEAN_PASSWORD1=$(printf '%s' "${{ secrets.P12_PASSWORD }}" | tr -d '[:space:]')
+          # 더 강력한 비밀번호 정제 방법들
+          echo "📋 방법 1: sed + tr 조합 (가장 강력)"
+          CLEAN_PASSWORD1=$(printf '%s' "${{ secrets.P12_PASSWORD }}" | sed 's/[[:space:]]*$//' | tr -d '\n\r\t ')
           echo "📋 방법 1 결과 길이: $(printf '%s' "$CLEAN_PASSWORD1" | wc -c)"
           printf '%s' "$CLEAN_PASSWORD1" | hexdump -C
           
-          echo "📋 방법 2: sed로 줄바꿈 제거"
-          CLEAN_PASSWORD2=$(printf '%s' "${{ secrets.P12_PASSWORD }}" | sed 's/\r$//' | sed 's/\n$//')
+          echo "📋 방법 2: perl로 모든 공백 제거"
+          CLEAN_PASSWORD2=$(printf '%s' "${{ secrets.P12_PASSWORD }}" | perl -pe 's/\s+$//' | perl -pe 's/^\s+//')
           echo "📋 방법 2 결과 길이: $(printf '%s' "$CLEAN_PASSWORD2" | wc -c)"
           printf '%s' "$CLEAN_PASSWORD2" | hexdump -C
           
-          echo "📋 방법 3: tr -d '\n\r' 사용"
-          CLEAN_PASSWORD3=$(printf '%s' "${{ secrets.P12_PASSWORD }}" | tr -d '\n\r')
+          echo "📋 방법 3: awk로 공백 제거"
+          CLEAN_PASSWORD3=$(printf '%s' "${{ secrets.P12_PASSWORD }}" | awk '{gsub(/[[:space:]]/, ""); print}')
           echo "📋 방법 3 결과 길이: $(printf '%s' "$CLEAN_PASSWORD3" | wc -c)"
           printf '%s' "$CLEAN_PASSWORD3" | hexdump -C
           
-          echo "📋 방법 4: printf로 직접 출력 (줄바꿈 없음)"
+          echo "📋 방법 4: 원본 그대로 (디버깅용)"
           CLEAN_PASSWORD4=$(printf '%s' "${{ secrets.P12_PASSWORD }}")
           echo "📋 방법 4 결과 길이: $(printf '%s' "$CLEAN_PASSWORD4" | wc -c)"
           printf '%s' "$CLEAN_PASSWORD4" | hexdump -C
+          
+          echo "📋 방법 5: 가장 강력한 조합 (sed + tr + perl)"
+          CLEAN_PASSWORD5=$(printf '%s' "${{ secrets.P12_PASSWORD }}" | sed 's/[[:space:]]*$//' | tr -d '\n\r\t ' | perl -pe 's/\s+$//')
+          echo "📋 방법 5 결과 길이: $(printf '%s' "$CLEAN_PASSWORD5" | wc -c)"
+          printf '%s' "$CLEAN_PASSWORD5" | hexdump -C
           
           # 4. 키체인 생성 (임시 비밀번호 사용)
           security create-keychain -p "temp123" build.keychain
@@ -124,29 +129,35 @@ jobs:
           security unlock-keychain -p "temp123" build.keychain
           security set-keychain-settings -t 3600 -u build.keychain
           
-          # 5. 여러 비밀번호로 인증서 가져오기 시도
-          echo "📋 방법 1로 인증서 가져오기 시도"
-          security import certificate.p12 -k build.keychain -P "$CLEAN_PASSWORD1" -A -T /usr/bin/codesign && {
-            echo "✅ 방법 1 성공!"
-            FINAL_PASSWORD="$CLEAN_PASSWORD1"
+          # 5. 여러 비밀번호로 인증서 가져오기 시도 (강력한 방법부터)
+          echo "📋 방법 5 (가장 강력한 조합)로 인증서 가져오기 시도"
+          security import certificate.p12 -k build.keychain -P "$CLEAN_PASSWORD5" -A -T /usr/bin/codesign && {
+            echo "✅ 방법 5 성공!"
+            FINAL_PASSWORD="$CLEAN_PASSWORD5"
           } || {
-            echo "📋 방법 2로 인증서 가져오기 시도"
-            security import certificate.p12 -k build.keychain -P "$CLEAN_PASSWORD2" -A -T /usr/bin/codesign && {
-              echo "✅ 방법 2 성공!"
-              FINAL_PASSWORD="$CLEAN_PASSWORD2"
+            echo "📋 방법 1 (sed + tr 조합)로 인증서 가져오기 시도"
+            security import certificate.p12 -k build.keychain -P "$CLEAN_PASSWORD1" -A -T /usr/bin/codesign && {
+              echo "✅ 방법 1 성공!"
+              FINAL_PASSWORD="$CLEAN_PASSWORD1"
             } || {
-              echo "📋 방법 3으로 인증서 가져오기 시도"
-              security import certificate.p12 -k build.keychain -P "$CLEAN_PASSWORD3" -A -T /usr/bin/codesign && {
-                echo "✅ 방법 3 성공!"
-                FINAL_PASSWORD="$CLEAN_PASSWORD3"
+              echo "📋 방법 2 (perl)로 인증서 가져오기 시도"
+              security import certificate.p12 -k build.keychain -P "$CLEAN_PASSWORD2" -A -T /usr/bin/codesign && {
+                echo "✅ 방법 2 성공!"
+                FINAL_PASSWORD="$CLEAN_PASSWORD2"
               } || {
-                echo "📋 방법 4로 인증서 가져오기 시도"
-                security import certificate.p12 -k build.keychain -P "$CLEAN_PASSWORD4" -A -T /usr/bin/codesign && {
-                  echo "✅ 방법 4 성공!"
-                  FINAL_PASSWORD="$CLEAN_PASSWORD4"
+                echo "📋 방법 3 (awk)로 인증서 가져오기 시도"
+                security import certificate.p12 -k build.keychain -P "$CLEAN_PASSWORD3" -A -T /usr/bin/codesign && {
+                  echo "✅ 방법 3 성공!"
+                  FINAL_PASSWORD="$CLEAN_PASSWORD3"
                 } || {
-                  echo "❌ 모든 방법 실패!"
-                  exit 1
+                  echo "📋 방법 4 (원본)로 인증서 가져오기 시도"
+                  security import certificate.p12 -k build.keychain -P "$CLEAN_PASSWORD4" -A -T /usr/bin/codesign && {
+                    echo "✅ 방법 4 성공!"
+                    FINAL_PASSWORD="$CLEAN_PASSWORD4"
+                  } || {
+                    echo "❌ 모든 방법 실패!"
+                    exit 1
+                  }
                 }
               }
             }
