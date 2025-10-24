@@ -82,6 +82,20 @@ jobs:
       - name: Verify Fastlane Setup
         run: |
           echo "🔧 Fastlane 설정 확인 중..."
+          
+          # 현재 디렉토리 확인
+          echo "📁 현재 디렉토리: $(pwd)"
+          echo "📁 디렉토리 내용:"
+          ls -la
+          
+          # ios 디렉토리 확인
+          echo "📁 ios 디렉토리 내용:"
+          ls -la ios/
+          
+          # fastlane 디렉토리 확인
+          echo "📁 ios/fastlane 디렉토리 내용:"
+          ls -la ios/fastlane/ || echo "fastlane 디렉토리가 없습니다"
+          
           cd ios
           
           # Fastfile 존재 확인
@@ -91,6 +105,8 @@ jobs:
             head -10 fastlane/Fastfile
           else
             echo "❌ Fastfile이 없습니다. 수동으로 생성해야 합니다."
+            echo "📁 현재 ios 디렉토리 내용:"
+            ls -la
             exit 1
           fi
           
