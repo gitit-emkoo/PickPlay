@@ -101,16 +101,9 @@ jobs:
             }
           }
           
-          # 새로운 인증서 생성 (AES 암호화 사용 - 어제 성공한 방법)
-          if [ "$SKIP_RECREATION" != "true" ]; then
-            echo "📋 AES-256-CBC 암호화로 재생성 (어제 성공한 방법)"
-            openssl pkcs12 -export -out certificate.p12 -in temp_cert.pem -passout pass:"${{ secrets.P12_PASSWORD }}" -keypbe AES-256-CBC -certpbe AES-256-CBC || {
-              echo "📋 AES 실패, 원본 인증서 그대로 사용"
-              cp certificate_original.p12 certificate.p12
-            }
-          else
-            echo "📋 재생성 건너뛰기 (원본 인증서 사용)"
-          fi
+          # 원본 인증서 그대로 사용 (재생성 시 Unknown format 오류 발생)
+          echo "📋 원본 인증서 그대로 사용 (재생성 시 Unknown format 오류 발생)"
+          cp certificate_original.p12 certificate.p12
           
           echo "📋 재생성된 인증서 파일 크기: $(ls -la certificate.p12)"
           
@@ -120,9 +113,15 @@ jobs:
           echo "📋 인증서 파일 hexdump (처음 32바이트):"
           head -c 32 certificate.p12 | hexdump -C
           
-          # 4. 비밀번호 확인 (이미 완벽함을 확인했으므로 단순화)
-          echo "📋 사용할 비밀번호: ${{ secrets.P12_PASSWORD }}"
-          CLEAN_PASSWORD="${{ secrets.P12_PASSWORD }}"
+          # 4. 비밀번호 확인 (원본 인증서 사용 시 더 강력한 정제 필요)
+          echo "📋 원본 비밀번호: ${{ secrets.P12_PASSWORD }}"
+          
+          # 여러 방법으로 비밀번호 정제
+          CLEAN_PASSWORD1=$(printf '%s' "${{ secrets.P12_PASSWORD }}" | sed 's/[[:space:]]*$//' | tr -d '\n\r\t ')
+          CLEAN_PASSWORD2=$(printf '%s' "${{ secrets.P12_PASSWORD }}" | tr -d '[:space:]')
+          CLEAN_PASSWORD3=$(printf '%s' "${{ secrets.P12_PASSWORD }}" | perl -pe 's/\s+$//')
+          
+          echo "📋 정제된 비밀번호들 준비 완료"
           
           # 4. 키체인 생성 (임시 비밀번호 사용)
           security create-keychain -p "temp123" build.keychain
@@ -130,9 +129,21 @@ jobs:
           security unlock-keychain -p "temp123" build.keychain
           security set-keychain-settings -t 3600 -u build.keychain
           
-          # 5. 재생성된 인증서로 가져오기 시도
-          echo "📋 재생성된 인증서로 가져오기 시도"
-          security import certificate.p12 -k build.keychain -P "$CLEAN_PASSWORD" -A -T /usr/bin/codesign
+          # 5. 원본 인증서로 가져오기 시도 (여러 비밀번호로)
+          echo "📋 원본 인증서로 가져오기 시도 (여러 비밀번호로)"
+          security import certificate.p12 -k build.keychain -P "$CLEAN_PASSWORD1" -A -T /usr/bin/codesign || {
+            echo "📋 방법 1 실패, 방법 2로 시도"
+            security import certificate.p12 -k build.keychain -P "$CLEAN_PASSWORD2" -A -T /usr/bin/codesign || {
+              echo "📋 방법 2 실패, 방법 3으로 시도"
+              security import certificate.p12 -k build.keychain -P "$CLEAN_PASSWORD3" -A -T /usr/bin/codesign || {
+                echo "📋 방법 3 실패, 원본 비밀번호로 시도"
+                security import certificate.p12 -k build.keychain -P "${{ secrets.P12_PASSWORD }}" -A -T /usr/bin/codesign || {
+                  echo "❌ 모든 방법 실패!"
+                  exit 1
+                }
+              }
+            }
+          }
           
           echo "✅ 인증서 설치 완료!"
           
