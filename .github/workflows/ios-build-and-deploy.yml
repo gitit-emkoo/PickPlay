@@ -96,21 +96,17 @@ jobs:
           echo "📁 ios/fastlane 디렉토리 내용:"
           ls -la ios/fastlane/ || echo "fastlane 디렉토리가 없습니다"
           
-          cd ios
-          
-          # Fastfile 존재 확인 및 생성
-          if [ -f "fastlane/Fastfile" ]; then
+          # Fastfile 존재 확인
+          if [ -f "ios/fastlane/Fastfile" ]; then
             echo "✅ Fastfile이 존재합니다."
             echo "📋 Fastfile 내용 확인:"
-            head -10 fastlane/Fastfile
+            head -10 ios/fastlane/Fastfile
           else
-            echo "⚠️ Fastfile이 없습니다. 생성합니다..."
-            mkdir -p fastlane
-            
-            # Fastfile을 복사 (이미 저장소에 있음)
-            cp ../ios/fastlane/Fastfile fastlane/Fastfile
-            echo "✅ Fastfile이 복사되었습니다."
+            echo "❌ Fastfile이 없습니다. 저장소에 추가해야 합니다."
+            exit 1
           fi
+          
+          cd ios
           
       # 9단계: 인증서 및 프로파일 준비
       - name: Prepare Certificates and Profiles
