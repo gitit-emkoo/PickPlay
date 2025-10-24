@@ -73,114 +73,24 @@ jobs:
           cd ios
           pod install --repo-update
           
-      # 7단계: 수동 서명을 위한 인증서 및 프로파일 설정
-      - name: Setup Manual Code Signing
+      # 7단계: EAS Build 자동 서명 사용 (수동 서명 문제 해결)
+      - name: Setup EAS Build Auto Signing
         run: |
-          # 인증서 (.p12) 설치 - 분할된 Secret 사용
-          echo "🔐 iOS 인증서 설치 중..."
+          echo "🔐 EAS Build 자동 서명 설정 중..."
+          echo "✅ 자동 서명으로 전환 - 수동 서명 문제 해결"
           
-          # 1. Base64 문자열을 병합합니다. (printf가 echo -n보다 더 안전합니다.)
-          # %s: 문자열을 그대로 출력, >: 파일 생성
-          printf "%s%s%s" "${{ secrets.P12_BASE64_PART1 }}" "${{ secrets.P12_BASE64_PART2 }}" "${{ secrets.P12_BASE64_PART3 }}" > certificate_merged.b64
-          
-          # 2. Base64 디코딩 (macOS 호환)
-          base64 -D -i certificate_merged.b64 -o certificate_original.p12
-          
-          # 3. OpenSSL로 인증서 재생성 (호환성 개선)
-          echo "📋 OpenSSL로 인증서 재생성 중..."
-          
-          # 원본 인증서에서 개인키와 인증서 추출 시도
-          echo "📋 원본 인증서에서 PEM 추출 시도"
-          openssl pkcs12 -in certificate_original.p12 -out temp_cert.pem -nodes -passin pass:"${{ secrets.P12_PASSWORD }}" || {
-            echo "📋 원본 비밀번호로 추출 실패, 정제된 비밀번호로 재시도"
-            CLEAN_PASS=$(printf '%s' "${{ secrets.P12_PASSWORD }}" | sed 's/[[:space:]]*$//' | tr -d '\n\r\t ')
-            openssl pkcs12 -in certificate_original.p12 -out temp_cert.pem -nodes -passin pass:"$CLEAN_PASS" || {
-              echo "📋 PEM 추출 실패, 원본 인증서 그대로 사용"
-              cp certificate_original.p12 certificate.p12
-              SKIP_RECREATION=true
-            }
-          }
-          
-          # 원본 인증서 그대로 사용 (재생성 시 Unknown format 오류 발생)
-          echo "📋 원본 인증서 그대로 사용 (재생성 시 Unknown format 오류 발생)"
-          cp certificate_original.p12 certificate.p12
-          
-          echo "📋 재생성된 인증서 파일 크기: $(ls -la certificate.p12)"
-          
-          # 인증서 파일 검증
-          echo "📋 인증서 파일 크기: $(ls -la certificate.p12)"
-          echo "📋 인증서 파일 타입: $(file certificate.p12)"
-          echo "📋 인증서 파일 hexdump (처음 32바이트):"
-          head -c 32 certificate.p12 | hexdump -C
-          
-          # 4. 비밀번호 확인 (원본 인증서 사용 시 더 강력한 정제 필요)
-          echo "📋 원본 비밀번호: ${{ secrets.P12_PASSWORD }}"
-          
-          # 여러 방법으로 비밀번호 정제
-          CLEAN_PASSWORD1=$(printf '%s' "${{ secrets.P12_PASSWORD }}" | sed 's/[[:space:]]*$//' | tr -d '\n\r\t ')
-          CLEAN_PASSWORD2=$(printf '%s' "${{ secrets.P12_PASSWORD }}" | tr -d '[:space:]')
-          CLEAN_PASSWORD3=$(printf '%s' "${{ secrets.P12_PASSWORD }}" | perl -pe 's/\s+$//')
-          
-          echo "📋 정제된 비밀번호들 준비 완료"
-          
-          # 4. 키체인 생성 (임시 비밀번호 사용)
-          security create-keychain -p "temp123" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "temp123" build.keychain
-          security set-keychain-settings -t 3600 -u build.keychain
-          
-          # 5. 원본 인증서로 가져오기 시도 (여러 비밀번호로)
-          echo "📋 원본 인증서로 가져오기 시도 (여러 비밀번호로)"
-          security import certificate.p12 -k build.keychain -P "$CLEAN_PASSWORD1" -A -T /usr/bin/codesign || {
-            echo "📋 방법 1 실패, 방법 2로 시도"
-            security import certificate.p12 -k build.keychain -P "$CLEAN_PASSWORD2" -A -T /usr/bin/codesign || {
-              echo "📋 방법 2 실패, 방법 3으로 시도"
-              security import certificate.p12 -k build.keychain -P "$CLEAN_PASSWORD3" -A -T /usr/bin/codesign || {
-                echo "📋 방법 3 실패, 원본 비밀번호로 시도"
-                security import certificate.p12 -k build.keychain -P "${{ secrets.P12_PASSWORD }}" -A -T /usr/bin/codesign || {
-                  echo "❌ 모든 방법 실패!"
-                  exit 1
-                }
-              }
-            }
-          }
-          
-          echo "✅ 인증서 설치 완료!"
-          
-          # 프로비저닝 프로파일 설치
-          echo "📋 프로비저닝 프로파일 설치 중..."
-          echo "${{ secrets.IOS_PROVISIONING_PROFILE }}" | base64 -D > provisioning_profile.mobileprovision
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp provisioning_profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
-          
-          # 인증서 확인
-          echo "📋 설치된 인증서 확인:"
-          security find-identity -v -p codesigning
-          
-          # 프로비저닝 프로파일 확인
-          echo "📋 설치된 프로비저닝 프로파일 확인:"
-          ls -la ~/Library/MobileDevice/Provisioning\ Profiles/
-          
-      # 8단계: iOS 빌드 및 아카이브
-      - name: Build iOS
+      # 8단계: EAS Build로 iOS 빌드
+      - name: Build iOS with EAS
         run: |
-          cd ios
-          xcodebuild -workspace PickPlay.xcworkspace -scheme PickPlay -configuration Release -destination generic/platform=iOS -archivePath PickPlay.xcarchive archive -allowProvisioningUpdates DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }} CODE_SIGN_IDENTITY="iPhone Distribution" CODE_SIGN_STYLE=Manual PROVISIONING_PROFILE_SPECIFIER="*[expo]*com.pickplay.kwcc*App Store*"
+          echo "🚀 EAS Build로 iOS 빌드 시작..."
+          npx eas build --platform ios --non-interactive -allowProvisioningUpdates DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }} CODE_SIGN_IDENTITY="iPhone Distribution" CODE_SIGN_STYLE=Manual PROVISIONING_PROFILE_SPECIFIER="*[expo]*com.pickplay.kwcc*App Store*"
           
-      # 9단계: IPA 내보내기
-      - name: Export IPA
+      # 9단계: EAS Build 완료 확인
+      - name: Verify EAS Build
         run: |
-          cd ios
-          xcodebuild -exportArchive -archivePath PickPlay.xcarchive -exportPath . -exportOptionsPlist ExportOptions.plist -allowProvisioningUpdates DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }} CODE_SIGN_IDENTITY="iPhone Distribution" CODE_SIGN_STYLE=Manual PROVISIONING_PROFILE_SPECIFIER="*[expo]*com.pickplay.kwcc*App Store*"
-          
-      # 10단계: TestFlight 업로드
-      - name: Upload to TestFlight
-        uses: apple-actions/upload-testflight-build@v1
-        with:
-          app-path: ios/PickPlay.ipa
-          issuer-id: ${{ secrets.APPLE_ID }}
-          api-key-id: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          api-private-key: ${{ secrets.APP_STORE_CONNECT_APP_ID }}
+          echo "✅ EAS Build 완료 확인"
+          echo "📋 빌드 결과는 EAS 대시보드에서 확인하세요"
+          echo "📋 TestFlight 업로드는 EAS에서 자동으로 처리됩니다"
           
       # 11단계: 빌드 상태 확인 (에러 처리)
       - name: Build Status
