@@ -79,16 +79,29 @@ jobs:
           # 인증서 (.p12) 설치 - 분할된 Secret 사용
           echo "🔐 iOS 인증서 설치 중..."
           
-          # 1. 분할된 Base64 문자열을 병합합니다 (공백, 줄바꿈 없음)
-          echo -n "${{ secrets.P12_BASE64_PART1 }}" > certificate_merged.b64
-          echo -n "${{ secrets.P12_BASE64_PART2 }}" >> certificate_merged.b64
-          echo -n "${{ secrets.P12_BASE64_PART3 }}" >> certificate_merged.b64
+          # 1. Base64 문자열을 병합합니다. (printf가 echo -n보다 더 안전합니다.)
+          # %s: 문자열을 그대로 출력, >: 파일 생성
+          printf "%s%s%s" "${{ secrets.P12_BASE64_PART1 }}" "${{ secrets.P12_BASE64_PART2 }}" "${{ secrets.P12_BASE64_PART3 }}" > certificate_merged.b64
           
           # 2. Base64 디코딩 (macOS 호환)
           base64 -D -i certificate_merged.b64 -o certificate.p12
           
-          # 3. 비밀번호 줄 바꿈 제거
-          CLEAN_PASSWORD=$(echo -n "${{ secrets.P12_PASSWORD }}" | tr -d '[:space:]')
+          # 인증서 파일 검증
+          echo "📋 인증서 파일 크기: $(ls -la certificate.p12)"
+          echo "📋 인증서 파일 타입: $(file certificate.p12)"
+          echo "📋 인증서 파일 hexdump (처음 32바이트):"
+          head -c 32 certificate.p12 | hexdump -C
+          
+          # 3. 비밀번호 디버깅 및 정제 (printf 사용)
+          echo "📋 원본 비밀번호 길이: $(printf '%s' "${{ secrets.P12_PASSWORD }}" | wc -c)"
+          echo "📋 원본 비밀번호 hexdump:"
+          printf '%s' "${{ secrets.P12_PASSWORD }}" | hexdump -C
+          
+          # printf로 안전하게 비밀번호 정제
+          CLEAN_PASSWORD=$(printf '%s' "${{ secrets.P12_PASSWORD }}" | tr -d '[:space:]')
+          echo "📋 정제된 비밀번호 길이: $(printf '%s' "$CLEAN_PASSWORD" | wc -c)"
+          echo "📋 정제된 비밀번호 hexdump:"
+          printf '%s' "$CLEAN_PASSWORD" | hexdump -C
           
           # 4. 키체인 생성 및 인증서 가져오기 (AES/SHA256 포맷 지원)
           security create-keychain -p "$CLEAN_PASSWORD" build.keychain
@@ -97,6 +110,7 @@ jobs:
           security set-keychain-settings -t 3600 -u build.keychain
           
           # -A (Allow access) 옵션을 추가하여 권한 오류 최소화
+          echo "📋 printf로 정제된 비밀번호로 인증서 가져오기 시도"
           security import certificate.p12 -k build.keychain -P "$CLEAN_PASSWORD" -A -T /usr/bin/codesign
           
           echo "✅ 인증서 설치 완료!"
