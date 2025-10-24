@@ -52,11 +52,8 @@ platform :ios do
       clean: true,
       skip_codesigning: false,
       skip_package_dependencies_resolution: false,
-      # 추가 빌드 설정
-      build_settings: {
-        "CODE_SIGN_STYLE" => "Manual",
-        "DEVELOPMENT_TEAM" => ENV["APPLE_TEAM_ID"]
-      }
+      # xcargs를 사용한 빌드 설정
+      xcargs: "CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=#{ENV['APPLE_TEAM_ID']}"
     )
     
     # TestFlight 업로드
