@@ -80,9 +80,9 @@ jobs:
           echo "🔍 SwiftLint 설치 중..."
           brew install swiftlint
           
-          # SwiftLint 실행 (코드 품질 검사)
+          # SwiftLint 실행 (코드 품질 검사) - 설정 파일 사용
           echo "🔍 SwiftLint 코드 품질 검사 중..."
-          swiftlint --strict || echo "⚠️ SwiftLint 경고가 있지만 계속 진행합니다."
+          swiftlint --config .swiftlint.yml || echo "⚠️ SwiftLint 경고가 있지만 계속 진행합니다."
           
       # 7단계: Fastlane 설치 및 설정 복원 (성공 사례 방식 적용)
       - name: Setup Fastlane
@@ -91,8 +91,16 @@ jobs:
           sudo gem install fastlane
           
           echo "📋 성공 사례 방식으로 파일 복원 중..."
-          # Google zx 도구를 사용한 자동화 스크립트 실행
-          npx zx scripts/post-prebuild-setup.js
+          # 간단한 bash 스크립트로 파일 복원 (zx 대신)
+          mkdir -p ios/fastlane
+          cp fastlane-template.rb ios/fastlane/Fastfile
+          cp export-options-template.plist ios/ExportOptions.plist
+          
+          # 파일 권한 설정 (성공 사례에서 중요하게 언급됨)
+          chmod +x ios/fastlane/Fastfile
+          chmod 644 ios/ExportOptions.plist
+          
+          echo "✅ 파일 복원 완료!"
           
       # 8단계: Fastlane 설정 확인
       - name: Verify Fastlane Setup

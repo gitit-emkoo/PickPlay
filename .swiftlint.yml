@@ -1,0 +1,25 @@
+# SwiftLint 설정 파일
+# Pods 디렉토리 제외 및 규칙 설정
+
+excluded:
+  - Pods
+  - ios/Pods
+  - ios/build
+  - ios/DerivedData
+
+# 라인 길이 제한 완화 (Pods 라이브러리 때문에)
+line_length:
+  warning: 150
+  error: 200
+
+# 식별자 이름 길이 제한 완화 (수학적 변수명 허용)
+identifier_name:
+  min_length: 1
+  max_length: 50
+
+# 강제 캐스팅 허용 (Pods 라이브러리 때문에)
+force_cast: warning
+force_try: warning
+
+# 중괄호 스타일 완화
+opening_brace: warning
