@@ -12,9 +12,8 @@
 # 빌드 과정:
 # 1. Expo prebuild로 iOS 프로젝트 생성
 # 2. CocoaPods로 의존성 설치
-# 3. 수동 서명을 위한 인증서 및 프로파일 설정
-# 4. xcodebuild로 직접 빌드 및 아카이브
-# 5. IPA 내보내기 및 TestFlight 업로드
+# 3. Fastlane으로 인증서 및 프로파일 설정
+# 4. Fastlane으로 빌드 및 TestFlight 업로드
 #
 # 필요한 GitHub Secrets:
 # - EXPO_TOKEN: Expo 계정 토큰
@@ -73,24 +72,33 @@ jobs:
           cd ios
           pod install --repo-update
           
-      # 7단계: Fastlane 설치 및 설정
+      # 7단계: Fastlane 설치
       - name: Setup Fastlane
         run: |
           echo "🚀 Fastlane 설치 중..."
           sudo gem install fastlane
           
-      # 8단계: Fastlane으로 인증서 및 프로파일 관리
-      - name: Setup Code Signing with Fastlane
+      # 8단계: Fastlane 초기화 및 설정
+      - name: Initialize Fastlane
         run: |
-          echo "🔐 Fastlane으로 코드 서명 설정 중..."
+          echo "🔧 Fastlane 초기화 중..."
+          cd ios
           
-          # Fastlane 초기화 (이미 있다면 건너뛰기)
-          if [ ! -f "fastlane/Fastfile" ]; then
-            fastlane init
+          # Fastlane 초기화 (비대화형)
+          echo "y" | fastlane init || true
+          
+          # Fastfile이 이미 존재하는지 확인
+          if [ -f "fastlane/Fastfile" ]; then
+            echo "✅ Fastfile이 이미 존재합니다."
+          else
+            echo "❌ Fastfile이 없습니다. 수동으로 생성해야 합니다."
+            exit 1
           fi
           
-          # 인증서 및 프로파일을 키체인에 설치
-          echo "📋 인증서 설치 중..."
+      # 9단계: 인증서 및 프로파일 준비
+      - name: Prepare Certificates and Profiles
+        run: |
+          echo "📋 인증서 및 프로파일 준비 중..."
           
           # 1. Base64 문자열 병합
           printf "%s%s%s" "${{ secrets.P12_BASE64_PART1 }}" "${{ secrets.P12_BASE64_PART2 }}" "${{ secrets.P12_BASE64_PART3 }}" > certificate_merged.b64
@@ -98,32 +106,30 @@ jobs:
           # 2. Base64 디코딩
           base64 -D -i certificate_merged.b64 -o certificate.p12
           
-          # 3. Fastlane으로 키체인 생성 및 인증서 설치
-          fastlane run create_keychain name:"build" password:"temp123" default_keychain:true unlock:true timeout:3600
-          
-          # 4. 비밀번호 정제 후 인증서 가져오기
-          CLEAN_PASSWORD=$(printf '%s' "${{ secrets.P12_PASSWORD }}" | sed 's/[[:space:]]*$//' | tr -d '\n\r\t ')
-          fastlane run import_certificate certificate_path:"certificate.p12" certificate_password:"$CLEAN_PASSWORD" keychain_name:"build"
-          
-          echo "✅ 인증서 설치 완료!"
-          
-          # 프로비저닝 프로파일 설치
-          echo "📋 프로비저닝 프로파일 설치 중..."
+          # 3. 프로비저닝 프로파일 디코딩
           echo "${{ secrets.IOS_PROVISIONING_PROFILE }}" | base64 -D > provisioning_profile.mobileprovision
-          fastlane run install_provisioning_profile path:"provisioning_profile.mobileprovision"
           
-      # 9단계: Fastlane으로 iOS 빌드 및 TestFlight 업로드
+          # 4. 파일 확인
+          echo "📁 생성된 파일들:"
+          ls -la certificate.p12 provisioning_profile.mobileprovision
+          
+      # 10단계: Fastlane으로 빌드 및 배포
       - name: Build and Deploy with Fastlane
+        env:
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           echo "🚀 Fastlane으로 빌드 및 배포 시작..."
+          cd ios
           
-          # Fastlane으로 빌드 및 TestFlight 업로드
-          fastlane run build_app \
-            workspace:"ios/PickPlay.xcworkspace" \
-            scheme:"PickPlay" \
-            configuration:"Release" \
-            export_method:"app-store" \
-            export_options:"ios/ExportOptions.plist"
+          # 비밀번호 정제
+          export CLEAN_PASSWORD=$(printf '%s' "$P12_PASSWORD" | sed 's/[[:space:]]*$//' | tr -d '\n\r\t ')
+          export P12_PASSWORD="$CLEAN_PASSWORD"
+          
+          # Fastlane beta lane 실행
+          fastlane beta
           
           echo "✅ 빌드 및 TestFlight 업로드 완료!"
           
