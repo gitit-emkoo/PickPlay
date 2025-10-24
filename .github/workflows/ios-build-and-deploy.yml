@@ -91,7 +91,7 @@ jobs:
           
           # SwiftLint 실행 (코드 품질 검사) - 설정 파일 사용
           echo "🔍 SwiftLint 코드 품질 검사 중..."
-          swiftlint --config .swiftlint.yml || echo "⚠️ SwiftLint 경고가 있지만 계속 진행합니다."
+          swiftlint --config ../.swiftlint.yml || echo "⚠️ SwiftLint 경고가 있지만 계속 진행합니다."
           
       # 7단계: Fastlane 설치 및 설정 복원 (성공 사례 방식 적용)
       - name: Setup Fastlane

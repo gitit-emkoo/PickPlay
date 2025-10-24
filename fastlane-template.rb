@@ -52,8 +52,6 @@ platform :ios do
       clean: true,
       skip_codesigning: false,
       skip_package_dependencies_resolution: false,
-      # 빌드 타임아웃 설정
-      build_timeout: 1200,
       # 추가 빌드 설정
       build_settings: {
         "CODE_SIGN_STYLE" => "Manual",
