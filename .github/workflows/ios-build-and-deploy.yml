@@ -70,6 +70,10 @@ jobs:
       - name: Install CocoaPods
         run: |
           cd ios
+          # 기존 Pods 캐시 정리
+          rm -rf Pods/
+          rm -f Podfile.lock
+          # 새로 설치
           pod install --repo-update
           
       # 7단계: Fastlane 설치 및 Fastfile 복원

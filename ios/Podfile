@@ -89,9 +89,15 @@ post_install do |installer|
         puts "🧩 [#{name}] Scrubbed -G flags from all build settings (#{config.name})"
       end
 
-      # iOS 15.1+ deployment target 강제
+      # iOS 15.1+ deployment target 강제 (더 강력한 설정)
       config.build_settings.delete 'IPHONEOS_DEPLOYMENT_TARGET'
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+      
+      # SDWebImage 특별 처리
+      if name.include?('SDWebImage')
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+        puts "🎯 [#{name}] SDWebImage deployment target set to 15.1"
+      end
 
       # ✅ 전역 빌드 안정성 설정
       config.build_settings['ENABLE_BITCODE'] = 'NO'
