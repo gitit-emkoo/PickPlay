@@ -73,24 +73,59 @@ jobs:
           cd ios
           pod install --repo-update
           
-      # 7단계: EAS Build 자동 서명 사용 (수동 서명 문제 해결)
-      - name: Setup EAS Build Auto Signing
+      # 7단계: Fastlane 설치 및 설정
+      - name: Setup Fastlane
         run: |
-          echo "🔐 EAS Build 자동 서명 설정 중..."
-          echo "✅ 자동 서명으로 전환 - 수동 서명 문제 해결"
+          echo "🚀 Fastlane 설치 중..."
+          sudo gem install fastlane
           
-      # 8단계: EAS Build로 iOS 빌드
-      - name: Build iOS with EAS
+      # 8단계: Fastlane으로 인증서 및 프로파일 관리
+      - name: Setup Code Signing with Fastlane
         run: |
-          echo "🚀 EAS Build로 iOS 빌드 시작..."
-          npx eas build --platform ios --non-interactive -allowProvisioningUpdates DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }} CODE_SIGN_IDENTITY="iPhone Distribution" CODE_SIGN_STYLE=Manual PROVISIONING_PROFILE_SPECIFIER="*[expo]*com.pickplay.kwcc*App Store*"
+          echo "🔐 Fastlane으로 코드 서명 설정 중..."
           
-      # 9단계: EAS Build 완료 확인
-      - name: Verify EAS Build
+          # Fastlane 초기화 (이미 있다면 건너뛰기)
+          if [ ! -f "fastlane/Fastfile" ]; then
+            fastlane init
+          fi
+          
+          # 인증서 및 프로파일을 키체인에 설치
+          echo "📋 인증서 설치 중..."
+          
+          # 1. Base64 문자열 병합
+          printf "%s%s%s" "${{ secrets.P12_BASE64_PART1 }}" "${{ secrets.P12_BASE64_PART2 }}" "${{ secrets.P12_BASE64_PART3 }}" > certificate_merged.b64
+          
+          # 2. Base64 디코딩
+          base64 -D -i certificate_merged.b64 -o certificate.p12
+          
+          # 3. Fastlane으로 키체인 생성 및 인증서 설치
+          fastlane run create_keychain name:"build" password:"temp123" default_keychain:true unlock:true timeout:3600
+          
+          # 4. 비밀번호 정제 후 인증서 가져오기
+          CLEAN_PASSWORD=$(printf '%s' "${{ secrets.P12_PASSWORD }}" | sed 's/[[:space:]]*$//' | tr -d '\n\r\t ')
+          fastlane run import_certificate certificate_path:"certificate.p12" certificate_password:"$CLEAN_PASSWORD" keychain_name:"build"
+          
+          echo "✅ 인증서 설치 완료!"
+          
+          # 프로비저닝 프로파일 설치
+          echo "📋 프로비저닝 프로파일 설치 중..."
+          echo "${{ secrets.IOS_PROVISIONING_PROFILE }}" | base64 -D > provisioning_profile.mobileprovision
+          fastlane run install_provisioning_profile path:"provisioning_profile.mobileprovision"
+          
+      # 9단계: Fastlane으로 iOS 빌드 및 TestFlight 업로드
+      - name: Build and Deploy with Fastlane
         run: |
-          echo "✅ EAS Build 완료 확인"
-          echo "📋 빌드 결과는 EAS 대시보드에서 확인하세요"
-          echo "📋 TestFlight 업로드는 EAS에서 자동으로 처리됩니다"
+          echo "🚀 Fastlane으로 빌드 및 배포 시작..."
+          
+          # Fastlane으로 빌드 및 TestFlight 업로드
+          fastlane run build_app \
+            workspace:"ios/PickPlay.xcworkspace" \
+            scheme:"PickPlay" \
+            configuration:"Release" \
+            export_method:"app-store" \
+            export_options:"ios/ExportOptions.plist"
+          
+          echo "✅ 빌드 및 TestFlight 업로드 완료!"
           
       # 11단계: 빌드 상태 확인 (에러 처리)
       - name: Build Status
