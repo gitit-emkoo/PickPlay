@@ -206,6 +206,7 @@ jobs:
           MATCH_GIT_PASSWORD: ${{ secrets.MATCH_GIT_PASSWORD }}
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
           FASTLANE_PASSWORD: ${{ secrets.FASTLANE_PASSWORD }}
+          FASTLANE_USER: ${{ secrets.FASTLANE_USER }}
         run: |
           echo "🔐 Fastlane Match 초기화 중..."
           cd ios
@@ -226,6 +227,7 @@ jobs:
           MATCH_GIT_PASSWORD: ${{ secrets.MATCH_GIT_PASSWORD }}
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
           FASTLANE_PASSWORD: ${{ secrets.FASTLANE_PASSWORD }}
+          FASTLANE_USER: ${{ secrets.FASTLANE_USER }}
         run: |
           echo "🚀 Fastlane Match로 빌드 및 배포 시작..."
           cd ios
