@@ -270,14 +270,54 @@ jobs:
           echo "✅ MATCH_GIT_USERNAME: ${#MATCH_GIT_USERNAME}자 (예상: 사용자명 길이)"
           echo "✅ MATCH_GIT_PASSWORD: ${#MATCH_GIT_PASSWORD}자 (예상: 토큰 길이)"
           
+          echo "🔍 ===== 상세 진단 테스트 ====="
+          
+          # Apple Developer Portal 접근 테스트
+          echo "🧪 Apple Developer Portal 접근 테스트 중..."
+          echo "  - 사용자: $FASTLANE_USER"
+          echo "  - 비밀번호: ${CLEAN_FASTLANE_PASSWORD:0:4}...${CLEAN_FASTLANE_PASSWORD: -4}"
+          echo "  - Team ID: $APPLE_TEAM_ID"
+          
+          # Git 저장소 접근 테스트
+          echo "🧪 Git 저장소 접근 테스트 중..."
+          echo "  - URL: ${MATCH_GIT_URL:0:20}...${MATCH_GIT_URL: -10}"
+          echo "  - 사용자: $MATCH_GIT_USERNAME"
+          echo "  - 토큰: ${MATCH_GIT_PASSWORD:0:4}...${MATCH_GIT_PASSWORD: -4}"
+          
+          # Fastlane 환경변수 설정 확인
+          echo "🧪 Fastlane 환경변수 설정 확인 중..."
+          echo "  - FASTLANE_USER: $FASTLANE_USER"
+          echo "  - FASTLANE_PASSWORD: ${CLEAN_FASTLANE_PASSWORD:0:4}...${CLEAN_FASTLANE_PASSWORD: -4}"
+          echo "  - APPLE_TEAM_ID: $APPLE_TEAM_ID"
+          
+          # Match 설정 확인
+          echo "🧪 Match 설정 확인 중..."
+          echo "  - MATCH_PASSWORD: ${CLEAN_MATCH_PASSWORD:0:4}...${CLEAN_MATCH_PASSWORD: -4}"
+          echo "  - MATCH_GIT_URL: ${MATCH_GIT_URL:0:20}...${MATCH_GIT_URL: -10}"
+          echo "  - MATCH_GIT_USERNAME: $MATCH_GIT_USERNAME"
+          echo "  - MATCH_GIT_PASSWORD: ${MATCH_GIT_PASSWORD:0:4}...${MATCH_GIT_PASSWORD: -4}"
+          
           # 정제된 비밀번호로 환경변수 재설정
           export FASTLANE_PASSWORD="$CLEAN_FASTLANE_PASSWORD"
           export MATCH_PASSWORD="$CLEAN_MATCH_PASSWORD"
           
           echo "✅ 비밀번호 정제 완료"
           
-          # Match 초기화 실행
-          fastlane match_init
+          echo "🔍 ===== Fastlane Match 실행 전 최종 확인 ====="
+          echo "📋 실행할 명령어: fastlane match_init"
+          echo "📋 사용할 환경변수:"
+          echo "  - FASTLANE_USER: $FASTLANE_USER"
+          echo "  - FASTLANE_PASSWORD: ${CLEAN_FASTLANE_PASSWORD:0:4}...${CLEAN_FASTLANE_PASSWORD: -4}"
+          echo "  - APPLE_TEAM_ID: $APPLE_TEAM_ID"
+          echo "  - MATCH_PASSWORD: ${CLEAN_MATCH_PASSWORD:0:4}...${CLEAN_MATCH_PASSWORD: -4}"
+          echo "  - MATCH_GIT_URL: ${MATCH_GIT_URL:0:20}...${MATCH_GIT_URL: -10}"
+          echo "  - MATCH_GIT_USERNAME: $MATCH_GIT_USERNAME"
+          echo "  - MATCH_GIT_PASSWORD: ${MATCH_GIT_PASSWORD:0:4}...${MATCH_GIT_PASSWORD: -4}"
+          
+          echo "🚀 Fastlane Match 초기화 시작..."
+          
+          # Match 초기화 실행 (상세 로그 포함)
+          fastlane match_init --verbose
           
           echo "✅ Fastlane Match 초기화 완료!"
           
