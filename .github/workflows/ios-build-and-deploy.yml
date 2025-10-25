@@ -216,6 +216,19 @@ jobs:
           CLEAN_FASTLANE_PASSWORD=$(echo "$FASTLANE_PASSWORD" | tr -d '[:space:]')
           CLEAN_MATCH_PASSWORD=$(echo "$MATCH_PASSWORD" | tr -d '[:space:]')
           
+          # 비밀번호 정보 로그 출력 (디버깅용)
+          echo "🔍 FASTLANE_PASSWORD 정보:"
+          echo "  - 원본 길이: ${#FASTLANE_PASSWORD}자"
+          echo "  - 정제 후 길이: ${#CLEAN_FASTLANE_PASSWORD}자"
+          echo "  - 앞 4자리: ${CLEAN_FASTLANE_PASSWORD:0:4}"
+          echo "  - 뒤 4자리: ${CLEAN_FASTLANE_PASSWORD: -4}"
+          
+          echo "🔍 MATCH_PASSWORD 정보:"
+          echo "  - 원본 길이: ${#MATCH_PASSWORD}자"
+          echo "  - 정제 후 길이: ${#CLEAN_MATCH_PASSWORD}자"
+          echo "  - 앞 4자리: ${CLEAN_MATCH_PASSWORD:0:4}"
+          echo "  - 뒤 4자리: ${CLEAN_MATCH_PASSWORD: -4}"
+          
           # 정제된 비밀번호로 환경변수 재설정
           export FASTLANE_PASSWORD="$CLEAN_FASTLANE_PASSWORD"
           export MATCH_PASSWORD="$CLEAN_MATCH_PASSWORD"
@@ -248,6 +261,25 @@ jobs:
           CLEAN_FASTLANE_PASSWORD=$(echo "$FASTLANE_PASSWORD" | tr -d '[:space:]')
           CLEAN_MATCH_PASSWORD=$(echo "$MATCH_PASSWORD" | tr -d '[:space:]')
           CLEAN_APPLE_APP_SPECIFIC_PASSWORD=$(echo "$APPLE_APP_SPECIFIC_PASSWORD" | tr -d '[:space:]')
+          
+          # 비밀번호 정보 로그 출력 (디버깅용)
+          echo "🔍 FASTLANE_PASSWORD 정보:"
+          echo "  - 원본 길이: ${#FASTLANE_PASSWORD}자"
+          echo "  - 정제 후 길이: ${#CLEAN_FASTLANE_PASSWORD}자"
+          echo "  - 앞 4자리: ${CLEAN_FASTLANE_PASSWORD:0:4}"
+          echo "  - 뒤 4자리: ${CLEAN_FASTLANE_PASSWORD: -4}"
+          
+          echo "🔍 MATCH_PASSWORD 정보:"
+          echo "  - 원본 길이: ${#MATCH_PASSWORD}자"
+          echo "  - 정제 후 길이: ${#CLEAN_MATCH_PASSWORD}자"
+          echo "  - 앞 4자리: ${CLEAN_MATCH_PASSWORD:0:4}"
+          echo "  - 뒤 4자리: ${CLEAN_MATCH_PASSWORD: -4}"
+          
+          echo "🔍 APPLE_APP_SPECIFIC_PASSWORD 정보:"
+          echo "  - 원본 길이: ${#APPLE_APP_SPECIFIC_PASSWORD}자"
+          echo "  - 정제 후 길이: ${#CLEAN_APPLE_APP_SPECIFIC_PASSWORD}자"
+          echo "  - 앞 4자리: ${CLEAN_APPLE_APP_SPECIFIC_PASSWORD:0:4}"
+          echo "  - 뒤 4자리: ${CLEAN_APPLE_APP_SPECIFIC_PASSWORD: -4}"
           
           # 정제된 비밀번호로 환경변수 재설정
           export FASTLANE_PASSWORD="$CLEAN_FASTLANE_PASSWORD"
