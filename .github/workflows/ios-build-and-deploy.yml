@@ -236,12 +236,37 @@ jobs:
           pod install --repo-update
           echo "✅ CocoaPods 의존성 업데이트 완료"
           
-          # Expo prebuild (네이티브 파일 최신화)
-          echo "🔄 Expo prebuild 실행 중..."
-          cd ..
-          npx expo prebuild --platform ios --clean
-          cd ios
-          echo "✅ Expo prebuild 완료"
+           # Expo prebuild (네이티브 파일 최신화)
+           echo "🔄 Expo prebuild 실행 중..."
+           cd ..
+           npx expo prebuild --platform ios --clean
+           cd ios
+           echo "✅ Expo prebuild 완료"
+           
+           # ExportOptions.plist 파일 동적 생성 (Expo prebuild로 인해 삭제됨)
+           echo "📄 ExportOptions.plist 파일 동적 생성 중..."
+           echo '<?xml version="1.0" encoding="UTF-8"?>' > ExportOptions.plist
+           echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' >> ExportOptions.plist
+           echo '<plist version="1.0">' >> ExportOptions.plist
+           echo '<dict>' >> ExportOptions.plist
+           echo '	<key>method</key>' >> ExportOptions.plist
+           echo '	<string>app-store</string>' >> ExportOptions.plist
+           echo '	<key>teamID</key>' >> ExportOptions.plist
+           echo "	<string>$APPLE_TEAM_ID</string>" >> ExportOptions.plist
+           echo '	<key>uploadBitcode</key>' >> ExportOptions.plist
+           echo '	<false/>' >> ExportOptions.plist
+           echo '	<key>uploadSymbols</key>' >> ExportOptions.plist
+           echo '	<true/>' >> ExportOptions.plist
+           echo '	<key>compileBitcode</key>' >> ExportOptions.plist
+           echo '	<false/>' >> ExportOptions.plist
+           echo '	<key>stripSwiftSymbols</key>' >> ExportOptions.plist
+           echo '	<true/>' >> ExportOptions.plist
+           echo '	<key>thinning</key>' >> ExportOptions.plist
+           echo '	<string>&lt;none&gt;</string>' >> ExportOptions.plist
+           echo '</dict>' >> ExportOptions.plist
+           echo '</plist>' >> ExportOptions.plist
+           chmod 644 ExportOptions.plist
+           echo "✅ ExportOptions.plist 파일 동적 생성 완료"
           
           # 모든 환경변수 디버깅 정보 출력
           echo "🔍 ===== 전체 환경변수 디버깅 정보 ====="
@@ -436,14 +461,30 @@ jobs:
              echo "✅ fastlane 디렉토리가 존재합니다."
            fi
            
-           # ExportOptions.plist 파일 확인 (Git에 커밋된 파일 사용)
-           echo "📄 ExportOptions.plist 파일 확인 중..."
-           if [ -f "ExportOptions.plist" ]; then
-             echo "✅ ExportOptions.plist 파일이 존재합니다."
-           else
-             echo "❌ ExportOptions.plist 파일이 없습니다. Git에 커밋된 파일을 확인해주세요."
-             exit 1
-           fi
+           # ExportOptions.plist 파일 동적 생성 (Expo prebuild로 인해 삭제됨)
+           echo "📄 ExportOptions.plist 파일 동적 생성 중..."
+           echo '<?xml version="1.0" encoding="UTF-8"?>' > ExportOptions.plist
+           echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' >> ExportOptions.plist
+           echo '<plist version="1.0">' >> ExportOptions.plist
+           echo '<dict>' >> ExportOptions.plist
+           echo '	<key>method</key>' >> ExportOptions.plist
+           echo '	<string>app-store</string>' >> ExportOptions.plist
+           echo '	<key>teamID</key>' >> ExportOptions.plist
+           echo "	<string>$APPLE_TEAM_ID</string>" >> ExportOptions.plist
+           echo '	<key>uploadBitcode</key>' >> ExportOptions.plist
+           echo '	<false/>' >> ExportOptions.plist
+           echo '	<key>uploadSymbols</key>' >> ExportOptions.plist
+           echo '	<true/>' >> ExportOptions.plist
+           echo '	<key>compileBitcode</key>' >> ExportOptions.plist
+           echo '	<false/>' >> ExportOptions.plist
+           echo '	<key>stripSwiftSymbols</key>' >> ExportOptions.plist
+           echo '	<true/>' >> ExportOptions.plist
+           echo '	<key>thinning</key>' >> ExportOptions.plist
+           echo '	<string>&lt;none&gt;</string>' >> ExportOptions.plist
+           echo '</dict>' >> ExportOptions.plist
+           echo '</plist>' >> ExportOptions.plist
+           chmod 644 ExportOptions.plist
+           echo "✅ ExportOptions.plist 파일 동적 생성 완료"
            
            # Fastlane Match를 사용한 빌드 실행
            fastlane beta
