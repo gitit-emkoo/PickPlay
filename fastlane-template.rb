@@ -14,6 +14,8 @@ platform :ios do
       readonly: false,
       app_identifier: "com.kwcc.pickplay",
       team_id: ENV["APPLE_TEAM_ID"],
+      username: ENV["FASTLANE_USER"],
+      password: ENV["FASTLANE_PASSWORD"],
       git_url: ENV["MATCH_GIT_URL"],
       git_basic_authorization: Base64.strict_encode64("#{ENV['MATCH_GIT_USERNAME']}:#{ENV['MATCH_GIT_PASSWORD']}"),
       keychain_name: "build",
@@ -36,6 +38,8 @@ platform :ios do
       readonly: true,  # 기존 인증서만 사용
       app_identifier: "com.kwcc.pickplay",
       team_id: ENV["APPLE_TEAM_ID"],
+      username: ENV["FASTLANE_USER"],
+      password: ENV["FASTLANE_PASSWORD"],
       git_url: ENV["MATCH_GIT_URL"],
       git_basic_authorization: Base64.strict_encode64("#{ENV['MATCH_GIT_USERNAME']}:#{ENV['MATCH_GIT_PASSWORD']}"),
       keychain_name: "build",

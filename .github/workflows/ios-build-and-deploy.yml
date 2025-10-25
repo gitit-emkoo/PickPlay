@@ -298,8 +298,10 @@ jobs:
           echo "  - MATCH_GIT_PASSWORD: ${MATCH_GIT_PASSWORD:0:4}...${MATCH_GIT_PASSWORD: -4}"
           
           # 정제된 비밀번호로 환경변수 재설정
+          export FASTLANE_USER="$FASTLANE_USER"
           export FASTLANE_PASSWORD="$CLEAN_FASTLANE_PASSWORD"
           export MATCH_PASSWORD="$CLEAN_MATCH_PASSWORD"
+          export APPLE_TEAM_ID="$APPLE_TEAM_ID"
           
           echo "✅ 비밀번호 정제 완료"
           
@@ -363,9 +365,11 @@ jobs:
           echo "  - 뒤 4자리: ${CLEAN_APPLE_APP_SPECIFIC_PASSWORD: -4}"
           
           # 정제된 비밀번호로 환경변수 재설정
+          export FASTLANE_USER="$FASTLANE_USER"
           export FASTLANE_PASSWORD="$CLEAN_FASTLANE_PASSWORD"
           export MATCH_PASSWORD="$CLEAN_MATCH_PASSWORD"
           export APPLE_APP_SPECIFIC_PASSWORD="$CLEAN_APPLE_APP_SPECIFIC_PASSWORD"
+          export APPLE_TEAM_ID="$APPLE_TEAM_ID"
           
           echo "✅ 비밀번호 정제 완료"
           
