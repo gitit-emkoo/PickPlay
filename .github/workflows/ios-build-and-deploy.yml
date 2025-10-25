@@ -55,22 +55,43 @@ jobs:
       - name: Install Dependencies
         run: npm ci --legacy-peer-deps
         
-      # 4단계: Expo CLI 설치 및 설정
+      # 4단계: Expo CLI 설치 및 설정 (npm 사용으로 변경)
       - name: Setup Expo
-        uses: expo/expo-github-action@v8
-        with:
-          expo-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          echo "📦 Expo CLI 설치 중..."
+          npm install -g @expo/cli@latest
+          echo "✅ Expo CLI 설치 완료"
+          
+          # Expo 토큰 설정
+          if [ -n "${{ secrets.EXPO_TOKEN }}" ]; then
+            npx expo login --non-interactive --token ${{ secrets.EXPO_TOKEN }}
+            echo "✅ Expo 로그인 완료"
+          else
+            echo "⚠️ EXPO_TOKEN이 설정되지 않았습니다. 공개 프로젝트로 진행합니다."
+          fi
           
       # 5단계: Xcode 버전 설정 및 iOS 프로젝트 생성
       - name: Setup Xcode and Prebuild iOS
         run: |
-          # Xcode 16.3 사용 (호환성 문제 해결)
-          sudo xcode-select -s /Applications/Xcode_16.3.app
+          # 사용 가능한 Xcode 버전 확인
+          echo "🔍 사용 가능한 Xcode 버전 확인 중..."
+          ls -la /Applications/ | grep -i xcode
+          
+          # 최신 Xcode 버전 자동 선택
+          LATEST_XCODE=$(ls /Applications/ | grep -i xcode | sort -V | tail -1)
+          if [ -n "$LATEST_XCODE" ]; then
+            echo "📱 최신 Xcode 버전 선택: $LATEST_XCODE"
+            sudo xcode-select -s "/Applications/$LATEST_XCODE"
+          else
+            echo "⚠️ Xcode를 찾을 수 없습니다. 기본 버전 사용"
+          fi
+          
           xcodebuild -version
           
           # iOS 프로젝트 생성
+          echo "🔄 iOS 프로젝트 생성 중..."
           npx expo prebuild --platform ios --clean
+          echo "✅ iOS 프로젝트 생성 완료"
         
       # 6단계: CocoaPods 의존성 설치 및 SwiftLint 설정
       - name: Install CocoaPods and SwiftLint
