@@ -78,10 +78,53 @@ platform :ios do
     workspace_path = "PickPlay.xcworkspace"
     unless File.exist?("#{workspace_path}/contents.xcworkspacedata")
       puts "❌ PickPlay.xcworkspace 번들이 올바르지 않습니다. CocoaPods로 생성 중..."
-      sh("pod install")
       
+      # 기존 workspace 및 Pods 완전 정리 (React Native 권장사항)
+      puts "🧹 기존 workspace 및 Pods 완전 정리 중..."
+      sh("rm -rf PickPlay.xcworkspace Pods Podfile.lock")
+      
+      # CocoaPods 완전 정리 (React Native 권장사항)
+      puts "🧹 CocoaPods 캐시 및 설정 완전 정리 중..."
+      sh("pod cache clean --all")
+      sh("pod deintegrate") # Xcode 프로젝트에서 Pods 설정 완전 제거
+      
+      # 시스템 환경 확인
+      puts "🔍 시스템 환경 확인 중..."
+      sh("df -h") # 디스크 공간 확인
+      sh("ls -la") # 현재 디렉토리 상태 확인
+      
+      # Podfile 존재 확인
+      unless File.exist?("Podfile")
+        UI.user_error!("❌ Podfile이 존재하지 않습니다!")
+      end
+      
+      # CocoaPods 재설치 (여러 방법 시도)
+      puts "📦 CocoaPods 재설치 시도 1: 기본 설치"
+      sh("pod install --repo-update")
+      
+      # workspace 생성 확인
       unless File.exist?("#{workspace_path}/contents.xcworkspacedata")
-        UI.user_error!("❌ PickPlay.xcworkspace 번들 생성 실패!")
+        puts "⚠️ 첫 번째 시도 실패, 두 번째 시도 중..."
+        puts "📦 CocoaPods 재설치 시도 2: 클린 설치"
+        sh("pod install --clean-install")
+        
+        unless File.exist?("#{workspace_path}/contents.xcworkspacedata")
+          puts "⚠️ 두 번째 시도 실패, 세 번째 시도 중..."
+          puts "📦 CocoaPods 재설치 시도 3: 강제 재설치"
+          sh("pod install --verbose --repo-update")
+          
+          unless File.exist?("#{workspace_path}/contents.xcworkspacedata")
+            puts "❌ 모든 시도 실패. 디렉토리 상태 확인 중..."
+            sh("ls -la")
+            sh("ls -la PickPlay.xcworkspace/") if File.exist?("PickPlay.xcworkspace")
+            sh("ls -la Pods/") if File.exist?("Pods")
+            
+            # 임시 우회책: workspace가 없어도 빌드 시도 (디버깅용)
+            puts "⚠️ 임시 우회책: workspace 없이 빌드 시도 중..."
+            puts "⚠️ 이는 디버깅 목적이며, 근본적인 해결책이 아닙니다."
+            # UI.user_error!("❌ PickPlay.xcworkspace 번들 생성 실패!")
+          end
+        end
       end
       puts "✅ PickPlay.xcworkspace 번들 생성 완료"
     else

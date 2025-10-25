@@ -243,33 +243,76 @@ jobs:
           ls -la /Applications/ | grep -i xcode
           echo "✅ Xcode 버전 확인 완료"
           
+           # Expo prebuild (네이티브 파일 최신화) - 먼저 실행
+           echo "🔄 Expo prebuild 실행 중..."
+           cd ..
+           npx expo prebuild --platform ios --clean
+           cd ios
+           echo "✅ Expo prebuild 완료"
+           
            # CocoaPods 의존성 업데이트 및 workspace 생성 (Expo prebuild 후 실행)
            echo "📦 CocoaPods 의존성 업데이트 및 workspace 생성 중..."
-           pod install --repo-update
-           echo "✅ CocoaPods 의존성 업데이트 완료"
+           
+           # 시스템 환경 확인
+           echo "🔍 시스템 환경 확인 중..."
+           df -h # 디스크 공간 확인
+           ls -la # 현재 디렉토리 상태 확인
+           
+           # Podfile 존재 확인
+           if [ ! -f "Podfile" ]; then
+             echo "❌ Podfile이 존재하지 않습니다!"
+             exit 1
+           fi
            
            # PickPlay.xcworkspace 번들 내부 핵심 파일로 검증 (가장 안전한 방법)
            echo "🔍 PickPlay.xcworkspace 번들 확인 중..."
            if [ -f "PickPlay.xcworkspace/contents.xcworkspacedata" ]; then
              echo "✅ PickPlay.xcworkspace 번들이 존재합니다."
            else
-             echo "❌ PickPlay.xcworkspace 번들이 올바르지 않습니다. Pod install을 다시 실행합니다..."
-             pod install
+             echo "❌ PickPlay.xcworkspace 번들이 올바르지 않습니다. CocoaPods로 강제 재생성 중..."
+             
+             # 기존 workspace 및 Pods 완전 정리 (React Native 권장사항)
+             echo "🧹 기존 workspace 및 Pods 완전 정리 중..."
+             rm -rf PickPlay.xcworkspace Pods Podfile.lock
+             
+             # CocoaPods 완전 정리 (React Native 권장사항)
+             echo "🧹 CocoaPods 캐시 및 설정 완전 정리 중..."
+             pod cache clean --all
+             pod deintegrate # Xcode 프로젝트에서 Pods 설정 완전 제거
+             
+             # CocoaPods 재설치 (여러 방법 시도)
+             echo "📦 CocoaPods 재설치 시도 1: 기본 설치"
+             pod install --repo-update
+             
+             # workspace 생성 확인
              if [ -f "PickPlay.xcworkspace/contents.xcworkspacedata" ]; then
                echo "✅ PickPlay.xcworkspace 번들 생성 완료"
              else
-               echo "❌ PickPlay.xcworkspace 번들 생성 실패. Podfile을 확인해주세요."
-               ls -la
-               exit 1
+               echo "⚠️ 첫 번째 시도 실패, 두 번째 시도 중..."
+               echo "📦 CocoaPods 재설치 시도 2: 클린 설치"
+               pod install --clean-install
+               
+               if [ -f "PickPlay.xcworkspace/contents.xcworkspacedata" ]; then
+                 echo "✅ PickPlay.xcworkspace 번들 생성 완료 (두 번째 시도)"
+               else
+                 echo "⚠️ 두 번째 시도 실패, 세 번째 시도 중..."
+                 echo "📦 CocoaPods 재설치 시도 3: 강제 재설치"
+                 pod install --verbose --repo-update
+                 
+                 if [ -f "PickPlay.xcworkspace/contents.xcworkspacedata" ]; then
+                   echo "✅ PickPlay.xcworkspace 번들 생성 완료 (세 번째 시도)"
+                 else
+                   echo "❌ 모든 시도 실패. 디렉토리 상태 확인 중..."
+                   ls -la
+                   ls -la PickPlay.xcworkspace/ 2>/dev/null || echo "PickPlay.xcworkspace 디렉토리가 존재하지 않습니다."
+                   ls -la Pods/ 2>/dev/null || echo "Pods 디렉토리가 존재하지 않습니다."
+                   exit 1
+                 fi
+               fi
              fi
            fi
-          
-           # Expo prebuild (네이티브 파일 최신화)
-           echo "🔄 Expo prebuild 실행 중..."
-           cd ..
-           npx expo prebuild --platform ios --clean
-           cd ios
-           echo "✅ Expo prebuild 완료"
+           
+           echo "✅ CocoaPods 의존성 업데이트 완료"
            
            # ExportOptions.plist 파일 동적 생성 (Expo prebuild로 인해 삭제됨)
            echo "📄 ExportOptions.plist 파일 동적 생성 중..."
