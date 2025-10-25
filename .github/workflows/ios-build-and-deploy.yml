@@ -81,6 +81,8 @@ jobs:
           rm -f Podfile.lock
           rm -rf build/
           rm -rf DerivedData/
+          rm -rf ~/Library/Developer/Xcode/DerivedData/
+          rm -rf ~/Library/Caches/CocoaPods/
           
           # 새로 설치
           pod install --repo-update
@@ -103,7 +105,28 @@ jobs:
           # 간단한 bash 스크립트로 파일 복원 (zx 대신)
           mkdir -p ios/fastlane
           cp fastlane-template.rb ios/fastlane/Fastfile
-          cp export-options-template.plist ios/ExportOptions.plist
+          
+          # ExportOptions.plist 동적 생성 (teamID 포함)
+          echo '<?xml version="1.0" encoding="UTF-8"?>' > ios/ExportOptions.plist
+          echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' >> ios/ExportOptions.plist
+          echo '<plist version="1.0">' >> ios/ExportOptions.plist
+          echo '<dict>' >> ios/ExportOptions.plist
+          echo '	<key>method</key>' >> ios/ExportOptions.plist
+          echo '	<string>app-store</string>' >> ios/ExportOptions.plist
+          echo '	<key>teamID</key>' >> ios/ExportOptions.plist
+          echo '	<string>${{ secrets.APPLE_TEAM_ID }}</string>' >> ios/ExportOptions.plist
+          echo '	<key>uploadBitcode</key>' >> ios/ExportOptions.plist
+          echo '	<false/>' >> ios/ExportOptions.plist
+          echo '	<key>uploadSymbols</key>' >> ios/ExportOptions.plist
+          echo '	<true/>' >> ios/ExportOptions.plist
+          echo '	<key>compileBitcode</key>' >> ios/ExportOptions.plist
+          echo '	<false/>' >> ios/ExportOptions.plist
+          echo '	<key>stripSwiftSymbols</key>' >> ios/ExportOptions.plist
+          echo '	<true/>' >> ios/ExportOptions.plist
+          echo '	<key>thinning</key>' >> ios/ExportOptions.plist
+          echo '	<string>&lt;none&gt;</string>' >> ios/ExportOptions.plist
+          echo '</dict>' >> ios/ExportOptions.plist
+          echo '</plist>' >> ios/ExportOptions.plist
           
           # 파일 권한 설정 (성공 사례에서 중요하게 언급됨)
           chmod +x ios/fastlane/Fastfile
@@ -158,6 +181,22 @@ jobs:
           # 4. 파일 확인
           echo "📁 생성된 파일들:"
           ls -la certificate.p12 provisioning_profile.mobileprovision
+          
+          # 5. 프로비저닝 프로파일 유효성 검사
+          echo "🔍 프로비저닝 프로파일 검사 중..."
+          security cms -D -i provisioning_profile.mobileprovision > profile_info.plist
+          
+          # 프로파일 정보 출력
+          echo "📋 프로파일 정보:"
+          plutil -p profile_info.plist | head -20
+          
+          # Push Notifications 기능 확인
+          if plutil -p profile_info.plist | grep -q "aps-environment"; then
+            echo "✅ Push Notifications 기능이 활성화되어 있습니다."
+          else
+            echo "⚠️ Push Notifications 기능이 비활성화되어 있습니다."
+            echo "🔧 Apple Developer Console에서 프로비저닝 프로파일을 다시 생성하세요."
+          fi
           
       # 10단계: Fastlane으로 빌드 및 배포
       - name: Build and Deploy with Fastlane

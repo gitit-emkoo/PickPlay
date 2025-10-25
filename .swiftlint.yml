@@ -23,3 +23,4 @@ force_try: warning
 
 # 중괄호 스타일 완화
 opening_brace: warning
+

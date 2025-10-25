@@ -106,7 +106,12 @@ post_install do |installer|
       
       # ✅ 빌드 실패 방지 설정
       config.build_settings['SWIFT_VERSION'] = '5.0'
-      config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-O'
+      # Swift 최적화 레벨을 조건부로 설정 (Debug/Release 구분)
+      if config.name == 'Debug'
+        config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
+      else
+        config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-O'
+      end
       config.build_settings['GCC_OPTIMIZATION_LEVEL'] = '0'
       config.build_settings['SWIFT_COMPILATION_MODE'] = 'wholemodule'
       
@@ -118,6 +123,13 @@ post_install do |installer|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
       config.build_settings['SUPPORTED_PLATFORMS'] = 'iphoneos iphonesimulator'
       config.build_settings['TARGETED_DEVICE_FAMILY'] = '1,2'
+      
+      # ✅ React Native Dependencies 스크립트 최적화
+      if name.include?('ReactNativeDependencies')
+        config.build_settings['RUN_CLANG_STATIC_ANALYZER'] = 'NO'
+        config.build_settings['CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED'] = 'NO'
+        puts "🔧 [#{name}] React Native Dependencies 스크립트 최적화 적용"
+      end
     end
   end
     

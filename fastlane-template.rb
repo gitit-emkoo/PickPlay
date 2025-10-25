@@ -37,9 +37,24 @@ platform :ios do
     end
     
     # 프로비저닝 프로파일 설치
-    install_provisioning_profile(
-      path: "../provisioning_profile.mobileprovision"
-    )
+    begin
+      install_provisioning_profile(
+        path: "../provisioning_profile.mobileprovision"
+      )
+      puts "✅ 프로비저닝 프로파일 설치 성공"
+      
+      # 프로파일 정보 확인
+      profile_info = `security cms -D -i ../provisioning_profile.mobileprovision`
+      if profile_info.include?("aps-environment")
+        puts "✅ Push Notifications 기능이 활성화되어 있습니다."
+      else
+        puts "⚠️ Push Notifications 기능이 비활성화되어 있습니다."
+        puts "🔧 Apple Developer Console에서 프로비저닝 프로파일을 다시 생성하세요."
+      end
+    rescue => e
+      puts "❌ 프로비저닝 프로파일 설치 실패: #{e.message}"
+      raise "프로비저닝 프로파일 설치에 실패했습니다."
+    end
     
     # 빌드 및 아카이브 (안정성 개선)
     build_app(
@@ -52,8 +67,10 @@ platform :ios do
       clean: true,
       skip_codesigning: false,
       skip_package_dependencies_resolution: false,
-      # xcargs를 사용한 빌드 설정
-      xcargs: "CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=#{ENV['APPLE_TEAM_ID']}"
+      # 빌드 타임아웃 설정 (더 긴 시간 허용)
+      build_timeout: 1800,
+      # xcargs를 사용한 빌드 설정 (Push Notifications 관련 설정 추가)
+      xcargs: "CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=#{ENV['APPLE_TEAM_ID']} CODE_SIGN_IDENTITY='iPhone Distribution' PROVISIONING_PROFILE_SPECIFIER='' SWIFT_OPTIMIZATION_LEVEL=-O"
     )
     
     # TestFlight 업로드
