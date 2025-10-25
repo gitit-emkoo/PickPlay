@@ -21,7 +21,7 @@ platform :ios do
     match(
       type: "appstore",
       readonly: false,
-      app_identifier: "com.kwcc.pickplay",
+      app_identifier: "com.pickplay.kwcc",
       team_id: ENV["APPLE_TEAM_ID"],
       api_key: api_key,
       git_url: ENV["MATCH_GIT_URL"],
@@ -53,7 +53,7 @@ platform :ios do
     match(
       type: "appstore",
       readonly: true,  # 기존 인증서만 사용
-      app_identifier: "com.kwcc.pickplay",
+      app_identifier: "com.pickplay.kwcc",
       team_id: ENV["APPLE_TEAM_ID"],
       api_key: api_key,
       git_url: ENV["MATCH_GIT_URL"],
@@ -83,7 +83,7 @@ platform :ios do
     begin
       upload_to_testflight(
         apple_id: ENV["APPLE_ID"],
-        app_identifier: "com.kwcc.pickplay",
+        app_identifier: "com.pickplay.kwcc",
         skip_waiting_for_build_processing: true
       )
       puts "✅ TestFlight 업로드 완료"
@@ -93,7 +93,7 @@ platform :ios do
       sleep 30
       upload_to_testflight(
         apple_id: ENV["APPLE_ID"],
-        app_identifier: "com.kwcc.pickplay",
+        app_identifier: "com.pickplay.kwcc",
         skip_waiting_for_build_processing: true
       )
       puts "✅ TestFlight 업로드 재시도 성공"
