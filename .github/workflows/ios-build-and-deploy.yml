@@ -212,6 +212,35 @@ jobs:
           echo "🔄 워크플로우 업데이트 확인 - 디버깅 로그 포함 버전"
           cd ios
           
+          # 모든 환경변수 디버깅 정보 출력
+          echo "🔍 ===== 전체 환경변수 디버깅 정보 ====="
+          echo "🔍 APPLE_TEAM_ID 정보:"
+          echo "  - 길이: ${#APPLE_TEAM_ID}자"
+          echo "  - 앞 4자리: ${APPLE_TEAM_ID:0:4}"
+          echo "  - 뒤 4자리: ${APPLE_TEAM_ID: -4}"
+          
+          echo "🔍 FASTLANE_USER 정보:"
+          echo "  - 길이: ${#FASTLANE_USER}자"
+          echo "  - 앞 10자리: ${FASTLANE_USER:0:10}"
+          echo "  - 뒤 10자리: ${FASTLANE_USER: -10}"
+          
+          echo "🔍 MATCH_GIT_URL 정보:"
+          echo "  - 길이: ${#MATCH_GIT_URL}자"
+          echo "  - 앞 20자리: ${MATCH_GIT_URL:0:20}"
+          echo "  - 뒤 10자리: ${MATCH_GIT_URL: -10}"
+          
+          echo "🔍 MATCH_GIT_USERNAME 정보:"
+          echo "  - 길이: ${#MATCH_GIT_USERNAME}자"
+          echo "  - 앞 10자리: ${MATCH_GIT_USERNAME:0:10}"
+          echo "  - 뒤 10자리: ${MATCH_GIT_USERNAME: -10}"
+          
+          echo "🔍 MATCH_GIT_PASSWORD 정보:"
+          echo "  - 길이: ${#MATCH_GIT_PASSWORD}자"
+          echo "  - 앞 4자리: ${MATCH_GIT_PASSWORD:0:4}"
+          echo "  - 뒤 4자리: ${MATCH_GIT_PASSWORD: -4}"
+          
+          echo "🔍 ===== 비밀번호 정제 전후 비교 ====="
+          
           # 비밀번호 정제 (공백 및 특수문자 제거)
           echo "🔧 비밀번호 정제 중..."
           CLEAN_FASTLANE_PASSWORD=$(echo "$FASTLANE_PASSWORD" | tr -d '[:space:]')
@@ -223,12 +252,23 @@ jobs:
           echo "  - 정제 후 길이: ${#CLEAN_FASTLANE_PASSWORD}자"
           echo "  - 앞 4자리: ${CLEAN_FASTLANE_PASSWORD:0:4}"
           echo "  - 뒤 4자리: ${CLEAN_FASTLANE_PASSWORD: -4}"
+          echo "  - 정제 전후 비교: 원본[${#FASTLANE_PASSWORD}] → 정제[${#CLEAN_FASTLANE_PASSWORD}]"
           
           echo "🔍 MATCH_PASSWORD 정보:"
           echo "  - 원본 길이: ${#MATCH_PASSWORD}자"
           echo "  - 정제 후 길이: ${#CLEAN_MATCH_PASSWORD}자"
           echo "  - 앞 4자리: ${CLEAN_MATCH_PASSWORD:0:4}"
           echo "  - 뒤 4자리: ${CLEAN_MATCH_PASSWORD: -4}"
+          echo "  - 정제 전후 비교: 원본[${#MATCH_PASSWORD}] → 정제[${#CLEAN_MATCH_PASSWORD}]"
+          
+          echo "🔍 ===== 환경변수 검증 결과 ====="
+          echo "✅ APPLE_TEAM_ID: ${#APPLE_TEAM_ID}자 (예상: 10자)"
+          echo "✅ FASTLANE_USER: ${#FASTLANE_USER}자 (예상: 이메일 길이)"
+          echo "✅ FASTLANE_PASSWORD: ${#CLEAN_FASTLANE_PASSWORD}자 (예상: 19자)"
+          echo "✅ MATCH_PASSWORD: ${#CLEAN_MATCH_PASSWORD}자 (예상: 10자)"
+          echo "✅ MATCH_GIT_URL: ${#MATCH_GIT_URL}자 (예상: URL 길이)"
+          echo "✅ MATCH_GIT_USERNAME: ${#MATCH_GIT_USERNAME}자 (예상: 사용자명 길이)"
+          echo "✅ MATCH_GIT_PASSWORD: ${#MATCH_GIT_PASSWORD}자 (예상: 토큰 길이)"
           
           # 정제된 비밀번호로 환경변수 재설정
           export FASTLANE_PASSWORD="$CLEAN_FASTLANE_PASSWORD"
