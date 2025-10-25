@@ -9,12 +9,21 @@ platform :ios do
     # Match 초기화 및 첫 번째 인증서 생성
     puts "🔐 Fastlane Match 초기화 중..."
     
+    # App Store Connect API Key 설정
+    api_key = app_store_connect_api_key(
+      key_id: ENV["APP_STORE_CONNECT_API_KEY_ID"],
+      issuer_id: ENV["APP_STORE_CONNECT_API_ISSUER_ID"],
+      key_content: ENV["APP_STORE_CONNECT_API_KEY"],
+      duration: 1200, # 20분
+      in_house: false
+    )
+    
     match(
       type: "appstore",
       readonly: false,
       app_identifier: "com.kwcc.pickplay",
       team_id: ENV["APPLE_TEAM_ID"],
-      username: ENV["FASTLANE_USER"],
+      api_key: api_key,
       git_url: ENV["MATCH_GIT_URL"],
       git_basic_authorization: Base64.strict_encode64("#{ENV['MATCH_GIT_USERNAME']}:#{ENV['MATCH_GIT_PASSWORD']}"),
       keychain_name: "build",
@@ -32,12 +41,21 @@ platform :ios do
     # Fastlane Match를 사용한 자동 인증서 및 프로비저닝 프로파일 관리
     puts "🔐 Fastlane Match로 인증서 및 프로비저닝 프로파일 설정 중..."
     
+    # App Store Connect API Key 설정
+    api_key = app_store_connect_api_key(
+      key_id: ENV["APP_STORE_CONNECT_API_KEY_ID"],
+      issuer_id: ENV["APP_STORE_CONNECT_API_ISSUER_ID"],
+      key_content: ENV["APP_STORE_CONNECT_API_KEY"],
+      duration: 1200, # 20분
+      in_house: false
+    )
+    
     match(
       type: "appstore",
       readonly: true,  # 기존 인증서만 사용
       app_identifier: "com.kwcc.pickplay",
       team_id: ENV["APPLE_TEAM_ID"],
-      username: ENV["FASTLANE_USER"],
+      api_key: api_key,
       git_url: ENV["MATCH_GIT_URL"],
       git_basic_authorization: Base64.strict_encode64("#{ENV['MATCH_GIT_USERNAME']}:#{ENV['MATCH_GIT_PASSWORD']}"),
       keychain_name: "build",
