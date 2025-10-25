@@ -204,6 +204,7 @@ jobs:
           MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
           MATCH_GIT_USERNAME: ${{ secrets.MATCH_GIT_USERNAME }}
           MATCH_GIT_PASSWORD: ${{ secrets.MATCH_GIT_PASSWORD }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
         run: |
           echo "🔐 Fastlane Match 초기화 중..."
           cd ios
@@ -222,6 +223,7 @@ jobs:
           MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
           MATCH_GIT_USERNAME: ${{ secrets.MATCH_GIT_USERNAME }}
           MATCH_GIT_PASSWORD: ${{ secrets.MATCH_GIT_PASSWORD }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
           FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
         run: |
