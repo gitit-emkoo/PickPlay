@@ -15,17 +15,16 @@
 # 3. Fastlane으로 인증서 및 프로파일 설정
 # 4. Fastlane으로 빌드 및 TestFlight 업로드
 #
-# 필요한 GitHub Secrets:
+# 필요한 GitHub Secrets (Fastlane Match 사용):
 # - EXPO_TOKEN: Expo 계정 토큰
-# - APPLE_ID: Apple Developer 계정 이메일
-# - APPLE_APP_SPECIFIC_PASSWORD: 앱별 비밀번호
 # - APPLE_TEAM_ID: Apple Developer 팀 ID
-# - APP_STORE_CONNECT_APP_ID: App Store Connect 앱 ID
-# - P12_BASE64_PART1: iOS Distribution 인증서 Base64 문자열 (0-1999자)
-# - P12_BASE64_PART2: iOS Distribution 인증서 Base64 문자열 (2000-3999자)
-# - P12_BASE64_PART3: iOS Distribution 인증서 Base64 문자열 (4000자 이후)
-# - P12_PASSWORD: .p12 파일의 비밀번호
-# - IOS_PROVISIONING_PROFILE: App Store 프로비저닝 프로파일 (.mobileprovision 파일을 base64로 인코딩)
+# - MATCH_GIT_URL: Fastlane Match용 Git 저장소 URL
+# - MATCH_GIT_USERNAME: Git 저장소 사용자명
+# - MATCH_GIT_PASSWORD: Git 저장소 비밀번호/토큰
+# - MATCH_PASSWORD: Fastlane Match 암호화 비밀번호
+# - APP_STORE_CONNECT_API_KEY_ID: App Store Connect API Key ID
+# - APP_STORE_CONNECT_API_ISSUER_ID: App Store Connect API Issuer ID
+# - APP_STORE_CONNECT_API_KEY: App Store Connect API Key (.p8 파일 내용)
 # ========================================
 
 name: iOS Build and Deploy to TestFlight
@@ -249,17 +248,17 @@ jobs:
            pod install --repo-update
            echo "✅ CocoaPods 의존성 업데이트 완료"
            
-           # PickPlay.xcworkspace 파일 확인
-           echo "🔍 PickPlay.xcworkspace 파일 확인 중..."
-           if [ -f "PickPlay.xcworkspace" ]; then
-             echo "✅ PickPlay.xcworkspace 파일이 존재합니다."
+           # PickPlay.xcworkspace 번들 내부 핵심 파일로 검증 (가장 안전한 방법)
+           echo "🔍 PickPlay.xcworkspace 번들 확인 중..."
+           if [ -f "PickPlay.xcworkspace/contents.xcworkspacedata" ]; then
+             echo "✅ PickPlay.xcworkspace 번들이 존재합니다."
            else
-             echo "❌ PickPlay.xcworkspace 파일이 없습니다. Pod install을 다시 실행합니다..."
+             echo "❌ PickPlay.xcworkspace 번들이 올바르지 않습니다. Pod install을 다시 실행합니다..."
              pod install
-             if [ -f "PickPlay.xcworkspace" ]; then
-               echo "✅ PickPlay.xcworkspace 파일 생성 완료"
+             if [ -f "PickPlay.xcworkspace/contents.xcworkspacedata" ]; then
+               echo "✅ PickPlay.xcworkspace 번들 생성 완료"
              else
-               echo "❌ PickPlay.xcworkspace 파일 생성 실패. Podfile을 확인해주세요."
+               echo "❌ PickPlay.xcworkspace 번들 생성 실패. Podfile을 확인해주세요."
                ls -la
                exit 1
              fi

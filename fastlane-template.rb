@@ -74,15 +74,18 @@ platform :ios do
     # 프로젝트 파일 검증 및 workspace 생성
     puts "🔍 프로젝트 파일 검증 중..."
     
-    # PickPlay.xcworkspace 파일이 없으면 CocoaPods로 생성
-    unless File.exist?("PickPlay.xcworkspace")
-      puts "❌ PickPlay.xcworkspace 파일을 찾을 수 없습니다. CocoaPods로 생성 중..."
+    # PickPlay.xcworkspace 번들 내부 핵심 파일로 검증 (가장 안전한 방법)
+    workspace_path = "PickPlay.xcworkspace"
+    unless File.exist?("#{workspace_path}/contents.xcworkspacedata")
+      puts "❌ PickPlay.xcworkspace 번들이 올바르지 않습니다. CocoaPods로 생성 중..."
       sh("pod install")
       
-      unless File.exist?("PickPlay.xcworkspace")
-        UI.user_error!("❌ PickPlay.xcworkspace 파일 생성 실패!")
+      unless File.exist?("#{workspace_path}/contents.xcworkspacedata")
+        UI.user_error!("❌ PickPlay.xcworkspace 번들 생성 실패!")
       end
-      puts "✅ PickPlay.xcworkspace 파일 생성 완료"
+      puts "✅ PickPlay.xcworkspace 번들 생성 완료"
+    else
+      puts "✅ PickPlay.xcworkspace 번들이 존재합니다."
     end
     
     unless File.exist?("PickPlay.xcodeproj")
