@@ -18,7 +18,8 @@ platform :ios do
     
     # 자동 코드 서명 비활성화 (충돌 방지)
     begin
-      disable_automatic_code_signing(
+      update_code_signing_settings(
+        use_automatic_signing: false,
         path: "PickPlay.xcodeproj",
         team_id: ENV["APPLE_TEAM_ID"]
       )
@@ -70,14 +71,24 @@ platform :ios do
       puts "⚠️ 빌드 번호 증분 중 오류 (무시하고 계속): #{ex.message}"
     end
     
-    # 프로젝트 파일 검증
+    # 프로젝트 파일 검증 및 workspace 생성
     puts "🔍 프로젝트 파일 검증 중..."
+    
+    # PickPlay.xcworkspace 파일이 없으면 CocoaPods로 생성
     unless File.exist?("PickPlay.xcworkspace")
-      UI.user_error!("❌ PickPlay.xcworkspace 파일을 찾을 수 없습니다!")
+      puts "❌ PickPlay.xcworkspace 파일을 찾을 수 없습니다. CocoaPods로 생성 중..."
+      sh("pod install")
+      
+      unless File.exist?("PickPlay.xcworkspace")
+        UI.user_error!("❌ PickPlay.xcworkspace 파일 생성 실패!")
+      end
+      puts "✅ PickPlay.xcworkspace 파일 생성 완료"
     end
+    
     unless File.exist?("PickPlay.xcodeproj")
       UI.user_error!("❌ PickPlay.xcodeproj 파일을 찾을 수 없습니다!")
     end
+    
     puts "✅ 프로젝트 파일 검증 완료"
     
     # Xcode 버전 자동 감지 및 설정

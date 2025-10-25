@@ -231,10 +231,26 @@ jobs:
           ls -la /Applications/ | grep -i xcode
           echo "✅ Xcode 버전 확인 완료"
           
-          # CocoaPods 의존성 업데이트
-          echo "📦 CocoaPods 의존성 업데이트 중..."
-          pod install --repo-update
-          echo "✅ CocoaPods 의존성 업데이트 완료"
+           # CocoaPods 의존성 업데이트 및 workspace 생성 (Expo prebuild 후 실행)
+           echo "📦 CocoaPods 의존성 업데이트 및 workspace 생성 중..."
+           pod install --repo-update
+           echo "✅ CocoaPods 의존성 업데이트 완료"
+           
+           # PickPlay.xcworkspace 파일 확인
+           echo "🔍 PickPlay.xcworkspace 파일 확인 중..."
+           if [ -f "PickPlay.xcworkspace" ]; then
+             echo "✅ PickPlay.xcworkspace 파일이 존재합니다."
+           else
+             echo "❌ PickPlay.xcworkspace 파일이 없습니다. Pod install을 다시 실행합니다..."
+             pod install
+             if [ -f "PickPlay.xcworkspace" ]; then
+               echo "✅ PickPlay.xcworkspace 파일 생성 완료"
+             else
+               echo "❌ PickPlay.xcworkspace 파일 생성 실패. Podfile을 확인해주세요."
+               ls -la
+               exit 1
+             fi
+           fi
           
            # Expo prebuild (네이티브 파일 최신화)
            echo "🔄 Expo prebuild 실행 중..."
