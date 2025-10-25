@@ -332,10 +332,29 @@ jobs:
           echo "  - MATCH_GIT_USERNAME: $MATCH_GIT_USERNAME"
           echo "  - MATCH_GIT_PASSWORD: ${MATCH_GIT_PASSWORD:0:4}...${MATCH_GIT_PASSWORD: -4}"
           
-          echo "🚀 Fastlane Match 초기화 시작..."
-          
-          # Match 초기화 실행 (상세 로그 포함)
-          fastlane match_init --verbose
+           echo "🚀 Fastlane Match 초기화 시작..."
+           
+           # Fastlane 디렉토리 확인 및 생성
+           echo "🔍 Fastlane 디렉토리 확인 중..."
+           if [ ! -d "fastlane" ]; then
+             echo "❌ fastlane 디렉토리가 없습니다. 생성 중..."
+             mkdir -p fastlane
+             cp ../fastlane-template.rb fastlane/Fastfile
+             cp ../appfile-template.rb fastlane/Appfile
+             chmod +x fastlane/Fastfile
+             chmod +x fastlane/Appfile
+             echo "✅ fastlane 디렉토리 및 설정 파일 생성 완료"
+           else
+             echo "✅ fastlane 디렉토리가 존재합니다."
+           fi
+           
+           # 현재 디렉토리 및 fastlane 디렉토리 내용 확인
+           echo "📁 현재 디렉토리: $(pwd)"
+           echo "📁 fastlane 디렉토리 내용:"
+           ls -la fastlane/
+           
+           # Match 초기화 실행 (상세 로그 포함)
+           fastlane match_init --verbose
           
           echo "✅ Fastlane Match 초기화 완료!"
           
@@ -388,10 +407,24 @@ jobs:
           export APPLE_APP_SPECIFIC_PASSWORD="$CLEAN_APPLE_APP_SPECIFIC_PASSWORD"
           export APPLE_TEAM_ID="$APPLE_TEAM_ID"
           
-          echo "✅ 비밀번호 정제 완료"
-          
-          # Fastlane Match를 사용한 빌드 실행
-          fastlane beta
+           echo "✅ 비밀번호 정제 완료"
+           
+           # Fastlane 디렉토리 확인 및 생성
+           echo "🔍 Fastlane 디렉토리 확인 중..."
+           if [ ! -d "fastlane" ]; then
+             echo "❌ fastlane 디렉토리가 없습니다. 생성 중..."
+             mkdir -p fastlane
+             cp ../fastlane-template.rb fastlane/Fastfile
+             cp ../appfile-template.rb fastlane/Appfile
+             chmod +x fastlane/Fastfile
+             chmod +x fastlane/Appfile
+             echo "✅ fastlane 디렉토리 및 설정 파일 생성 완료"
+           else
+             echo "✅ fastlane 디렉토리가 존재합니다."
+           fi
+           
+           # Fastlane Match를 사용한 빌드 실행
+           fastlane beta
           
           echo "✅ 빌드 및 TestFlight 업로드 완료!"
           
