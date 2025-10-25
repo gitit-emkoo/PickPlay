@@ -209,6 +209,7 @@ jobs:
           FASTLANE_USER: ${{ secrets.FASTLANE_USER }}
         run: |
           echo "🔐 Fastlane Match 초기화 중..."
+          echo "🔄 워크플로우 업데이트 확인 - 디버깅 로그 포함 버전"
           cd ios
           
           # 비밀번호 정제 (공백 및 특수문자 제거)
