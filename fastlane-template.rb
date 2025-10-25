@@ -35,8 +35,24 @@ platform :ios do
 
   desc "Build and upload to TestFlight using Fastlane Match"
   lane :beta do
-    # Xcode 버전 명시적 설정 (안정적인 버전 사용)
-    xcode_select("/Applications/Xcode_16.3.app")
+    # Xcode 버전 자동 감지 및 설정
+    puts "🔍 Xcode 버전 자동 감지 중..."
+    xcode_version = `xcodebuild -version | head -1 | cut -d' ' -f2`.strip
+    puts "📱 감지된 Xcode 버전: #{xcode_version}"
+    
+    # 사용 가능한 Xcode 버전 확인
+    available_xcodes = `ls /Applications/ | grep -i xcode`.strip.split("\n")
+    puts "📱 사용 가능한 Xcode 버전들: #{available_xcodes.join(', ')}"
+    
+    # 가장 최신 Xcode 사용
+    if available_xcodes.any? { |x| x.include?("Xcode") }
+      latest_xcode = available_xcodes.find { |x| x.include?("Xcode") }
+      xcode_path = "/Applications/#{latest_xcode}"
+      puts "📱 사용할 Xcode: #{xcode_path}"
+      xcode_select(xcode_path)
+    else
+      puts "⚠️ 특정 Xcode 버전을 찾을 수 없습니다. 기본 버전 사용"
+    end
     
     # Fastlane Match를 사용한 자동 인증서 및 프로비저닝 프로파일 관리
     puts "🔐 Fastlane Match로 인증서 및 프로비저닝 프로파일 설정 중..."

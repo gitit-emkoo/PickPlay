@@ -213,6 +213,32 @@ jobs:
           echo "🔄 워크플로우 업데이트 확인 - 디버깅 로그 포함 버전"
           cd ios
           
+          # 키체인 생성 및 설정
+          echo "🔑 키체인 생성 및 설정 중..."
+          security create-keychain -p actions build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p actions build.keychain
+          security set-keychain-settings -t 3600 -l ~/Library/Keychains/build.keychain
+          echo "✅ 키체인 생성 완료"
+          
+          # Xcode 버전 확인 및 설정
+          echo "🔍 Xcode 버전 확인 중..."
+          xcodebuild -version
+          ls -la /Applications/ | grep -i xcode
+          echo "✅ Xcode 버전 확인 완료"
+          
+          # CocoaPods 의존성 업데이트
+          echo "📦 CocoaPods 의존성 업데이트 중..."
+          pod install --repo-update
+          echo "✅ CocoaPods 의존성 업데이트 완료"
+          
+          # Expo prebuild (네이티브 파일 최신화)
+          echo "🔄 Expo prebuild 실행 중..."
+          cd ..
+          npx expo prebuild --platform ios --clean
+          cd ios
+          echo "✅ Expo prebuild 완료"
+          
           # 모든 환경변수 디버깅 정보 출력
           echo "🔍 ===== 전체 환경변수 디버깅 정보 ====="
           echo "🔍 APPLE_TEAM_ID 정보:"
