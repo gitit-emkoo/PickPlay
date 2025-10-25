@@ -82,11 +82,19 @@ platform :ios do
       # 기존 workspace 및 Pods 완전 정리 (React Native 권장사항)
       puts "🧹 기존 workspace 및 Pods 완전 정리 중..."
       sh("rm -rf PickPlay.xcworkspace Pods Podfile.lock")
+      # 주의: PickPlay.xcodeproj는 삭제하지 않음 (pod deintegrate가 필요로 함)
       
       # CocoaPods 완전 정리 (React Native 권장사항)
       puts "🧹 CocoaPods 캐시 및 설정 완전 정리 중..."
       sh("pod cache clean --all")
-      sh("pod deintegrate") # Xcode 프로젝트에서 Pods 설정 완전 제거
+      
+      # pod deintegrate 실행 (xcodeproj 파일이 존재할 때만)
+      if File.exist?("PickPlay.xcodeproj")
+        puts "🔧 Xcode 프로젝트에서 Pods 설정 제거 중..."
+        sh("pod deintegrate PickPlay.xcodeproj") # 프로젝트 파일 경로 명시
+      else
+        puts "⚠️ PickPlay.xcodeproj 파일이 없습니다. pod deintegrate 건너뜀"
+      end
       
       # 시스템 환경 확인
       puts "🔍 시스템 환경 확인 중..."
