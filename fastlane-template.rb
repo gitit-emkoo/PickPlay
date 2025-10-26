@@ -4,8 +4,10 @@
 default_platform(:ios)
 
 platform :ios do
-  # 키체인 정리 및 환경 설정
-  before_all do
+  # Fastlane이 ios/fastlane에서 실행되므로, 한 단계 위인 ios/로 이동
+  Dir.chdir("..") do
+    # 키체인 정리 및 환경 설정
+    before_all do
     puts "🧹 키체인 정리 및 환경 설정 중..."
     
     # 기존 키체인 정리 (충돌 방지)
@@ -71,6 +73,11 @@ platform :ios do
       puts "⚠️ 빌드 번호 증분 중 오류 (무시하고 계속): #{ex.message}"
     end
     
+    # Expo prebuild 먼저 실행 (네이티브 파일 생성)
+    puts "🔄 Expo prebuild 실행 중..."
+    sh("cd .. && npx expo prebuild --platform ios --clean")
+    puts "✅ Expo prebuild 완료"
+    
     # 프로젝트 파일 검증 및 workspace 생성
     puts "🔍 프로젝트 파일 검증 중..."
     
@@ -101,9 +108,13 @@ platform :ios do
       sh("df -h") # 디스크 공간 확인
       sh("ls -la") # 현재 디렉토리 상태 확인
       
-      # Podfile 존재 확인
+      # Podfile 존재 확인 (이제 ios/ 디렉토리에서 실행되므로 직접 접근 가능)
       unless File.exist?("Podfile")
-        UI.user_error!("❌ Podfile이 존재하지 않습니다!")
+        puts "❌ Podfile이 존재하지 않습니다!"
+        puts "🔍 현재 디렉토리 내용:"
+        sh("ls -la")
+        puts "🔍 현재 디렉토리: #{Dir.pwd}"
+        UI.user_error!("❌ Podfile이 존재하지 않습니다! Expo prebuild가 제대로 실행되었는지 확인해주세요.")
       end
       
       # CocoaPods 재설치 (여러 방법 시도)
@@ -289,4 +300,5 @@ platform :ios do
       puts "⚠️ Firebase 토큰이 없습니다. Firebase App Distribution을 건너뜁니다."
     end
   end
+  end # Dir.chdir("..") 블록 종료
 end

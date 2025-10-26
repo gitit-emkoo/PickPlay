@@ -14,3 +14,4 @@ app_identifier "com.pickplay.kwcc"
 # api_key_path "path/to/your/AuthKey_XXXXXXXXXX.p8"
 # api_key_id "XXXXXXXXXX"
 # api_key_issuer_id "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
