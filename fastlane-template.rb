@@ -74,17 +74,19 @@ platform :ios do
     end
     
     # Expo prebuild 먼저 실행 (네이티브 파일 생성)
-    # 절대 경로를 사용하여 안정성 확보
+    # Dir.chdir 블록으로 안전하게 CWD 관리
     puts "🔄 Expo prebuild 실행 중..."
-    project_root = File.expand_path("../..", Dir.pwd)
-    puts "📁 프로젝트 루트: #{project_root}"
-    sh("cd #{project_root} && npx expo prebuild --platform ios --clean")
-    puts "✅ Expo prebuild 완료"
+    Dir.chdir("../..") do
+      puts "📁 프로젝트 루트에서 실행 중: #{Dir.pwd}"
+      sh("npx expo prebuild --platform ios --clean")
+    end
+    puts "✅ Expo prebuild 완료 (CWD 자동 복원: #{Dir.pwd})"
     
     # Expo prebuild가 ios/ 디렉토리를 재생성했으므로 fastlane 디렉토리 복구
     puts "🔧 fastlane 디렉토리 복구 중..."
     unless Dir.exist?("fastlane")
       puts "📁 fastlane 디렉토리가 없습니다. 복원 중..."
+      project_root = File.expand_path("../..", Dir.pwd)
       sh("mkdir -p fastlane")
       sh("cp #{project_root}/fastlane-template.rb fastlane/Fastfile")
       if File.exist?("#{project_root}/appfile-template.rb")
