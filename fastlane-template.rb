@@ -142,37 +142,21 @@ platform :ios do
       in_house: false
     )
     
-    # Match 실행 (인증서 만료 시 자동 갱신)
-    begin
-      match(
-        type: "appstore",
-        readonly: true,  
-        app_identifier: "com.pickplay.kwcc",
-        team_id: ENV["APPLE_TEAM_ID"],
-        api_key: api_key,
-        git_url: ENV["MATCH_GIT_URL"],
-        git_basic_authorization: Base64.strict_encode64("#{ENV['MATCH_GIT_USERNAME']}:#{ENV['MATCH_GIT_PASSWORD']}"),
-        keychain_name: "build",
-        keychain_password: "actions"
-      )
-      puts "✅ 기존 인증서 사용 성공"
-    rescue => ex
-      puts "⚠️ 기존 인증서 사용 실패, 새로 생성 시도: #{ex.message}"
-      match(
-        type: "appstore",
-        readonly: false,  
-        app_identifier: "com.pickplay.kwcc",
-        team_id: ENV["APPLE_TEAM_ID"],
-        api_key: api_key,
-        git_url: ENV["MATCH_GIT_URL"],
-        git_basic_authorization: Base64.strict_encode64("#{ENV['MATCH_GIT_USERNAME']}:#{ENV['MATCH_GIT_PASSWORD']}"),
-        keychain_name: "build",
-        keychain_password: "actions"
-      )
-      puts "✅ 새 인증서 생성 완료"
-    end
+    # Match 실행: Push Notification과 같은 새로운 권한을 반영할 수 있도록
+    # readonly: false를 사용하여 프로필을 필요에 따라 자동 갱신합니다.
+    match(
+      type: "appstore",
+      readonly: false,  # 인증서 만료 및 새로운 권한 반영을 위해 읽기 전용 비활성화
+      app_identifier: "com.pickplay.kwcc",
+      team_id: ENV["APPLE_TEAM_ID"],
+      api_key: api_key,
+      git_url: ENV["MATCH_GIT_URL"],
+      git_basic_authorization: Base64.strict_encode64("#{ENV['MATCH_GIT_USERNAME']}:#{ENV['MATCH_GIT_PASSWORD']}"),
+      keychain_name: "build",
+      keychain_password: "actions"
+    )
     
-    puts "✅ Fastlane Match 설정 완료"
+    puts "✅ Fastlane Match 설정 완료 (최신 프로필로 업데이트/설치 확인)"
     
     # 빌드 및 아카이브 (Match가 자동으로 코드 서명 설정)
     # 절대 경로 사용
