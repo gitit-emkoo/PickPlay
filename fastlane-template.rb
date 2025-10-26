@@ -110,49 +110,61 @@ platform :ios do
     # 베타 버전을 제외한 안정 버전 필터링
     stable_xcodes = available_xcodes
       .select { |x| x.include?("Xcode") && !x.downcase.include?("beta") }
-
-    if stable_xcodes.any?
-      # 안정 버전 중 가장 최신 버전 선택
-      latest_stable_xcode = stable_xcodes
-        .sort_by { |x| 
-          # 버전 번호 추출 (Xcode.app 또는 Xcode_X.Y.Z 형식 모두 처리)
-          version_match = x.match(/Xcode(?:_|\s)?(\d+)\.(\d+)(?:\.(\d+))?/) 
-          if version_match
-            major = version_match[1].to_i
-            minor = version_match[2].to_i
-            patch = version_match[3]&.to_i || 0
-            [major, minor, patch]
-          else
-            # Xcode.app 과 같이 버전 번호가 없는 경우 낮은 우선순위 부여
-            [0,0,0] 
-          end
-        }
-        .last
-      
-      xcode_path = "/Applications/#{latest_stable_xcode}"
-      puts "📱 사용할 안정적인 최신 Xcode: #{xcode_path}"
+    
+    # Xcode 16.4 우선 선택 (가장 안정적인 버전)
+    xcode_16_4 = stable_xcodes.find { |x| x.include?("Xcode_16.4") || x.include?("Xcode_16_4") }
+    
+    if xcode_16_4
+      xcode_path = "/Applications/#{xcode_16_4}"
+      puts "📱 사용할 우선순위 Xcode 16.4: #{xcode_path}"
       xcode_select(xcode_path)
     else
-      # 안정 버전이 없으면 설치된 것 중 가장 최신 (베타 포함) 사용 (기존 로직)
-      puts "⚠️ 안정적인 Xcode 버전을 찾을 수 없습니다. 설치된 최신 버전을 사용합니다."
-      latest_xcode = available_xcodes
-        .select { |x| x.include?("Xcode") }
-        .sort_by { |x| 
-          version_match = x.match(/Xcode(?:_|\s)(\d+)\.(\d+)(?:\.(\d+))?/)
-          if version_match
-            major = version_match[1].to_i
-            minor = version_match[2].to_i
-            patch = version_match[3]&.to_i || 0
-            [major, minor, patch]
-          else
-            [0, 0, 0]
-          end
-        }
-        .last
+      # Xcode 16.4가 없으면 다른 Xcode 16.x 중 최신 버전 선택
+      xcode_16_versions = stable_xcodes.select { |x| x.match(/Xcode_?16/i) }
+      
+      if xcode_16_versions.any?
+        latest_xcode_16 = xcode_16_versions
+          .sort_by { |x| 
+            version_match = x.match(/Xcode_?16(?:_|\s)?(\d+)?\.?(\d+)?(?:\.(\d+))?/i)
+            if version_match
+              patch = version_match[1]&.to_i || version_match[3]&.to_i || 0
+              sub_patch = version_match[2]&.to_i || 0
+              [16, patch, sub_patch]
+            else
+              [16, 0, 0]
+            end
+          }
+          .last
         
-      xcode_path = "/Applications/#{latest_xcode}"
-      puts "📱 사용할 Xcode (베타 가능성 있음): #{xcode_path}"
-      xcode_select(xcode_path)
+        xcode_path = "/Applications/#{latest_xcode_16}"
+        puts "📱 사용할 Xcode 16.x: #{xcode_path}"
+        xcode_select(xcode_path)
+      else
+        # Xcode 16.x도 없으면 안정 버전 중 최신 선택
+        puts "⚠️ Xcode 16.x를 찾을 수 없습니다. 설치된 최신 안정 버전을 사용합니다."
+        latest_stable = stable_xcodes
+          .sort_by { |x| 
+            version_match = x.match(/Xcode(?:_|\s)?(\d+)\.(\d+)(?:\.(\d+))?/)
+            if version_match
+              major = version_match[1].to_i
+              minor = version_match[2].to_i
+              patch = version_match[3]&.to_i || 0
+              [major, minor, patch]
+            else
+              [0, 0, 0]
+            end
+          }
+          .last
+        
+        if latest_stable
+          xcode_path = "/Applications/#{latest_stable}"
+          puts "📱 사용할 안정적 최신 Xcode: #{xcode_path}"
+          xcode_select(xcode_path)
+        else
+          puts "❌ 사용 가능한 Xcode 버전이 없습니다."
+          UI.user_error!("Xcode 설치를 확인하세요.")
+        end
+      end
     end
     
     # Fastlane Match를 사용한 자동 인증서 및 프로비저닝 프로파일 관리

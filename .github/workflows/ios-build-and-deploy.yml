@@ -489,5 +489,20 @@ jobs:
             echo "✅ 빌드 성공! TestFlight에 업로드되었습니다."
           else
             echo "❌ 빌드 실패! 로그를 확인해주세요."
+            
+            # 상세 로그 출력
+            echo "================================================"
+            echo "빌드 로그 파일 위치 확인"
+            echo "================================================"
+            if [ -f ~/Library/Logs/gym/PickPlay-PickPlay.log ]; then
+              echo "📋 로그 파일의 마지막 100줄:"
+              tail -100 ~/Library/Logs/gym/PickPlay-PickPlay.log
+            fi
+            
+            if [ -d ~/Library/Developer/Xcode/Archives ]; then
+              echo "📦 Archive 파일들:"
+              ls -lah ~/Library/Developer/Xcode/Archives/
+            fi
+            
             exit 1
           fi
