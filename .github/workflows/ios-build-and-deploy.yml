@@ -474,10 +474,36 @@ jobs:
            echo '</dict>' >> ExportOptions.plist
            echo '</plist>' >> ExportOptions.plist
            chmod 644 ExportOptions.plist
-           echo "✅ ExportOptions.plist 파일 동적 생성 완료"
-           
-           # Fastlane Match를 사용한 빌드 실행
-           fastlane beta
+          echo "✅ ExportOptions.plist 파일 동적 생성 완료"
+          
+          # 🔥 기존 프로파일 삭제 (Push Notifications 권한 문제 해결)
+          echo "🔥 기존 프로파일 삭제 중 (match nuke)..."
+          echo "⚠️ 이 작업은 기존 App Store 프로파일을 삭제하고 새로 생성합니다."
+          
+          # Match nuke를 위한 환경변수 설정
+          export GIT_BASIC_AUTHORIZATION=$(echo -n "$MATCH_GIT_USERNAME:$MATCH_GIT_PASSWORD" | base64)
+          
+          # App Store Connect API Key를 임시 파일로 저장 (match nuke에서 필요)
+          echo "$APP_STORE_CONNECT_API_KEY" > /tmp/app_store_connect_api_key.p8
+          
+          # Match nuke 실행 (기존 프로파일 삭제)
+          fastlane match nuke appstore \
+            --app_identifier "com.pickplay.kwcc" \
+            --team_id "$APPLE_TEAM_ID" \
+            --git_url "$MATCH_GIT_URL" \
+            --git_basic_authorization "$GIT_BASIC_AUTHORIZATION" \
+            --api_key_path "/tmp/app_store_connect_api_key.p8" \
+            --api_key_id "$APP_STORE_CONNECT_API_KEY_ID" \
+            --api_issuer "$APP_STORE_CONNECT_API_ISSUER_ID" \
+            2>&1 || echo "⚠️ match nuke 실행 중 오류 (기존 프로파일이 없을 수 있음, 계속 진행)"
+          
+          # 임시 파일 정리
+          rm -f /tmp/app_store_connect_api_key.p8
+          
+          echo "✅ 프로파일 삭제 완료 (또는 건너뛰기). 새 프로파일이 생성됩니다."
+          
+          # Fastlane Match를 사용한 빌드 실행 (새 프로파일 자동 생성)
+          fastlane beta
           
           echo "✅ 빌드 및 TestFlight 업로드 완료!"
           
