@@ -74,8 +74,11 @@ platform :ios do
     end
     
     # Expo prebuild 먼저 실행 (네이티브 파일 생성)
+    # 현재 Dir.chdir("..")로 ios/에 있으므로, 한 단계 더 위로 가야 루트가 됩니다
     puts "🔄 Expo prebuild 실행 중..."
-    sh("cd .. && npx expo prebuild --platform ios --clean")
+    Dir.chdir("../..") do
+      sh("npx expo prebuild --platform ios --clean")
+    end
     puts "✅ Expo prebuild 완료"
     
     # 프로젝트 파일 검증 및 workspace 생성
