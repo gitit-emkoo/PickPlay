@@ -37,11 +37,16 @@ on:
 jobs:
   ios-build-and-deploy:
     runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: pickplay
     
     steps:
       # 1단계: 코드 체크아웃
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          path: pickplay
         
       # 2단계: Node.js 환경 설정 (npm 캐시 사용으로 빌드 속도 향상)
       - name: Setup Node.js
