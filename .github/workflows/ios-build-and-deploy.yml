@@ -385,7 +385,7 @@ jobs:
           
           echo "✅ Fastlane Match 초기화 완료!"
           
-      # 11단계: DerivedData 완전 정리 (빌드 안정성 향상)
+      # 11단계: DerivedData 완전 정리 및 build 디렉토리 생성 (빌드 안정성 향상)
       - name: Clean DerivedData Before Build
         working-directory: pickplay
         run: |
@@ -402,10 +402,10 @@ jobs:
           cd ios
           rm -rf build/
           rm -rf DerivedData/
-          # React Native Codegen 생성 파일 삭제 (복사 충돌 방지)
-          rm -rf build/generated/ios/react/renderer/components/
+          # build 디렉토리 구조 생성 (ReactCodegen이 파일을 복사할 수 있도록)
+          mkdir -p build/generated/ios/react/renderer/components/lottiereactnative/
           cd ..
-          echo "✅ DerivedData 정리 완료"
+          echo "✅ DerivedData 정리 및 build 디렉토리 생성 완료"
       
       # 12단계: Fastlane으로 빌드 및 배포 (Match 사용)
       - name: Build and Deploy with Fastlane Match
