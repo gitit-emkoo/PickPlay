@@ -60,6 +60,7 @@ jobs:
         
       # 4단계: Expo CLI 설치 및 설정 (원래 방식으로 복원)
       - name: Setup Expo
+        working-directory: pickplay
         uses: expo/expo-github-action@v8
         with:
           expo-version: latest
@@ -89,19 +90,7 @@ jobs:
           npx expo prebuild --platform ios --clean
           echo "✅ iOS 프로젝트 생성 완료"
           
-          # Expo prebuild 후 fastlane 디렉토리 복원 (중요!)
-          echo "🔧 fastlane 디렉토리 복원 중..."
-          if [ ! -d "ios/fastlane" ]; then
-            echo "📁 fastlane 디렉토리가 없습니다. 복원 중..."
-            mkdir -p ios/fastlane
-            cp fastlane-template.rb ios/fastlane/Fastfile
-            if [ -f "appfile-template.rb" ]; then
-              cp appfile-template.rb ios/fastlane/Appfile
-            fi
-            echo "✅ fastlane 디렉토리 복원 완료"
-          else
-            echo "✅ fastlane 디렉토리가 이미 존재합니다."
-          fi
+          # fastlane 디렉토리는 이미 프로젝트 루트에 존재하므로 복원 불필요
         
       # 6단계: CocoaPods 의존성 설치 및 SwiftLint 설정
       - name: Install CocoaPods and SwiftLint
