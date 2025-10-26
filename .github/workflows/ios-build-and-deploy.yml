@@ -138,10 +138,13 @@ jobs:
           echo "🚀 Fastlane 설치 중..."
           sudo gem install fastlane
           
-          echo "📋 성공 사례 방식으로 파일 복원 중..."
-          # 간단한 bash 스크립트로 파일 복원 (zx 대신)
-          mkdir -p ios/fastlane
-          cp fastlane-template.rb ios/fastlane/Fastfile
+          echo "📋 fastlane 디렉토리 생성 중..."
+          # Fastlane 디렉토리를 프로젝트 루트에 생성 (공식 권장사항)
+          mkdir -p fastlane
+          cp fastlane-template.rb fastlane/Fastfile
+          if [ -f "appfile-template.rb" ]; then
+            cp appfile-template.rb fastlane/Appfile
+          fi
           
           # ExportOptions.plist 동적 생성 (teamID 포함)
           echo '<?xml version="1.0" encoding="UTF-8"?>' > ios/ExportOptions.plist
@@ -166,7 +169,7 @@ jobs:
           echo '</plist>' >> ios/ExportOptions.plist
           
           # 파일 권한 설정 (성공 사례에서 중요하게 언급됨)
-          chmod +x ios/fastlane/Fastfile
+          chmod +x fastlane/Fastfile
           chmod 644 ios/ExportOptions.plist
           
           echo "✅ 파일 복원 완료!"
@@ -186,20 +189,18 @@ jobs:
           ls -la ios/
           
           # fastlane 디렉토리 확인
-          echo "📁 ios/fastlane 디렉토리 내용:"
-          ls -la ios/fastlane/ || echo "fastlane 디렉토리가 없습니다"
+          echo "📁 fastlane 디렉토리 내용:"
+          ls -la fastlane/ || echo "fastlane 디렉토리가 없습니다"
           
           # Fastfile 존재 확인
-          if [ -f "ios/fastlane/Fastfile" ]; then
+          if [ -f "fastlane/Fastfile" ]; then
             echo "✅ Fastfile이 존재합니다."
             echo "📋 Fastfile 내용 확인:"
-            head -10 ios/fastlane/Fastfile
+            head -10 fastlane/Fastfile
           else
             echo "❌ Fastfile이 없습니다. 저장소에 추가해야 합니다."
             exit 1
           fi
-          
-          cd ios
           
       # 9단계: Fastlane Match 설정 (인증서 자동 관리)
       - name: Setup Fastlane Match
@@ -241,7 +242,7 @@ jobs:
         run: |
           echo "🔐 Fastlane Match 초기화 중..."
           echo "🔄 워크플로우 업데이트 확인 - 디버깅 로그 포함 버전"
-          cd ios
+          # Fastlane이 프로젝트 루트의 fastlane/에서 실행되므로 cd ios 필요 없음
           
           # 키체인 생성 및 설정
           echo "🔑 키체인 생성 및 설정 중..."

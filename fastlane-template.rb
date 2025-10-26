@@ -3,9 +3,9 @@
 
 default_platform(:ios)
 
-# Fastlane이 `ios/fastlane`에서 실행되므로
-# 프로젝트 루트는 2단계 위입니다.
-FASTLANE_ROOT = File.expand_path('../..', __dir__)
+# Fastlane이 프로젝트 루트의 `fastlane/`에서 실행되므로
+# 프로젝트 루트는 1단계 위입니다.
+FASTLANE_ROOT = File.expand_path('..', __dir__)
 
 platform :ios do
   # 키체인 정리 및 환경 설정
@@ -64,15 +64,23 @@ platform :ios do
 
   desc "Build and upload to TestFlight using Fastlane Match"
   lane :beta do
-    # 현재 Fastlane 실행 위치 확인
+    # 현재 Fastlane 실행 위치 확인 (프로젝트 루트의 fastlane/)
     puts "🔍 현재 실행 위치: #{Dir.pwd}"
+    puts "📁 프로젝트 루트: #{FASTLANE_ROOT}"
     
-    # Fastlane이 ios/fastlane에서 실행되는 경우 ios/로 이동
-    if File.basename(Dir.pwd) == "fastlane" && File.basename(File.dirname(Dir.pwd)) == "ios"
-      puts "📁 ios/fastlane에서 실행 중, ios/로 이동..."
-      Dir.chdir("..")
-      puts "✅ ios/로 이동 완료: #{Dir.pwd}"
+    # Expo prebuild를 프로젝트 루트에서 실행
+    puts "🔄 Expo prebuild 실행 중..."
+    Dir.chdir(FASTLANE_ROOT) do
+      puts "📁 프로젝트 루트에서 실행 중: #{Dir.pwd}"
+      sh("npx expo prebuild --platform ios --clean --non-interactive")
     end
+    puts "✅ Expo prebuild 완료 (Pod install 포함)"
+    
+    # ios/ 디렉토리로 이동
+    ios_path = File.join(FASTLANE_ROOT, "ios")
+    UI.user_error!("❌ ios/ 디렉토리가 존재하지 않습니다: #{ios_path}") unless Dir.exist?(ios_path)
+    Dir.chdir(ios_path)
+    puts "📁 ios/ 디렉토리로 이동: #{Dir.pwd}"
     
     # 빌드 번호 자동 증분 (버전 충돌 방지)
     puts "📈 빌드 번호 자동 증분 중..."
@@ -84,22 +92,6 @@ platform :ios do
     rescue => ex
       puts "⚠️ 빌드 번호 증분 중 오류 (무시하고 계속): #{ex.message}"
     end
-    
-    # --- [디렉토리 작업 시작] ---
-    # 1. Expo prebuild를 프로젝트 루트에서 실행
-    puts "🔄 Expo prebuild 실행 중..."
-    Dir.chdir(FASTLANE_ROOT) do
-      puts "📁 프로젝트 루트에서 실행 중: #{Dir.pwd}"
-      sh("npx expo prebuild --platform ios --clean --non-interactive")
-    end
-    puts "✅ Expo prebuild 완료 (Pod install 포함)"
-    
-    # 2. 빌드를 위해 ios/ 디렉토리로 안전하게 이동
-    ios_path = File.join(FASTLANE_ROOT, "ios")
-    UI.user_error!("❌ ios/ 디렉토리가 존재하지 않습니다: #{ios_path}") unless Dir.exist?(ios_path)
-    Dir.chdir(ios_path)
-    puts "📁 빌드를 위해 ios/ 디렉토리로 이동: #{Dir.pwd}"
-    # --- [디렉토리 작업 종료] ---
     
     # 이제 `fastlane` 액션들은 `ios/` 내부에서 실행됩니다.
     
