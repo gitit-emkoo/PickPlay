@@ -4,10 +4,8 @@
 default_platform(:ios)
 
 platform :ios do
-  # Fastlane이 ios/fastlane에서 실행되므로, 한 단계 위인 ios/로 이동
-  Dir.chdir("..") do
-    # 키체인 정리 및 환경 설정
-    before_all do
+  # 키체인 정리 및 환경 설정
+  before_all do
     puts "🧹 키체인 정리 및 환경 설정 중..."
     
     # 기존 키체인 정리 (충돌 방지)
@@ -80,9 +78,25 @@ platform :ios do
       puts "📁 프로젝트 루트에서 실행 중: #{Dir.pwd}"
       sh("npx expo prebuild --platform ios --clean")
     end
-    puts "✅ Expo prebuild 완료 (CWD 자동 복원: #{Dir.pwd})"
+    puts "✅ Expo prebuild 완료"
     
-    # Expo prebuild가 ios/ 디렉토리를 재생성했으므로 fastlane 디렉토리 복구
+    # Expo prebuild 후 ios/ 디렉토리로 이동 및 fastlane 디렉토리 복구
+    puts "🔧 ios/ 디렉토리로 이동 및 fastlane 디렉토리 복구 중..."
+    
+    # 현재 위치 확인 및 ios/ 디렉토리로 이동
+    current_dir = Dir.pwd
+    puts "📁 현재 디렉토리: #{current_dir}"
+    
+    # ios/ 디렉토리인지 확인
+    if File.basename(current_dir) == "ios"
+      puts "✅ 이미 ios/ 디렉토리에 있습니다."
+    else
+      puts "⚠️ ios/ 디렉토리가 아닙니다. 이동 중..."
+      Dir.chdir("ios")
+      puts "✅ ios/ 디렉토리로 이동 완료"
+    end
+    
+    # fastlane 디렉토리 복구
     puts "🔧 fastlane 디렉토리 복구 중..."
     unless Dir.exist?("fastlane")
       puts "📁 fastlane 디렉토리가 없습니다. 복원 중..."
@@ -320,5 +334,4 @@ platform :ios do
       puts "⚠️ Firebase 토큰이 없습니다. Firebase App Distribution을 건너뜁니다."
     end
   end
-  end # Dir.chdir("..") 블록 종료
 end
