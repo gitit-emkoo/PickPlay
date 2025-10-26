@@ -188,7 +188,6 @@ platform :ios do
       force_for_new_devices: true,  # 새로운 capabilities를 위한 프로파일 강제 재생성
       force_for_new_certificates: true,  # 새 인증서용 프로파일 재생성
       skip_certificate_matching: false,  # 인증서 매칭 활성화
-      skip_provisioning_profiles_matching: false,  # 프로파일 매칭 활성화
       app_identifier: "com.pickplay.kwcc",
       team_id: ENV["APPLE_TEAM_ID"],
       api_key: api_key,

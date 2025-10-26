@@ -487,6 +487,10 @@ jobs:
           echo "$APP_STORE_CONNECT_API_KEY" > /tmp/app_store_connect_api_key.p8
           
           # Match nuke 실행 (기존 프로파일 삭제)
+          # export MATCH_PASSWORD to be used by match nuke
+          export MATCH_PASSWORD="$CLEAN_MATCH_PASSWORD"
+          
+          # Match nuke 실행 (기존 프로파일 삭제)
           fastlane match nuke appstore \
             --app_identifier "com.pickplay.kwcc" \
             --team_id "$APPLE_TEAM_ID" \
@@ -495,6 +499,7 @@ jobs:
             --api_key_path "/tmp/app_store_connect_api_key.p8" \
             --api_key_id "$APP_STORE_CONNECT_API_KEY_ID" \
             --api_issuer "$APP_STORE_CONNECT_API_ISSUER_ID" \
+            --skip_confirmation \
             2>&1 || echo "⚠️ match nuke 실행 중 오류 (기존 프로파일이 없을 수 있음, 계속 진행)"
           
           # 임시 파일 정리
