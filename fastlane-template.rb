@@ -204,10 +204,22 @@ platform :ios do
     if profile_path && File.exist?(profile_path)
       puts "✅ 프로파일 다운로드 확인: #{profile_path}"
       # 프로파일 내용 확인
-      `security cms -D -i "#{profile_path}"` =~ /<key>Entitlements<\/key>.*?<dict>(.*?)<\/dict>/m
+      profile_content = `security cms -D -i "#{profile_path}"`
+      profile_content =~ /<key>Entitlements<\/key>.*?<dict>(.*?)<\/dict>/m
+      
       if $1
+        entitlements = $1
         puts "📋 프로파일 Entitlements:"
-        puts $1
+        puts entitlements
+        
+        # 푸시 알림 권한 포함 여부 명시적 확인
+        if entitlements.include?("aps-environment")
+          puts "✨ Success: Entitlements에 'aps-environment' (Push Notification)가 포함되어 있습니다."
+        else
+          puts "❌ Failure: Entitlements에 'aps-environment' (Push Notification)가 누락되었습니다."
+        end
+      else
+        puts "⚠️ 프로파일에서 Entitlements 정보를 추출할 수 없습니다."
       end
     else
       puts "⚠️ 프로파일 경로를 찾을 수 없습니다."
