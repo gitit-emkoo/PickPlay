@@ -188,6 +188,7 @@ platform :ios do
       force_for_new_devices: true,  # 새로운 capabilities를 위한 프로파일 강제 재생성
       force_for_new_certificates: true,  # 새 인증서용 프로파일 재생성
       skip_certificate_matching: false,  # 인증서 매칭 활성화
+      skip_provisioning_profiles_matching: false,  # 프로파일 매칭 활성화
       app_identifier: "com.pickplay.kwcc",
       team_id: ENV["APPLE_TEAM_ID"],
       api_key: api_key,
@@ -197,7 +198,49 @@ platform :ios do
       keychain_password: "actions"
     )
     
+    # Match 실행 후 프로파일 확인
+    puts "🔍 다운로드된 프로파일 확인 중..."
+    profile_path = ENV["sigh_com.pickplay.kwcc_appstore_profile-path"]
+    if profile_path && File.exist?(profile_path)
+      puts "✅ 프로파일 다운로드 확인: #{profile_path}"
+      # 프로파일 내용 확인
+      `security cms -D -i "#{profile_path}"` =~ /<key>Entitlements<\/key>.*?<dict>(.*?)<\/dict>/m
+      if $1
+        puts "📋 프로파일 Entitlements:"
+        puts $1
+      end
+    else
+      puts "⚠️ 프로파일 경로를 찾을 수 없습니다."
+    end
+    
     puts "✅ Fastlane Match 설정 완료 (최신 프로필로 업데이트/설치 확인)"
+    
+    # Match가 다운로드한 프로파일을 명시적으로 프로젝트에 적용
+    puts "🔧 코드 서명 설정 적용 중..."
+    profile_uuid = ENV["sigh_com.pickplay.kwcc_appstore"]
+    profile_path = ENV["sigh_com.pickplay.kwcc_appstore_profile-path"]
+    
+    if profile_uuid && profile_path
+      puts "📋 프로파일 UUID: #{profile_uuid}"
+      puts "📋 프로파일 경로: #{profile_path}"
+      
+      # 프로파일을 수동으로 적용
+      begin
+        update_code_signing_settings(
+          use_automatic_signing: false,
+          path: ABSOLUTE_XCODEPROJ_PATH,
+          team_id: ENV["APPLE_TEAM_ID"],
+          code_sign_identity: "iPhone Distribution",
+          profile_uuid: profile_uuid,
+          profile_name: "match AppStore com.pickplay.kwcc"
+        )
+        puts "✅ 코드 서명 설정 적용 완료"
+      rescue => ex
+        puts "⚠️ 코드 서명 설정 적용 중 오류 (무시하고 계속): #{ex.message}"
+      end
+    else
+      puts "⚠️ 프로파일 UUID 또는 경로를 찾을 수 없습니다."
+    end
     
     # 빌드 및 아카이브 (Match가 자동으로 코드 서명 설정)
     # 절대 경로 사용
@@ -209,7 +252,7 @@ platform :ios do
       clean: true,
       skip_codesigning: false,
       skip_package_dependencies_resolution: false,
-      xcargs: "SWIFT_OPTIMIZATION_LEVEL=-O"
+      xcargs: "SWIFT_OPTIMIZATION_LEVEL=-O -DEVELOPMENT_TEAM='#{ENV["APPLE_TEAM_ID"]}' CODE_SIGN_STYLE=Manual"
     )
     
     # TestFlight 업로드
