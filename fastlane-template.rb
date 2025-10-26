@@ -3,6 +3,10 @@
 
 default_platform(:ios)
 
+# Fastlane이 `fastlane` 디렉토리나 프로젝트 루트 중 어디에서 실행되든 상관없이
+# 프로젝트의 실제 루트 경로를 계산합니다.
+FASTLANE_ROOT = File.expand_path('../..', File.dirname(__FILE__))
+
 platform :ios do
   # 키체인 정리 및 환경 설정
   before_all do
@@ -71,123 +75,31 @@ platform :ios do
       puts "⚠️ 빌드 번호 증분 중 오류 (무시하고 계속): #{ex.message}"
     end
     
-    # 현재 위치 확인 (fastlane은 ios/fastlane에서 실행됨)
-    current_dir = Dir.pwd
-    puts "📁 현재 디렉토리: #{current_dir}"
-    
-    # ios/ 디렉토리로 이동
-    unless File.basename(current_dir) == "ios"
-      puts "⚠️ ios/ 디렉토리가 아닙니다. 이동 중..."
-      Dir.chdir("..")
-      puts "✅ ios/ 디렉토리로 이동 완료: #{Dir.pwd}"
-    end
-    
-    # Expo prebuild 먼저 실행 (네이티브 파일 생성)
+    # --- [디렉토리 작업 시작] ---
+    # 1. Expo prebuild를 프로젝트 루트에서 실행
     puts "🔄 Expo prebuild 실행 중..."
-    project_root = File.expand_path("..", Dir.pwd)
-    Dir.chdir(project_root) do
+    Dir.chdir(FASTLANE_ROOT) do
       puts "📁 프로젝트 루트에서 실행 중: #{Dir.pwd}"
-      sh("npx expo prebuild --platform ios --clean")
+      sh("npx expo prebuild --platform ios --clean --non-interactive")
     end
-    puts "✅ Expo prebuild 완료"
+    puts "✅ Expo prebuild 완료 (Pod install 포함)"
     
-    # ios/ 디렉토리로 다시 이동
-    Dir.chdir("ios")
-    puts "📁 ios/ 디렉토리로 복귀: #{Dir.pwd}"
+    # 2. 빌드를 위해 ios/ 디렉토리로 안전하게 이동
+    ios_path = File.join(FASTLANE_ROOT, "ios")
+    UI.user_error!("❌ ios/ 디렉토리가 존재하지 않습니다: #{ios_path}") unless Dir.exist?(ios_path)
+    Dir.chdir(ios_path)
+    puts "📁 빌드를 위해 ios/ 디렉토리로 이동: #{Dir.pwd}"
+    # --- [디렉토리 작업 종료] ---
     
-    # fastlane 디렉토리 복구
-    puts "🔧 fastlane 디렉토리 복구 중..."
-    unless Dir.exist?("fastlane")
-      puts "📁 fastlane 디렉토리가 없습니다. 복원 중..."
-      project_root = File.expand_path("..", Dir.pwd)
-      sh("mkdir -p fastlane")
-      sh("cp #{project_root}/fastlane-template.rb fastlane/Fastfile")
-      if File.exist?("#{project_root}/appfile-template.rb")
-        sh("cp #{project_root}/appfile-template.rb fastlane/Appfile")
-      end
-      sh("chmod +x fastlane/Fastfile fastlane/Appfile")
-      puts "✅ fastlane 디렉토리 복구 완료"
-    else
-      puts "✅ fastlane 디렉토리가 존재합니다."
-    end
+    # 이제 `fastlane` 액션들은 `ios/` 내부에서 실행됩니다.
     
-    # 프로젝트 파일 검증 및 workspace 생성
-    puts "🔍 프로젝트 파일 검증 중..."
-    
-    # PickPlay.xcworkspace 번들 내부 핵심 파일로 검증 (가장 안전한 방법)
+    # workspace 존재 여부만 간단히 확인
+    puts "🔍 PickPlay.xcworkspace 확인 중..."
     workspace_path = "PickPlay.xcworkspace"
     unless File.exist?("#{workspace_path}/contents.xcworkspacedata")
-      puts "❌ PickPlay.xcworkspace 번들이 올바르지 않습니다. CocoaPods로 생성 중..."
-      
-      # 기존 workspace 및 Pods 완전 정리 (React Native 권장사항)
-      puts "🧹 기존 workspace 및 Pods 완전 정리 중..."
-      sh("rm -rf PickPlay.xcworkspace Pods Podfile.lock")
-      # 주의: PickPlay.xcodeproj는 삭제하지 않음 (pod deintegrate가 필요로 함)
-      
-      # CocoaPods 완전 정리 (React Native 권장사항)
-      puts "🧹 CocoaPods 캐시 및 설정 완전 정리 중..."
-      sh("pod cache clean --all")
-      
-      # pod deintegrate 실행 (xcodeproj 파일이 존재할 때만)
-      if File.exist?("PickPlay.xcodeproj")
-        puts "🔧 Xcode 프로젝트에서 Pods 설정 제거 중..."
-        sh("pod deintegrate PickPlay.xcodeproj") # 프로젝트 파일 경로 명시
-      else
-        puts "⚠️ PickPlay.xcodeproj 파일이 없습니다. pod deintegrate 건너뜀"
-      end
-      
-      # 시스템 환경 확인
-      puts "🔍 시스템 환경 확인 중..."
-      sh("df -h") # 디스크 공간 확인
-      sh("ls -la") # 현재 디렉토리 상태 확인
-      
-      # Podfile 존재 확인 (이제 ios/ 디렉토리에서 실행되므로 직접 접근 가능)
-      unless File.exist?("Podfile")
-        puts "❌ Podfile이 존재하지 않습니다!"
-        puts "🔍 현재 디렉토리 내용:"
-        sh("ls -la")
-        puts "🔍 현재 디렉토리: #{Dir.pwd}"
-        UI.user_error!("❌ Podfile이 존재하지 않습니다! Expo prebuild가 제대로 실행되었는지 확인해주세요.")
-      end
-      
-      # CocoaPods 재설치 (여러 방법 시도)
-      puts "📦 CocoaPods 재설치 시도 1: 기본 설치"
-      sh("pod install --repo-update")
-      
-      # workspace 생성 확인
-      unless File.exist?("#{workspace_path}/contents.xcworkspacedata")
-        puts "⚠️ 첫 번째 시도 실패, 두 번째 시도 중..."
-        puts "📦 CocoaPods 재설치 시도 2: 클린 설치"
-        sh("pod install --clean-install")
-        
-        unless File.exist?("#{workspace_path}/contents.xcworkspacedata")
-          puts "⚠️ 두 번째 시도 실패, 세 번째 시도 중..."
-          puts "📦 CocoaPods 재설치 시도 3: 강제 재설치"
-          sh("pod install --verbose --repo-update")
-          
-          unless File.exist?("#{workspace_path}/contents.xcworkspacedata")
-            puts "❌ 모든 시도 실패. 디렉토리 상태 확인 중..."
-            sh("ls -la")
-            sh("ls -la PickPlay.xcworkspace/") if File.exist?("PickPlay.xcworkspace")
-            sh("ls -la Pods/") if File.exist?("Pods")
-            
-            # 임시 우회책: workspace가 없어도 빌드 시도 (디버깅용)
-            puts "⚠️ 임시 우회책: workspace 없이 빌드 시도 중..."
-            puts "⚠️ 이는 디버깅 목적이며, 근본적인 해결책이 아닙니다."
-            # UI.user_error!("❌ PickPlay.xcworkspace 번들 생성 실패!")
-          end
-        end
-      end
-      puts "✅ PickPlay.xcworkspace 번들 생성 완료"
-    else
-      puts "✅ PickPlay.xcworkspace 번들이 존재합니다."
+      UI.user_error!("❌ PickPlay.xcworkspace 번들이 올바르지 않습니다. Expo prebuild가 Pods 설치에 실패했습니다.")
     end
-    
-    unless File.exist?("PickPlay.xcodeproj")
-      UI.user_error!("❌ PickPlay.xcodeproj 파일을 찾을 수 없습니다!")
-    end
-    
-    puts "✅ 프로젝트 파일 검증 완료"
+    puts "✅ PickPlay.xcworkspace 확인 완료"
     
     # Xcode 버전 자동 감지 및 설정
     puts "🔍 Xcode 버전 자동 감지 중..."
