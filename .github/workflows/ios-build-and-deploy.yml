@@ -53,12 +53,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: pickplay/package-lock.json
           
-      # 3단계: 의존성 설치 (npm ci로 정확한 버전 보장, peer dependency 충돌 해결)
-      - name: Install Dependencies
-        working-directory: pickplay
-        run: npm ci --legacy-peer-deps
-        
-      # 4단계: Expo CLI 설치 및 설정 (원래 방식으로 복원)
+      # 3단계: Expo CLI 설치 및 설정 (원래 방식으로 복원)
       - name: Setup Expo
         uses: expo/expo-github-action@v8
         with:
@@ -84,22 +79,50 @@ jobs:
           xcodebuild -version
           echo "✅ Xcode 설정 완료"
         
-      # 6단계: CocoaPods 의존성 설치 및 SwiftLint 설정
+      # 6단계: node_modules 및 캐시 완전 정리
+      - name: Clean Dependencies
+        working-directory: pickplay
+        run: |
+          echo "🧹 의존성 완전 정리 중..."
+          # node_modules 제거
+          rm -rf node_modules
+          rm -f package-lock.json
+          
+          # React Native 캐시 제거
+          rm -rf $TMPDIR/react-*
+          
+          # iOS Pods 제거
+          cd ios
+          rm -rf Pods
+          rm -f Podfile.lock
+          rm -rf build
+          rm -rf DerivedData
+          pod deintegrate || echo "deintegrate 무시"
+          cd ..
+          
+          echo "✅ 의존성 정리 완료"
+          
+      # 7단계: 의존성 재설치
+      - name: Reinstall Dependencies
+        working-directory: pickplay
+        run: |
+          echo "📦 의존성 재설치 중..."
+          npm install --legacy-peer-deps
+          echo "✅ 의존성 재설치 완료"
+          
+      # 7.5단계: Expo prebuild (iOS 네이티브 파일 생성)
+      - name: Expo Prebuild
+        working-directory: pickplay
+        run: |
+          echo "🔄 Expo prebuild 실행 중 (CocoaPods 설치 전)..."
+          CI=1 npx expo prebuild --platform ios --clean
+          echo "✅ Expo prebuild 완료"
+          
+      # 8단계: CocoaPods 의존성 설치 및 SwiftLint 설정
       - name: Install CocoaPods and SwiftLint
         working-directory: pickplay
         run: |
           cd ios
-          # 기존 Pods 캐시 정리 (더 강력한 정리)
-          rm -rf Pods/
-          rm -f Podfile.lock
-          rm -rf build/
-          rm -rf DerivedData/
-          rm -rf ~/Library/Developer/Xcode/DerivedData/
-          rm -rf ~/Library/Caches/CocoaPods/
-          
-          # React Native 의존성 정리 (New Architecture 충돌 방지)
-          echo "🧹 React Native 의존성 정리 중..."
-          pod deintegrate || echo "deintegrate 실패 (무시하고 계속)"
           
           # 메모리 정리 (빌드 안정성 향상)
           sudo purge
@@ -119,7 +142,7 @@ jobs:
           echo "🔍 SwiftLint 코드 품질 검사 중..."
           swiftlint --config ../.swiftlint.yml || echo "⚠️ SwiftLint 경고가 있지만 계속 진행합니다."
           
-      # 7단계: Fastlane 설치 및 설정 복원 (성공 사례 방식 적용)
+      # 9단계: Fastlane 설치 및 설정 복원 (성공 사례 방식 적용)
       - name: Setup Fastlane
         working-directory: pickplay
         run: |
@@ -134,35 +157,12 @@ jobs:
             cp appfile-template.rb fastlane/Appfile
           fi
           
-          # ExportOptions.plist 동적 생성 (teamID 포함)
-          echo '<?xml version="1.0" encoding="UTF-8"?>' > ios/ExportOptions.plist
-          echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' >> ios/ExportOptions.plist
-          echo '<plist version="1.0">' >> ios/ExportOptions.plist
-          echo '<dict>' >> ios/ExportOptions.plist
-          echo '	<key>method</key>' >> ios/ExportOptions.plist
-          echo '	<string>app-store</string>' >> ios/ExportOptions.plist
-          echo '	<key>teamID</key>' >> ios/ExportOptions.plist
-          echo '	<string>${{ secrets.APPLE_TEAM_ID }}</string>' >> ios/ExportOptions.plist
-          echo '	<key>uploadBitcode</key>' >> ios/ExportOptions.plist
-          echo '	<false/>' >> ios/ExportOptions.plist
-          echo '	<key>uploadSymbols</key>' >> ios/ExportOptions.plist
-          echo '	<true/>' >> ios/ExportOptions.plist
-          echo '	<key>compileBitcode</key>' >> ios/ExportOptions.plist
-          echo '	<false/>' >> ios/ExportOptions.plist
-          echo '	<key>stripSwiftSymbols</key>' >> ios/ExportOptions.plist
-          echo '	<true/>' >> ios/ExportOptions.plist
-          echo '	<key>thinning</key>' >> ios/ExportOptions.plist
-          echo '	<string>&lt;none&gt;</string>' >> ios/ExportOptions.plist
-          echo '</dict>' >> ios/ExportOptions.plist
-          echo '</plist>' >> ios/ExportOptions.plist
-          
           # 파일 권한 설정 (성공 사례에서 중요하게 언급됨)
           chmod +x fastlane/Fastfile
-          chmod 644 ios/ExportOptions.plist
           
-          echo "✅ 파일 복원 완료!"
+          echo "✅ Fastlane 설정 완료!"
           
-      # 8단계: Fastlane 설정 확인
+      # 10단계: Fastlane 설정 확인
       - name: Verify Fastlane Setup
         working-directory: pickplay
         run: |
@@ -191,7 +191,7 @@ jobs:
             exit 1
           fi
           
-      # 9단계: Fastlane Match 설정 (인증서 자동 관리)
+      # 11단계: Fastlane Match 설정 (인증서 자동 관리)
       - name: Setup Fastlane Match
         working-directory: pickplay
         run: |
@@ -218,8 +218,8 @@ jobs:
           
           echo "✅ Fastlane Match 설정 완료"
           
-      # 10단계: Fastlane Match 초기화 (첫 실행 시에만)
-      - name: Initialize Fastlane Match
+      # 12단계: Fastlane Match 인증서 동기화
+      - name: Setup Fastlane Match Certificates
         working-directory: pickplay
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -231,9 +231,7 @@ jobs:
           APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
           APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
         run: |
-          echo "🔐 Fastlane Match 초기화 중..."
-          echo "🔄 워크플로우 업데이트 확인 - 디버깅 로그 포함 버전"
-          # Fastlane이 프로젝트 루트의 fastlane/에서 실행되므로 cd ios 필요 없음
+          echo "🔐 Fastlane Match 인증서 동기화 중..."
           
           # 키체인 생성 및 설정
           echo "🔑 키체인 생성 및 설정 중..."
@@ -243,19 +241,10 @@ jobs:
           security set-keychain-settings -t 3600 -l ~/Library/Keychains/build.keychain
           echo "✅ 키체인 생성 완료"
           
-          # Xcode 버전 확인 및 설정
-          echo "🔍 Xcode 버전 확인 중..."
-          xcodebuild -version
-          ls -la /Applications/ | grep -i xcode
-          echo "✅ Xcode 버전 확인 완료"
-          
-          # 현재 위치 확인
-          echo "📁 현재 위치: $(pwd)"
-          
-          # Expo prebuild 실행
-          echo "🔄 Expo prebuild 실행 중..."
-          CI=1 npx expo prebuild --platform ios --clean
-          echo "✅ Expo prebuild 완료"
+          # 비밀번호 정제 (공백 및 특수문자 제거)
+          echo "🔧 비밀번호 정제 중..."
+          CLEAN_MATCH_PASSWORD=$(echo "$MATCH_PASSWORD" | tr -d '[:space:]')
+          export MATCH_PASSWORD="$CLEAN_MATCH_PASSWORD"
           
           # 모든 환경변수 디버깅 정보 출력
           echo "🔍 ===== 전체 환경변수 디버깅 정보 ====="
@@ -289,103 +278,18 @@ jobs:
           echo "  - 앞 4자리: ${MATCH_GIT_PASSWORD:0:4}"
           echo "  - 뒤 4자리: ${MATCH_GIT_PASSWORD: -4}"
           
-          echo "🔍 ===== 비밀번호 정제 전후 비교 ====="
+          # 현재 디렉토리 및 fastlane 디렉토리 내용 확인
+          echo "📁 현재 디렉토리: $(pwd)"
+          echo "📁 fastlane 디렉토리 내용:"
+          ls -la fastlane/
           
-          # 비밀번호 정제 (공백 및 특수문자 제거)
-          echo "🔧 비밀번호 정제 중..."
-          CLEAN_MATCH_PASSWORD=$(echo "$MATCH_PASSWORD" | tr -d '[:space:]')
+          # Match 인증서 동기화 (CI/CD에서 매번 실행)
+          echo "🔐 Match 인증서 동기화 중..."
+          fastlane match development --readonly
+          fastlane match appstore --readonly
+          echo "✅ Match 인증서 동기화 완료!"
           
-          # 비밀번호 정보 로그 출력 (디버깅용)
-          echo "🔍 MATCH_PASSWORD 정보:"
-          echo "  - 원본 길이: ${#MATCH_PASSWORD}자"
-          echo "  - 정제 후 길이: ${#CLEAN_MATCH_PASSWORD}자"
-          echo "  - 앞 4자리: ${CLEAN_MATCH_PASSWORD:0:4}"
-          echo "  - 뒤 4자리: ${CLEAN_MATCH_PASSWORD: -4}"
-          echo "  - 정제 전후 비교: 원본[${#MATCH_PASSWORD}] → 정제[${#CLEAN_MATCH_PASSWORD}]"
-          
-          echo "🔍 ===== 환경변수 검증 결과 ====="
-          echo "✅ APPLE_TEAM_ID: ${#APPLE_TEAM_ID}자 (예상: 10자)"
-          echo "✅ APP_STORE_CONNECT_API_KEY_ID: ${#APP_STORE_CONNECT_API_KEY_ID}자 (예상: 10자)"
-          echo "✅ APP_STORE_CONNECT_API_ISSUER_ID: ${#APP_STORE_CONNECT_API_ISSUER_ID}자 (예상: UUID 길이)"
-          echo "✅ MATCH_PASSWORD: ${#CLEAN_MATCH_PASSWORD}자 (예상: 10자)"
-          echo "✅ MATCH_GIT_URL: ${#MATCH_GIT_URL}자 (예상: URL 길이)"
-          echo "✅ MATCH_GIT_USERNAME: ${#MATCH_GIT_USERNAME}자 (예상: 사용자명 길이)"
-          echo "✅ MATCH_GIT_PASSWORD: ${#MATCH_GIT_PASSWORD}자 (예상: 토큰 길이)"
-          
-          echo "🔍 ===== 상세 진단 테스트 ====="
-          
-          # App Store Connect API Key 접근 테스트
-          echo "🧪 App Store Connect API Key 접근 테스트 중..."
-          echo "  - Key ID: $APP_STORE_CONNECT_API_KEY_ID"
-          echo "  - Issuer ID: $APP_STORE_CONNECT_API_ISSUER_ID"
-          echo "  - Team ID: $APPLE_TEAM_ID"
-          
-          # Git 저장소 접근 테스트
-          echo "🧪 Git 저장소 접근 테스트 중..."
-          echo "  - URL: ${MATCH_GIT_URL:0:20}...${MATCH_GIT_URL: -10}"
-          echo "  - 사용자: $MATCH_GIT_USERNAME"
-          echo "  - 토큰: ${MATCH_GIT_PASSWORD:0:4}...${MATCH_GIT_PASSWORD: -4}"
-          
-          # Match 설정 확인
-          echo "🧪 Match 설정 확인 중..."
-          echo "  - MATCH_PASSWORD: ${CLEAN_MATCH_PASSWORD:0:4}...${CLEAN_MATCH_PASSWORD: -4}"
-          echo "  - MATCH_GIT_URL: ${MATCH_GIT_URL:0:20}...${MATCH_GIT_URL: -10}"
-          echo "  - MATCH_GIT_USERNAME: $MATCH_GIT_USERNAME"
-          echo "  - MATCH_GIT_PASSWORD: ${MATCH_GIT_PASSWORD:0:4}...${MATCH_GIT_PASSWORD: -4}"
-          
-          # 정제된 비밀번호로 환경변수 재설정
-          export MATCH_PASSWORD="$CLEAN_MATCH_PASSWORD"
-          export APPLE_TEAM_ID="$APPLE_TEAM_ID"
-          
-          echo "✅ 비밀번호 정제 완료"
-          
-          echo "🔍 ===== Fastlane Match 실행 전 최종 확인 ====="
-          echo "📋 실행할 명령어: fastlane match_init"
-          echo "📋 사용할 환경변수:"
-          echo "  - APPLE_TEAM_ID: $APPLE_TEAM_ID"
-          echo "  - APP_STORE_CONNECT_API_KEY_ID: $APP_STORE_CONNECT_API_KEY_ID"
-          echo "  - APP_STORE_CONNECT_API_ISSUER_ID: $APP_STORE_CONNECT_API_ISSUER_ID"
-          echo "  - MATCH_PASSWORD: ${CLEAN_MATCH_PASSWORD:0:4}...${CLEAN_MATCH_PASSWORD: -4}"
-          echo "  - MATCH_GIT_URL: ${MATCH_GIT_URL:0:20}...${MATCH_GIT_URL: -10}"
-          echo "  - MATCH_GIT_USERNAME: $MATCH_GIT_USERNAME"
-          echo "  - MATCH_GIT_PASSWORD: ${MATCH_GIT_PASSWORD:0:4}...${MATCH_GIT_PASSWORD: -4}"
-          
-           echo "🚀 Fastlane Match 초기화 시작..."
-           
-           # Fastlane 디렉토리 확인 및 생성
-           echo "🔍 Fastlane 디렉토리 확인 중..."
-           if [ ! -d "fastlane" ]; then
-             echo "❌ fastlane 디렉토리가 없습니다. 생성 중..."
-             mkdir -p fastlane
-             cp ../fastlane-template.rb fastlane/Fastfile
-             cp ../appfile-template.rb fastlane/Appfile
-             chmod +x fastlane/Fastfile
-             chmod +x fastlane/Appfile
-             echo "✅ fastlane 디렉토리 및 설정 파일 생성 완료"
-           else
-             echo "✅ fastlane 디렉토리가 존재합니다."
-           fi
-           
-           # ExportOptions.plist 파일 확인 (Git에 커밋된 파일 사용)
-           echo "📄 ExportOptions.plist 파일 확인 중..."
-           if [ -f "ExportOptions.plist" ]; then
-             echo "✅ ExportOptions.plist 파일이 존재합니다."
-           else
-             echo "❌ ExportOptions.plist 파일이 없습니다. Git에 커밋된 파일을 확인해주세요."
-             exit 1
-           fi
-           
-           # 현재 디렉토리 및 fastlane 디렉토리 내용 확인
-           echo "📁 현재 디렉토리: $(pwd)"
-           echo "📁 fastlane 디렉토리 내용:"
-           ls -la fastlane/
-           
-           # Match 초기화 실행 (상세 로그 포함)
-           fastlane match_init --verbose
-          
-          echo "✅ Fastlane Match 초기화 완료!"
-          
-      # 11단계: DerivedData 완전 정리 및 build 디렉토리 생성 (빌드 안정성 향상)
+      # 11단계: DerivedData 완전 정리 (빌드 안정성 향상)
       - name: Clean DerivedData Before Build
         working-directory: pickplay
         run: |
@@ -402,10 +306,8 @@ jobs:
           cd ios
           rm -rf build/
           rm -rf DerivedData/
-          # build 디렉토리 구조 생성 (ReactCodegen이 파일을 복사할 수 있도록)
-          mkdir -p build/generated/ios/react/renderer/components/lottiereactnative/
           cd ..
-          echo "✅ DerivedData 정리 및 build 디렉토리 생성 완료"
+          echo "✅ DerivedData 정리 완료"
       
       # 12단계: Fastlane으로 빌드 및 배포 (Match 사용)
       - name: Build and Deploy with Fastlane Match
@@ -423,113 +325,34 @@ jobs:
           APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
         run: |
           echo "🚀 Fastlane Match로 빌드 및 배포 시작..."
-          cd ios
           
-          # 비밀번호 정제 (공백 및 특수문자 제거)
-          echo "🔧 비밀번호 정제 중..."
-          CLEAN_FASTLANE_PASSWORD=$(echo "$FASTLANE_PASSWORD" | tr -d '[:space:]')
-          CLEAN_MATCH_PASSWORD=$(echo "$MATCH_PASSWORD" | tr -d '[:space:]')
-          CLEAN_APPLE_APP_SPECIFIC_PASSWORD=$(echo "$APPLE_APP_SPECIFIC_PASSWORD" | tr -d '[:space:]')
-          
-          # 비밀번호 정보 로그 출력 (디버깅용)
-          echo "🔍 FASTLANE_PASSWORD 정보:"
-          echo "  - 원본 길이: ${#FASTLANE_PASSWORD}자"
-          echo "  - 정제 후 길이: ${#CLEAN_FASTLANE_PASSWORD}자"
-          echo "  - 앞 4자리: ${CLEAN_FASTLANE_PASSWORD:0:4}"
-          echo "  - 뒤 4자리: ${CLEAN_FASTLANE_PASSWORD: -4}"
-          
-          echo "🔍 MATCH_PASSWORD 정보:"
-          echo "  - 원본 길이: ${#MATCH_PASSWORD}자"
-          echo "  - 정제 후 길이: ${#CLEAN_MATCH_PASSWORD}자"
-          echo "  - 앞 4자리: ${CLEAN_MATCH_PASSWORD:0:4}"
-          echo "  - 뒤 4자리: ${CLEAN_MATCH_PASSWORD: -4}"
-          
-          echo "🔍 APPLE_APP_SPECIFIC_PASSWORD 정보:"
-          echo "  - 원본 길이: ${#APPLE_APP_SPECIFIC_PASSWORD}자"
-          echo "  - 정제 후 길이: ${#CLEAN_APPLE_APP_SPECIFIC_PASSWORD}자"
-          echo "  - 앞 4자리: ${CLEAN_APPLE_APP_SPECIFIC_PASSWORD:0:4}"
-          echo "  - 뒤 4자리: ${CLEAN_APPLE_APP_SPECIFIC_PASSWORD: -4}"
-          
-          # 정제된 비밀번호로 환경변수 재설정
-          export FASTLANE_USER="$FASTLANE_USER"
-          export FASTLANE_PASSWORD="$CLEAN_FASTLANE_PASSWORD"
-          export MATCH_PASSWORD="$CLEAN_MATCH_PASSWORD"
-          export APPLE_APP_SPECIFIC_PASSWORD="$CLEAN_APPLE_APP_SPECIFIC_PASSWORD"
-          export APPLE_TEAM_ID="$APPLE_TEAM_ID"
-          
-           echo "✅ 비밀번호 정제 완료"
-           
-           # Fastlane 디렉토리 확인 및 생성
-           echo "🔍 Fastlane 디렉토리 확인 중..."
-           if [ ! -d "fastlane" ]; then
-             echo "❌ fastlane 디렉토리가 없습니다. 생성 중..."
-             mkdir -p fastlane
-             cp ../fastlane-template.rb fastlane/Fastfile
-             cp ../appfile-template.rb fastlane/Appfile
-             chmod +x fastlane/Fastfile
-             chmod +x fastlane/Appfile
-             echo "✅ fastlane 디렉토리 및 설정 파일 생성 완료"
-           else
-             echo "✅ fastlane 디렉토리가 존재합니다."
-           fi
-           
-           # ExportOptions.plist 파일 동적 생성 (Expo prebuild로 인해 삭제됨)
-           echo "📄 ExportOptions.plist 파일 동적 생성 중..."
-           echo '<?xml version="1.0" encoding="UTF-8"?>' > ExportOptions.plist
-           echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' >> ExportOptions.plist
-           echo '<plist version="1.0">' >> ExportOptions.plist
-           echo '<dict>' >> ExportOptions.plist
-           echo '	<key>method</key>' >> ExportOptions.plist
-           echo '	<string>app-store</string>' >> ExportOptions.plist
-           echo '	<key>teamID</key>' >> ExportOptions.plist
-           echo "	<string>$APPLE_TEAM_ID</string>" >> ExportOptions.plist
-           echo '	<key>uploadBitcode</key>' >> ExportOptions.plist
-           echo '	<false/>' >> ExportOptions.plist
-           echo '	<key>uploadSymbols</key>' >> ExportOptions.plist
-           echo '	<true/>' >> ExportOptions.plist
-           echo '	<key>compileBitcode</key>' >> ExportOptions.plist
-           echo '	<false/>' >> ExportOptions.plist
-           echo '	<key>stripSwiftSymbols</key>' >> ExportOptions.plist
-           echo '	<true/>' >> ExportOptions.plist
-           echo '	<key>thinning</key>' >> ExportOptions.plist
-           echo '	<string>&lt;none&gt;</string>' >> ExportOptions.plist
-           echo '</dict>' >> ExportOptions.plist
-           echo '</plist>' >> ExportOptions.plist
-           chmod 644 ExportOptions.plist
+          # ExportOptions.plist 파일 동적 생성
+          echo "📄 ExportOptions.plist 파일 동적 생성 중..."
+          mkdir -p ios
+          echo '<?xml version="1.0" encoding="UTF-8"?>' > ios/ExportOptions.plist
+          echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' >> ios/ExportOptions.plist
+          echo '<plist version="1.0">' >> ios/ExportOptions.plist
+          echo '<dict>' >> ios/ExportOptions.plist
+          echo '	<key>method</key>' >> ios/ExportOptions.plist
+          echo '	<string>app-store</string>' >> ios/ExportOptions.plist
+          echo '	<key>teamID</key>' >> ios/ExportOptions.plist
+          echo "	<string>$APPLE_TEAM_ID</string>" >> ios/ExportOptions.plist
+          echo '	<key>uploadBitcode</key>' >> ios/ExportOptions.plist
+          echo '	<false/>' >> ios/ExportOptions.plist
+          echo '	<key>uploadSymbols</key>' >> ios/ExportOptions.plist
+          echo '	<true/>' >> ios/ExportOptions.plist
+          echo '	<key>compileBitcode</key>' >> ios/ExportOptions.plist
+          echo '	<false/>' >> ios/ExportOptions.plist
+          echo '	<key>stripSwiftSymbols</key>' >> ios/ExportOptions.plist
+          echo '	<true/>' >> ios/ExportOptions.plist
+          echo '	<key>thinning</key>' >> ios/ExportOptions.plist
+          echo '	<string>&lt;none&gt;</string>' >> ios/ExportOptions.plist
+          echo '</dict>' >> ios/ExportOptions.plist
+          echo '</plist>' >> ios/ExportOptions.plist
+          chmod 644 ios/ExportOptions.plist
           echo "✅ ExportOptions.plist 파일 동적 생성 완료"
           
-          # 🔥 기존 프로파일 삭제 (Push Notifications 권한 문제 해결)
-          echo "🔥 기존 프로파일 삭제 중 (match nuke)..."
-          echo "⚠️ 이 작업은 기존 App Store 프로파일을 삭제하고 새로 생성합니다."
-          
-          # Match nuke를 위한 환경변수 설정
-          export GIT_BASIC_AUTHORIZATION=$(echo -n "$MATCH_GIT_USERNAME:$MATCH_GIT_PASSWORD" | base64)
-          
-          # App Store Connect API Key를 임시 파일로 저장 (match nuke에서 필요)
-          echo "$APP_STORE_CONNECT_API_KEY" > /tmp/app_store_connect_api_key.p8
-          
-          # Match nuke 실행 (기존 프로파일 삭제)
-          # export MATCH_PASSWORD to be used by match nuke
-          export MATCH_PASSWORD="$CLEAN_MATCH_PASSWORD"
-          
-          # Match nuke 실행 (기존 프로파일 삭제)
-          fastlane match nuke appstore \
-            --app_identifier "com.pickplay.kwcc" \
-            --team_id "$APPLE_TEAM_ID" \
-            --git_url "$MATCH_GIT_URL" \
-            --git_basic_authorization "$GIT_BASIC_AUTHORIZATION" \
-            --api_key_path "/tmp/app_store_connect_api_key.p8" \
-            --api_key_id "$APP_STORE_CONNECT_API_KEY_ID" \
-            --api_issuer "$APP_STORE_CONNECT_API_ISSUER_ID" \
-            --skip_confirmation \
-            2>&1 || echo "⚠️ match nuke 실행 중 오류 (기존 프로파일이 없을 수 있음, 계속 진행)"
-          
-          # 임시 파일 정리
-          rm -f /tmp/app_store_connect_api_key.p8
-          
-          echo "✅ 프로파일 삭제 완료 (또는 건너뛰기). 새 프로파일이 생성됩니다."
-          
-          # Fastlane Match를 사용한 빌드 실행 (새 프로파일 자동 생성)
+          # Fastlane Match를 사용한 빌드 실행 (pickplay 디렉토리에서 실행, fastlane/Fastfile 사용)
           fastlane beta
           
           echo "✅ 빌드 및 TestFlight 업로드 완료!"
