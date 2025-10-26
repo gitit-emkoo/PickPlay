@@ -71,36 +71,35 @@ platform :ios do
       puts "⚠️ 빌드 번호 증분 중 오류 (무시하고 계속): #{ex.message}"
     end
     
+    # 현재 위치 확인 (fastlane은 ios/fastlane에서 실행됨)
+    current_dir = Dir.pwd
+    puts "📁 현재 디렉토리: #{current_dir}"
+    
+    # ios/ 디렉토리로 이동
+    unless File.basename(current_dir) == "ios"
+      puts "⚠️ ios/ 디렉토리가 아닙니다. 이동 중..."
+      Dir.chdir("..")
+      puts "✅ ios/ 디렉토리로 이동 완료: #{Dir.pwd}"
+    end
+    
     # Expo prebuild 먼저 실행 (네이티브 파일 생성)
-    # Dir.chdir 블록으로 안전하게 CWD 관리
     puts "🔄 Expo prebuild 실행 중..."
-    Dir.chdir("../..") do
+    project_root = File.expand_path("..", Dir.pwd)
+    Dir.chdir(project_root) do
       puts "📁 프로젝트 루트에서 실행 중: #{Dir.pwd}"
       sh("npx expo prebuild --platform ios --clean")
     end
     puts "✅ Expo prebuild 완료"
     
-    # Expo prebuild 후 ios/ 디렉토리로 이동 및 fastlane 디렉토리 복구
-    puts "🔧 ios/ 디렉토리로 이동 및 fastlane 디렉토리 복구 중..."
-    
-    # 현재 위치 확인 및 ios/ 디렉토리로 이동
-    current_dir = Dir.pwd
-    puts "📁 현재 디렉토리: #{current_dir}"
-    
-    # ios/ 디렉토리인지 확인
-    if File.basename(current_dir) == "ios"
-      puts "✅ 이미 ios/ 디렉토리에 있습니다."
-    else
-      puts "⚠️ ios/ 디렉토리가 아닙니다. 이동 중..."
-      Dir.chdir("ios")
-      puts "✅ ios/ 디렉토리로 이동 완료"
-    end
+    # ios/ 디렉토리로 다시 이동
+    Dir.chdir("ios")
+    puts "📁 ios/ 디렉토리로 복귀: #{Dir.pwd}"
     
     # fastlane 디렉토리 복구
     puts "🔧 fastlane 디렉토리 복구 중..."
     unless Dir.exist?("fastlane")
       puts "📁 fastlane 디렉토리가 없습니다. 복원 중..."
-      project_root = File.expand_path("../..", Dir.pwd)
+      project_root = File.expand_path("..", Dir.pwd)
       sh("mkdir -p fastlane")
       sh("cp #{project_root}/fastlane-template.rb fastlane/Fastfile")
       if File.exist?("#{project_root}/appfile-template.rb")
