@@ -74,12 +74,27 @@ platform :ios do
     end
     
     # Expo prebuild 먼저 실행 (네이티브 파일 생성)
-    # 현재 Dir.chdir("..")로 ios/에 있으므로, 한 단계 더 위로 가야 루트가 됩니다
+    # 절대 경로를 사용하여 안정성 확보
     puts "🔄 Expo prebuild 실행 중..."
-    Dir.chdir("../..") do
-      sh("npx expo prebuild --platform ios --clean")
-    end
+    project_root = File.expand_path("../..", Dir.pwd)
+    puts "📁 프로젝트 루트: #{project_root}"
+    sh("cd #{project_root} && npx expo prebuild --platform ios --clean")
     puts "✅ Expo prebuild 완료"
+    
+    # Expo prebuild가 ios/ 디렉토리를 재생성했으므로 fastlane 디렉토리 복구
+    puts "🔧 fastlane 디렉토리 복구 중..."
+    unless Dir.exist?("fastlane")
+      puts "📁 fastlane 디렉토리가 없습니다. 복원 중..."
+      sh("mkdir -p fastlane")
+      sh("cp #{project_root}/fastlane-template.rb fastlane/Fastfile")
+      if File.exist?("#{project_root}/appfile-template.rb")
+        sh("cp #{project_root}/appfile-template.rb fastlane/Appfile")
+      end
+      sh("chmod +x fastlane/Fastfile fastlane/Appfile")
+      puts "✅ fastlane 디렉토리 복구 완료"
+    else
+      puts "✅ fastlane 디렉토리가 존재합니다."
+    end
     
     # 프로젝트 파일 검증 및 workspace 생성
     puts "🔍 프로젝트 파일 검증 중..."
