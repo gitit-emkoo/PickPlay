@@ -254,7 +254,7 @@ jobs:
           
           # Expo prebuild 실행
           echo "🔄 Expo prebuild 실행 중..."
-          npx expo prebuild --platform ios --clean --non-interactive
+          CI=1 npx expo prebuild --platform ios --clean
           echo "✅ Expo prebuild 완료"
           
           # 모든 환경변수 디버깅 정보 출력
@@ -385,7 +385,27 @@ jobs:
           
           echo "✅ Fastlane Match 초기화 완료!"
           
-      # 11단계: Fastlane으로 빌드 및 배포 (Match 사용)
+      # 11단계: DerivedData 완전 정리 (빌드 안정성 향상)
+      - name: Clean DerivedData Before Build
+        working-directory: pickplay
+        run: |
+          echo "🧹 DerivedData 완전 정리 중..."
+          # Xcode DerivedData 정리
+          rm -rf ~/Library/Developer/Xcode/DerivedData/*
+          # Xcode 캐시 정리
+          rm -rf ~/Library/Caches/com.apple.dt.Xcode/*
+          # iOS Device Support 정리
+          rm -rf ~/Library/Developer/Xcode/iOS\ DeviceSupport/*
+          # Archives 정리
+          rm -rf ~/Library/Developer/Xcode/Archives/*
+          # 프로젝트 내 DerivedData 정리
+          cd ios
+          rm -rf build/
+          rm -rf DerivedData/
+          cd ..
+          echo "✅ DerivedData 정리 완료"
+      
+      # 12단계: Fastlane으로 빌드 및 배포 (Match 사용)
       - name: Build and Deploy with Fastlane Match
         working-directory: pickplay
         env:
