@@ -103,15 +103,42 @@ platform :ios do
     xcode_version = `xcodebuild -version | head -1 | cut -d' ' -f2`.strip
     puts "📱 감지된 Xcode 버전: #{xcode_version}"
     
-    # 사용 가능한 Xcode 버전 확인 및 설정 로직은 유지
+    # 사용 가능한 Xcode 버전 확인 및 설정 로직 개선
     available_xcodes = `ls /Applications/ | grep -i xcode`.strip.split("\n")
     puts "📱 사용 가능한 Xcode 버전들: #{available_xcodes.join(', ')}"
     
-    if available_xcodes.any? { |x| x.include?("Xcode") }
+    # 베타 버전을 제외한 안정 버전 필터링
+    stable_xcodes = available_xcodes
+      .select { |x| x.include?("Xcode") && !x.downcase.include?("beta") }
+
+    if stable_xcodes.any?
+      # 안정 버전 중 가장 최신 버전 선택
+      latest_stable_xcode = stable_xcodes
+        .sort_by { |x| 
+          # 버전 번호 추출 (Xcode.app 또는 Xcode_X.Y.Z 형식 모두 처리)
+          version_match = x.match(/Xcode(?:_|\s)?(\d+)\.(\d+)(?:\.(\d+))?/) 
+          if version_match
+            major = version_match[1].to_i
+            minor = version_match[2].to_i
+            patch = version_match[3]&.to_i || 0
+            [major, minor, patch]
+          else
+            # Xcode.app 과 같이 버전 번호가 없는 경우 낮은 우선순위 부여
+            [0,0,0] 
+          end
+        }
+        .last
+      
+      xcode_path = "/Applications/#{latest_stable_xcode}"
+      puts "📱 사용할 안정적인 최신 Xcode: #{xcode_path}"
+      xcode_select(xcode_path)
+    else
+      # 안정 버전이 없으면 설치된 것 중 가장 최신 (베타 포함) 사용 (기존 로직)
+      puts "⚠️ 안정적인 Xcode 버전을 찾을 수 없습니다. 설치된 최신 버전을 사용합니다."
       latest_xcode = available_xcodes
         .select { |x| x.include?("Xcode") }
         .sort_by { |x| 
-          version_match = x.match(/Xcode_(\d+)\.(\d+)(?:\.(\d+))?/)
+          version_match = x.match(/Xcode(?:_|\s)(\d+)\.(\d+)(?:\.(\d+))?/)
           if version_match
             major = version_match[1].to_i
             minor = version_match[2].to_i
@@ -122,12 +149,10 @@ platform :ios do
           end
         }
         .last
-      
+        
       xcode_path = "/Applications/#{latest_xcode}"
-      puts "📱 사용할 Xcode: #{xcode_path}"
+      puts "📱 사용할 Xcode (베타 가능성 있음): #{xcode_path}"
       xcode_select(xcode_path)
-    else
-      puts "⚠️ 특정 Xcode 버전을 찾을 수 없습니다. 기본 버전 사용"
     end
     
     # Fastlane Match를 사용한 자동 인증서 및 프로비저닝 프로파일 관리
