@@ -3,9 +3,9 @@
 
 default_platform(:ios)
 
-# Fastlane이 `fastlane` 디렉토리나 프로젝트 루트 중 어디에서 실행되든 상관없이
-# 프로젝트의 실제 루트 경로를 계산합니다.
-FASTLANE_ROOT = File.expand_path('../..', File.dirname(__FILE__))
+# Fastlane이 `ios/fastlane`에서 실행되므로
+# 프로젝트 루트는 2단계 위입니다.
+FASTLANE_ROOT = File.expand_path('../..', __dir__)
 
 platform :ios do
   # 키체인 정리 및 환경 설정
@@ -64,6 +64,16 @@ platform :ios do
 
   desc "Build and upload to TestFlight using Fastlane Match"
   lane :beta do
+    # 현재 Fastlane 실행 위치 확인
+    puts "🔍 현재 실행 위치: #{Dir.pwd}"
+    
+    # Fastlane이 ios/fastlane에서 실행되는 경우 ios/로 이동
+    if File.basename(Dir.pwd) == "fastlane" && File.basename(File.dirname(Dir.pwd)) == "ios"
+      puts "📁 ios/fastlane에서 실행 중, ios/로 이동..."
+      Dir.chdir("..")
+      puts "✅ ios/로 이동 완료: #{Dir.pwd}"
+    end
+    
     # 빌드 번호 자동 증분 (버전 충돌 방지)
     puts "📈 빌드 번호 자동 증분 중..."
     begin
