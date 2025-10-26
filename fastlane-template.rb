@@ -180,10 +180,11 @@ platform :ios do
     )
     
     # Match 실행: Push Notification과 같은 새로운 권한을 반영할 수 있도록
-    # readonly: false를 사용하여 프로필을 필요에 따라 자동 갱신합니다.
+    # force: true를 사용하여 기존 프로파일을 강제로 재생성합니다.
     match(
       type: "appstore",
       readonly: false,  # 인증서 만료 및 새로운 권한 반영을 위해 읽기 전용 비활성화
+      force: true,  # 기존 프로파일을 강제로 재생성하여 Push Notifications 권한 반영
       app_identifier: "com.pickplay.kwcc",
       team_id: ENV["APPLE_TEAM_ID"],
       api_key: api_key,
