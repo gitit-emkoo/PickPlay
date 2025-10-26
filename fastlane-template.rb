@@ -3,9 +3,18 @@
 
 default_platform(:ios)
 
-# Fastlane이 프로젝트 루트의 `fastlane/`에서 실행되므로
-# 프로젝트 루트는 1단계 위입니다.
-FASTLANE_ROOT = File.expand_path('..', __dir__)
+# Fastlane 실행 위치 자동 감지 및 프로젝트 루트 계산
+# 로그: "🔍 현재 실행 위치: /Users/runner/work/PickPlay/PickPlay/pickplay/ios/fastlane"
+#     즉, ios/fastlane에서 실행됨
+
+# iOS 프로젝트 루트는 ios/ 디렉토리 (iOS 프로젝트 관점)
+IOS_PROJECT_ROOT = File.expand_path('..', __dir__)
+
+# Expo 프로젝트 루트는 ios/ 한 단계 위 (package.json이 있는 곳)
+EXPO_PROJECT_ROOT = File.expand_path('../..', __dir__)
+
+puts "🔍 iOS 프로젝트 루트: #{IOS_PROJECT_ROOT}"
+puts "🔍 Expo 프로젝트 루트: #{EXPO_PROJECT_ROOT}"
 
 platform :ios do
   # 키체인 정리 및 환경 설정
@@ -64,23 +73,39 @@ platform :ios do
 
   desc "Build and upload to TestFlight using Fastlane Match"
   lane :beta do
-    # 현재 Fastlane 실행 위치 확인 (프로젝트 루트의 fastlane/)
-    puts "🔍 현재 실행 위치: #{Dir.pwd}"
-    puts "📁 프로젝트 루트: #{FASTLANE_ROOT}"
+    # 현재 Fastlane 실행 위치 확인
+    puts "🔍 ===== 디버깅: 현재 실행 위치 ====="
+    puts "🔍 Dir.pwd: #{Dir.pwd}"
+    puts "🔍 __dir__: #{__dir__}"
+    puts "🔍 IOS_PROJECT_ROOT: #{IOS_PROJECT_ROOT}"
+    puts "🔍 EXPO_PROJECT_ROOT: #{EXPO_PROJECT_ROOT}"
     
-    # Expo prebuild를 프로젝트 루트에서 실행
+    # 각 디렉토리 존재 여부 확인
+    puts "🔍 ===== 디렉토리 존재 확인 ====="
+    puts "📁 IOS_PROJECT_ROOT 존재: #{Dir.exist?(IOS_PROJECT_ROOT)}"
+    puts "📁 EXPO_PROJECT_ROOT 존재: #{Dir.exist?(EXPO_PROJECT_ROOT)}"
+    
+    # package.json 위치 확인
+    package_json_path = File.join(EXPO_PROJECT_ROOT, "package.json")
+    puts "📁 package.json 경로: #{package_json_path}"
+    puts "📁 package.json 존재: #{File.exist?(package_json_path)}"
+    
+    # Expo prebuild를 Expo 프로젝트 루트에서 실행
     puts "🔄 Expo prebuild 실행 중..."
-    Dir.chdir(FASTLANE_ROOT) do
-      puts "📁 프로젝트 루트에서 실행 중: #{Dir.pwd}"
-      sh("npx expo prebuild --platform ios --clean --non-interactive")
+    Dir.chdir(EXPO_PROJECT_ROOT) do
+      puts "📁 Expo 프로젝트 루트에서 실행 중: #{Dir.pwd}"
+      puts "📁 현재 디렉토리 내용:"
+      system("ls -la")
+      sh("CI=1 npx expo prebuild --platform ios --clean")
     end
-    puts "✅ Expo prebuild 완료 (Pod install 포함)"
+    puts "✅ Expo prebuild 완료"
     
-    # ios/ 디렉토리로 이동
-    ios_path = File.join(FASTLANE_ROOT, "ios")
-    UI.user_error!("❌ ios/ 디렉토리가 존재하지 않습니다: #{ios_path}") unless Dir.exist?(ios_path)
-    Dir.chdir(ios_path)
-    puts "📁 ios/ 디렉토리로 이동: #{Dir.pwd}"
+    # iOS 프로젝트 디렉토리로 이동 확인
+    puts "📁 이동 전 현재 위치: #{Dir.pwd}"
+    Dir.chdir(IOS_PROJECT_ROOT)
+    puts "📁 iOS 프로젝트 루트로 이동: #{Dir.pwd}"
+    puts "📁 ios/ 디렉토리 내용:"
+    system("ls -la")
     
     # 빌드 번호 자동 증분 (버전 충돌 방지)
     puts "📈 빌드 번호 자동 증분 중..."
