@@ -283,11 +283,7 @@ jobs:
           echo "📁 fastlane 디렉토리 내용:"
           ls -la fastlane/
           
-          # Match 인증서 동기화 (CI/CD에서 매번 실행)
-          echo "🔐 Match 인증서 동기화 중..."
-          fastlane match development --readonly
-          fastlane match appstore --readonly
-          echo "✅ Match 인증서 동기화 완료!"
+          echo "✅ Fastlane Match 설정 준비 완료 (beta lane에서 인증서 동기화 실행)"
           
       # 11단계: DerivedData 완전 정리 (빌드 안정성 향상)
       - name: Clean DerivedData Before Build
