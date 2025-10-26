@@ -51,6 +51,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+          cache-dependency-path: pickplay/package-lock.json
           
       # 3단계: 의존성 설치 (npm ci로 정확한 버전 보장, peer dependency 충돌 해결)
       - name: Install Dependencies
