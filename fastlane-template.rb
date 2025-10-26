@@ -90,20 +90,20 @@ platform :ios do
     puts "📁 package.json 경로: #{package_json_path}"
     puts "📁 package.json 존재: #{File.exist?(package_json_path)}"
     
-    # Expo prebuild를 Expo 프로젝트 루트에서 실행
-    puts "🔄 Expo prebuild 실행 중..."
-    Dir.chdir(EXPO_PROJECT_ROOT) do
-      puts "📁 Expo 프로젝트 루트에서 실행 중: #{Dir.pwd}"
-      puts "📁 현재 디렉토리 내용:"
-      system("ls -la")
-      sh("CI=1 npx expo prebuild --platform ios --clean")
-    end
-    puts "✅ Expo prebuild 완료"
+    # Expo prebuild는 이미 GitHub Actions에서 실행됨
+    # 여기서는 workspace만 확인
     
-    # iOS 프로젝트 디렉토리로 이동 확인
-    puts "📁 이동 전 현재 위치: #{Dir.pwd}"
-    Dir.chdir(IOS_PROJECT_ROOT)
-    puts "📁 iOS 프로젝트 루트로 이동: #{Dir.pwd}"
+    # 현재 위치 확인 및 ios/로 이동
+    puts "📁 현재 위치: #{Dir.pwd}"
+    
+    # 현재 위치가 ios/fastlane이므로 ios/로 이동
+    unless Dir.pwd.end_with?('/ios')
+      Dir.chdir(IOS_PROJECT_ROOT)
+      puts "📁 ios/로 이동: #{Dir.pwd}"
+    else
+      puts "📁 이미 ios/에 있음: #{Dir.pwd}"
+    end
+    
     puts "📁 ios/ 디렉토리 내용:"
     system("ls -la")
     
