@@ -55,6 +55,14 @@ post_install do |installer|
     target.build_configurations.each do |config|
       name = target.name.to_s
 
+      # ✅ iOS Deployment Target 강제 설정 (가장 먼저 처리)
+      # 모든 Pod에서 15.1 이상으로 강제 설정
+      old_target = config.build_settings['IPHONEOS_DEPLOYMENT_TARGET']
+      if old_target && (old_target.to_f < 15.1)
+        puts "⚠️ [#{name}] iOS deployment target 업그레이드: #{old_target} → 15.1"
+      end
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+
       # ✅ BoringSSL-GRPC: -G 플래그 제거 (iOS arm64 타겟에서 에러)
       if name.include?('BoringSSL') || name.include?('gRPC')
         # 모든 C/C++ 플래그 키에서 -G 제거
@@ -89,17 +97,7 @@ post_install do |installer|
 
         puts "🧩 [#{name}] Scrubbed -G flags from all build settings (#{config.name})"
       end
-
-      # iOS 15.1+ deployment target 강제 (더 강력한 설정)
-      config.build_settings.delete 'IPHONEOS_DEPLOYMENT_TARGET'
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
       
-      # SDWebImage 특별 처리
-      if name.include?('SDWebImage')
-        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-        puts "🎯 [#{name}] SDWebImage deployment target set to 15.1"
-      end
-
       # ✅ 전역 빌드 안정성 설정
       config.build_settings['ENABLE_BITCODE'] = 'NO'
       config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
@@ -120,7 +118,6 @@ post_install do |installer|
       config.build_settings['SKIP_INSTALL'] = 'YES'
       
       # ✅ Xcode 16.3 호환성 설정
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
       config.build_settings['SUPPORTED_PLATFORMS'] = 'iphoneos iphonesimulator'
       config.build_settings['TARGETED_DEVICE_FAMILY'] = '1,2'
       
