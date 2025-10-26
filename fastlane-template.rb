@@ -185,6 +185,9 @@ platform :ios do
       type: "appstore",
       readonly: false,  # 인증서 만료 및 새로운 권한 반영을 위해 읽기 전용 비활성화
       force: true,  # 기존 프로파일을 강제로 재생성하여 Push Notifications 권한 반영
+      force_for_new_devices: true,  # 새로운 capabilities를 위한 프로파일 강제 재생성
+      force_for_new_certificates: true,  # 새 인증서용 프로파일 재생성
+      skip_certificate_matching: false,  # 인증서 매칭 활성화
       app_identifier: "com.pickplay.kwcc",
       team_id: ENV["APPLE_TEAM_ID"],
       api_key: api_key,
