@@ -51,12 +51,31 @@ post_install do |installer|
   # Expo post install (must be after RN)
   Expo::PostInstall.install!(installer)
 
+  # ✅ lottie-react-native Codegen 오류 방지: Codegen 빌드 스킵 설정
+  installer.pods_project.targets.each do |target|
+    target_name = target.name.to_s
+    
+    # lottiereactnative의 Codegen Build Phase를 비활성화
+    if target_name == 'ReactCodegen'
+      puts "🔧 [ReactCodegen] lottiereactnative Codegen 스킵 설정 중..."
+      
+      target.build_phases.each do |phase|
+        if phase.is_a?(Xcodeproj::Project::Object::PBXShellScriptBuildPhase)
+          if phase.name&.include?('Copy lottiereactnative')
+            puts "⏭️ [#{phase.name}] Codegen Build Phase 비활성화"
+            phase.run_only_for_deployment_postprocessing = 1
+          end
+        end
+      end
+    end
+  end
+  
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
       name = target.name.to_s
 
       # ✅ iOS Deployment Target 강제 설정 (가장 먼저 처리)
-      # 모든 Pod에서 15.1 이상으로 강제 설정
+      # 모든 Pod에서 15.1 이상으로 강제 설정 (경고 제거)
       old_target = config.build_settings['IPHONEOS_DEPLOYMENT_TARGET']
       if old_target && (old_target.to_f < 15.1)
         puts "⚠️ [#{name}] iOS deployment target 업그레이드: #{old_target} → 15.1"

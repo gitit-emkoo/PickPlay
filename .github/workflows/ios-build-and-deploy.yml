@@ -369,6 +369,27 @@ jobs:
           rm -rf DerivedData/
           cd ..
           echo "✅ DerivedData 정리 완료"
+          
+          # Codegen 디렉토리 재생성 (build/ 삭제 후)
+          echo "📁 Codegen 디렉토리 재생성 중..."
+          mkdir -p ios/build/generated/ios
+          
+          codegen_dirs=(
+            "react/renderer/components/lottiereactnative"
+            "react/renderer/components/reanimated"
+            "react/renderer/components/workletscore"
+            "react/renderer/components/safeareacontext"
+            "react/renderer/components/googlemobileads"
+            "react/renderer/components/rngesturehandler"
+            "react/renderer/components/rnscreens"
+          )
+          
+          for dir in "${codegen_dirs[@]}"; do
+            mkdir -p "ios/build/generated/ios/$dir"
+            echo "✅ Codegen 디렉토리 생성: ios/build/generated/ios/$dir"
+          done
+          
+          echo "✅ Codegen 디렉토리 재생성 완료"
       
       # 12단계: Fastlane으로 빌드 및 배포 (Match 사용)
       - name: Build and Deploy with Fastlane Match
