@@ -172,14 +172,13 @@ platform :ios do
     # Push Notifications capability 강제 추가
     begin
       puts "🔔 Push Notifications capability 추가 중..."
-      add_capabilities(
-        project_path: ABSOLUTE_XCODEPROJ_PATH,
-        target: "PickPlay",
-        capabilities: [:push_notifications]
+      add_capability(
+        app_identifier: "com.pickplay.kwcc",
+        capability: "Push Notifications"
       )
       puts "✅ Push Notifications capability 추가 완료"
     rescue => ex
-      puts "⚠️ add_capabilities 실패 (무시하고 계속): #{ex.message}"
+      puts "⚠️ add_capability 실패 (무시하고 계속): #{ex.message}"
     end
     
     # 5. 빌드 및 아카이브
