@@ -135,8 +135,7 @@ platform :ios do
     
     match(
       type: "appstore",
-      readonly: true,  # 🚀 속도 개선 핵심: 프로파일을 새로 생성하지 않고 다운로드만 합니다.
-      # force: 옵션들은 readonly가 true일 때 무시됩니다.
+      force: true,  # 기존 프로파일을 강제로 재생성하여 Push Notifications 반영
       app_identifier: "com.pickplay.kwcc",
       team_id: ENV["APPLE_TEAM_ID"],
       api_key: api_key,
@@ -146,7 +145,7 @@ platform :ios do
       keychain_password: "actions"
     )
     
-    puts "✅ Fastlane Match 설정 완료 (읽기 전용 모드로 빠르게 진행됨)"
+    puts "✅ Fastlane Match 설정 완료 (프로파일 재생성으로 Push Notifications 반영)"
     
     # ReactAppDependencyProvider와 lottiereactnative 헤더 파일 복사 오류 방지
     build_generated_base = File.join(EXPO_PROJECT_ROOT, "ios/build/generated/ios")
