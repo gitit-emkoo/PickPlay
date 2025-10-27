@@ -121,8 +121,24 @@ platform :ios do
       end
     end
     
-    # 4. Fastlane Match 설정 (프로파일 재생성 모드)
-    puts "🔐 Fastlane Match로 인증서 및 프로비저닝 프로파일 설정 중..."
+    # 🌟 4. Capability 강제 추가 🌟 (가장 먼저 실행하여 프로젝트 파일 수정)
+    # Xcode 프로젝트에 Push Notification Capability를 명시적으로 추가합니다.
+    puts "🚀 Xcode 프로젝트에 Push Notifications Capability 활성화 중..."
+    begin
+      add_capabilities(
+        path: ABSOLUTE_XCODEPROJ_PATH,
+        target_name: "PickPlay",
+        capabilities: [
+          { capability: "Push Notifications" }
+        ]
+      )
+      puts "✅ PickPlay 타겟에 Push Notification Capability 강제 활성화 완료"
+    rescue => ex
+      puts "⚠️ add_capabilities 실패 (무시하고 계속): #{ex.message}"
+    end
+    
+    # 5. Fastlane Match 설정
+    puts "🔐 Fastlane Match로 인증서 및 프로비저닝 프로파일 설정 중 (프로파일 강제 재생성)..."
     
     # App Store Connect API Key 설정
     api_key = app_store_connect_api_key(
@@ -135,9 +151,7 @@ platform :ios do
     
     match(
       type: "appstore",
-      force_for_new_devices: true,  # Push Notifications capability를 위해 프로파일 재생성
-      force_for_new_certificates: false,  # 인증서는 유지
-      readonly: false,  # 프로파일 생성 허용
+      force: true, # Entitlement 변경사항 반영을 위해 강제 재생성
       app_identifier: "com.pickplay.kwcc",
       team_id: ENV["APPLE_TEAM_ID"],
       api_key: api_key,
@@ -147,7 +161,7 @@ platform :ios do
       keychain_password: "actions"
     )
     
-    puts "✅ Fastlane Match 설정 완료 (프로파일 재생성으로 Push Notifications 반영)"
+    puts "✅ Fastlane Match 설정 완료 (최신 Entitlement 반영된 프로파일로 업데이트)"
     
     # ReactAppDependencyProvider와 lottiereactnative 헤더 파일 복사 오류 방지
     build_generated_base = File.join(EXPO_PROJECT_ROOT, "ios/build/generated/ios")
@@ -168,19 +182,7 @@ platform :ios do
     
     puts "✅ build/generated/ios 디렉토리 및 더미 파일 생성 완료"
     
-    # Push Notifications capability 강제 추가
-    begin
-      puts "🔔 Push Notifications capability 추가 중..."
-      add_capability(
-        app_identifier: "com.pickplay.kwcc",
-        capability: "Push Notifications"
-      )
-      puts "✅ Push Notifications capability 추가 완료"
-    rescue => ex
-      puts "⚠️ add_capability 실패 (무시하고 계속): #{ex.message}"
-    end
-    
-    # 5. 빌드 및 아카이브
+    # 7. 빌드 및 아카이브
     build_app(
       workspace: ABSOLUTE_WORKSPACE_PATH, 
       scheme: "PickPlay",
@@ -191,7 +193,7 @@ platform :ios do
       xcargs: "SWIFT_OPTIMIZATION_LEVEL=-O DEVELOPMENT_TEAM='#{ENV["APPLE_TEAM_ID"]}' CODE_SIGN_STYLE=Manual GENERATE_PROFILING_CODE=NO ENABLE_PREVIEWS=YES"
     )
     
-    # 6. TestFlight 업로드 및 Firebase App Distribution
+    # 8. TestFlight 업로드 및 Firebase App Distribution
     begin
       upload_to_testflight(
         apple_id: ENV["APPLE_ID"],
