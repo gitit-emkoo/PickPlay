@@ -22,8 +22,8 @@ end
 use_frameworks! :linkage => :static
 
 target 'PickPlay' do
-  # Expo autolinking for native modules
-  use_expo_modules!
+  # Expo autolinking for native modules (lottie-react-native 제외)
+  use_expo_modules!(:config => {:suppress_autolinking_for => ['lottie-react-native']})
 
   use_react_native!(
     :path => '../node_modules/react-native',
@@ -72,19 +72,20 @@ post_install do |installer|
     end
     
     if target_name == 'ReactCodegen'
-      puts "🔧 [ReactCodegen] lottiereactnative 관련 Copy Files Build Phase 제거 중..."
+      puts "🔧 [ReactCodegen] lottiereactnative 관련 모든 빌드 단계 제거 중..."
       
-      # Copy Files Build Phase를 찾아서 삭제
+      # 모든 Build Phase에서 lottiereactnative 관련 항목 제거
+      phases_to_remove = []
       target.build_phases.each do |phase|
-        if phase.is_a?(Xcodeproj::Project::Object::PBXCopyFilesBuildPhase)
-          # lottiereactnative 관련 복사 작업 제거
-          if phase.name&.include?('lottiereactnative') || 
-             phase.dst_subfolder_spec == 6  # Copy to Generated Code
-            puts "⏭️ [#{phase.name || 'Copy Files'}] Build Phase 삭제"
-            phase.remove_from_project
-          end
+        phase_display_name = phase.name || phase.display_name || ''
+        
+        if phase_display_name.downcase.include?('lottiereactnative')
+          puts "⏭️ [#{phase_display_name}] Build Phase 삭제"
+          phases_to_remove << phase
         end
       end
+      
+      phases_to_remove.each { |phase| phase.remove_from_project }
     end
   end
   
