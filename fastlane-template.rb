@@ -259,7 +259,7 @@ platform :ios do
     end
     
     # Old Architecture 사용 시 Codegen 파일 생성 불필요
-    # (fabric_enabled => false 로 설정했으므로 Codegen 생성되지 않음)
+    # ($RNReanimated[:codegen_disabled] = true로 설정했으므로 Codegen 생성되지 않음)
     
     # 빌드 및 아카이브 (Match가 자동으로 코드 서명 설정)
     # 절대 경로 사용

@@ -19,6 +19,14 @@ rescue LoadError
   end
 end
 
+# --- REANIMATED New Architecture (Fabric) 비활성화 ---
+# Old Architecture 환경에서 reanimated 4.x+ 사용 시 필수 설정
+# 이 설정은 Reanimated에게 New Arch CodeGen을 건너뛰도록 지시합니다.
+$RNReanimated = {
+  :codegen_disabled => true
+}
+# ----------------------------------------------------
+
 use_frameworks! :linkage => :static
 
 target 'PickPlay' do
@@ -28,7 +36,7 @@ target 'PickPlay' do
   use_react_native!(
     :path => '../node_modules/react-native',
     :hermes_enabled => true,
-    :fabric_enabled => false,  # SDK 54 의존성 충돌로 인한 lottie 문제 방지 (Old Architecture 사용)
+    :fabric_enabled => false,  # Old Architecture (reanimated Codegen 비활성화됨)
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
 
@@ -40,9 +48,6 @@ target 'PickPlay' do
   pod 'FirebaseAuth', firebase_version
   pod 'FirebaseFirestore', firebase_version
   pod 'FirebaseFunctions', firebase_version
-  
-  # ✅ lottie-react-native Codegen 오류 방지: Old Architecture로 강제 사용
-  pod 'lottie-ios', '~> 4.5.0', :modular_headers => true
 end
 
 post_install do |installer|
