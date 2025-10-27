@@ -183,6 +183,30 @@ jobs:
           echo "🔍 SwiftLint 코드 품질 검사 중..."
           swiftlint --config ../.swiftlint.yml || echo "⚠️ SwiftLint 경고가 있지만 계속 진행합니다."
           
+      # 8.5단계: Codegen 디렉토리 재생성 (pod install 직후)
+      - name: Post-pod Install Codegen Directories
+        working-directory: pickplay
+        run: |
+          echo "📁 Codegen 디렉토리 재생성 중 (pod install 직후)..."
+          mkdir -p ios/build/generated/ios
+          
+          codegen_dirs=(
+            "react/renderer/components/lottiereactnative"
+            "react/renderer/components/reanimated"
+            "react/renderer/components/workletscore"
+            "react/renderer/components/safeareacontext"
+            "react/renderer/components/googlemobileads"
+            "react/renderer/components/rngesturehandler"
+            "react/renderer/components/rnscreens"
+          )
+          
+          for dir in "${codegen_dirs[@]}"; do
+            mkdir -p "ios/build/generated/ios/$dir"
+            echo "✅ Codegen 디렉토리 생성: ios/build/generated/ios/$dir"
+          done
+          
+          echo "✅ Codegen 디렉토리 재생성 완료 (pod install 직후)"
+          
       # 9단계: Fastlane 설치 및 설정 복원 (성공 사례 방식 적용)
       - name: Setup Fastlane
         working-directory: pickplay
@@ -362,6 +386,27 @@ jobs:
           APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
         run: |
           echo "🚀 Fastlane Match로 빌드 및 배포 시작..."
+          
+          # Codegen 디렉토리 재생성 (DerivedData 정리 후)
+          echo "📁 Codegen 디렉토리 재생성 중..."
+          mkdir -p ios/build/generated/ios
+          
+          codegen_dirs=(
+            "react/renderer/components/lottiereactnative"
+            "react/renderer/components/reanimated"
+            "react/renderer/components/workletscore"
+            "react/renderer/components/safeareacontext"
+            "react/renderer/components/googlemobileads"
+            "react/renderer/components/rngesturehandler"
+            "react/renderer/components/rnscreens"
+          )
+          
+          for dir in "${codegen_dirs[@]}"; do
+            mkdir -p "ios/build/generated/ios/$dir"
+            echo "✅ Codegen 디렉토리 생성: ios/build/generated/ios/$dir"
+          done
+          
+          echo "✅ Codegen 디렉토리 재생성 완료"
           
           # ExportOptions.plist 파일 동적 생성
           echo "📄 ExportOptions.plist 파일 동적 생성 중..."
