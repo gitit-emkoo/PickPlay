@@ -4,9 +4,9 @@
 default_platform(:ios)
 
 # Fastlane 실행 위치 자동 감지 및 프로젝트 루트 계산
-# 현재 Fastfile 위치: .../pickplay/ios/fastlane/
+# 현재 Fastfile 위치: .../pickplay/fastlane/
 # EXPO 프로젝트 루트: .../pickplay/ (package.json이 있는 곳)
-EXPO_PROJECT_ROOT = File.expand_path('../..', __dir__) 
+EXPO_PROJECT_ROOT = File.expand_path('..', __dir__) 
 
 # Xcode 관련 절대 경로 (EXPO 프로젝트 루트 기준)
 # Fastlane 액션에서 파일 경로를 참조할 때 반드시 이 절대 경로를 사용합니다.
@@ -263,7 +263,7 @@ platform :ios do
       clean: true,
       skip_codesigning: false,
       skip_package_dependencies_resolution: false,
-      xcargs: "SWIFT_OPTIMIZATION_LEVEL=-O -DEVELOPMENT_TEAM='#{ENV["APPLE_TEAM_ID"]}' CODE_SIGN_STYLE=Manual"
+      xcargs: "SWIFT_OPTIMIZATION_LEVEL=-O -DEVELOPMENT_TEAM='#{ENV["APPLE_TEAM_ID"]}' CODE_SIGN_STYLE=Manual GENERATE_PROFILING_CODE=NO ENABLE_PREVIEWS=YES"
     )
     
     # TestFlight 업로드
