@@ -259,8 +259,14 @@ platform :ios do
       puts "⚠️ 프로파일 UUID 또는 경로를 찾을 수 없습니다."
     end
     
-    # Old Architecture 사용 시 Codegen 파일 생성 불필요
-    # ($RNReanimated[:codegen_disabled] = true로 설정했으므로 Codegen 생성되지 않음)
+    # ReactAppDependencyProvider와 같은 헤더 파일 복사 오류 방지
+    build_generated_base = File.join(EXPO_PROJECT_ROOT, "ios/build/generated/ios")
+    FileUtils.mkdir_p(build_generated_base)
+    
+    # 빈 RCTAppDependencyProvider.h 파일 생성 (복사 오류 방지)
+    FileUtils.touch(File.join(build_generated_base, "RCTAppDependencyProvider.h"))
+    
+    puts "✅ build/generated/ios 디렉토리 생성 완료"
     
     # 빌드 및 아카이브 (Match가 자동으로 코드 서명 설정)
     # 절대 경로 사용
