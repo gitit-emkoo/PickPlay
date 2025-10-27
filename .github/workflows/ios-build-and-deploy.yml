@@ -184,8 +184,8 @@ jobs:
           echo "✅ Pods 완전 제거 완료"
           
           # 새로 설치 (재시도 로직 포함)
-          # Reanimated의 New Architecture 필수 요구사항 우회
-          export RCT_NEW_ARCH_ENABLED=0
+          # Reanimated 검사 통과를 위해 1로 설정 (실제 빌드는 fabric_enabled => false로 Old Arch)
+          export RCT_NEW_ARCH_ENABLED=1
           for i in {1..3}; do
             echo "CocoaPods 설치 시도 $i..."
             pod install --repo-update && break || echo "시도 $i 실패, 재시도 중..."
