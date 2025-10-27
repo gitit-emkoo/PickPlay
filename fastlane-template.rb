@@ -96,7 +96,8 @@ platform :ios do
     unless File.exist?(File.join(ABSOLUTE_WORKSPACE_PATH, "contents.xcworkspacedata"))
       puts "⚠️ PickPlay.xcworkspace가 없습니다. pod install을 실행합니다..."
       Dir.chdir(File.join(EXPO_PROJECT_ROOT, "ios")) do
-        system("pod install") || UI.user_error!("pod install 실패")
+        # Reanimated의 New Architecture 필수 요구사항 우회
+        system({"RCT_NEW_ARCH_ENABLED" => "0"}, "pod install") || UI.user_error!("pod install 실패")
       end
       puts "✅ pod install 완료"
     else
