@@ -79,11 +79,12 @@ jobs:
           xcodebuild -version
           echo "✅ Xcode 설정 완료"
         
-      # 6단계: node_modules 및 캐시 완전 정리
-      - name: Clean Dependencies
+      # 6단계: Codegen 캐시 완전 정리 (강화)
+      - name: Clean Dependencies and Codegen Cache
         working-directory: pickplay
         run: |
-          echo "🧹 의존성 완전 정리 중..."
+          echo "🧹 의존성 및 Codegen 캐시 완전 정리 중..."
+          
           # node_modules 제거
           rm -rf node_modules
           rm -f package-lock.json
@@ -91,16 +92,29 @@ jobs:
           # React Native 캐시 제거
           rm -rf $TMPDIR/react-*
           
-          # iOS Pods 제거
+          # iOS Pods 및 Codegen 캐시 제거 (강화)
           cd ios
           rm -rf Pods
           rm -f Podfile.lock
           rm -rf build
           rm -rf DerivedData
+          
+          # Codegen 관련 디렉토리 완전 정리
+          rm -rf build/generated
+          rm -rf build/react
+          
+          # CocoaPods 완전 제거
           pod deintegrate || echo "deintegrate 무시"
           cd ..
           
-          echo "✅ 의존성 정리 완료"
+          # Metro bundler 캐시 제거
+          rm -rf .expo
+          rm -rf .metro
+          
+          # React Native CLI 캐시 제거
+          npm cache clean --force || echo "npm cache clean 무시"
+          
+          echo "✅ Codegen 캐시 정리 완료"
           
       # 7단계: 의존성 재설치
       - name: Reinstall Dependencies
@@ -117,6 +131,33 @@ jobs:
           echo "🔄 Expo prebuild 실행 중 (CocoaPods 설치 전)..."
           CI=1 npx expo prebuild --platform ios --clean
           echo "✅ Expo prebuild 완료"
+          
+      # 7.7단계: Codegen 디렉토리 사전 생성 (빌드 오류 방지)
+      - name: Pre-create Codegen Build Directories
+        working-directory: pickplay
+        run: |
+          echo "📁 Codegen 디렉토리 사전 생성 중..."
+          
+          # Base 디렉토리 생성
+          mkdir -p ios/build/generated/ios
+          
+          # Codegen이 생성할 수 있는 모든 디렉토리 구조 사전 생성
+          codegen_dirs=(
+            "react/renderer/components/lottiereactnative"
+            "react/renderer/components/reanimated"
+            "react/renderer/components/workletscore"
+            "react/renderer/components/safeareacontext"
+            "react/renderer/components/googlemobileads"
+            "react/renderer/components/rngesturehandler"
+            "react/renderer/components/rnscreens"
+          )
+          
+          for dir in "${codegen_dirs[@]}"; do
+            mkdir -p "ios/build/generated/ios/$dir"
+            echo "✅ Codegen 디렉토리 생성: ios/build/generated/ios/$dir"
+          done
+          
+          echo "✅ Codegen 디렉토리 사전 생성 완료"
           
       # 8단계: CocoaPods 의존성 설치 및 SwiftLint 설정
       - name: Install CocoaPods and SwiftLint

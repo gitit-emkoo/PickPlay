@@ -253,6 +253,28 @@ platform :ios do
       puts "⚠️ 프로파일 UUID 또는 경로를 찾을 수 없습니다."
     end
     
+    # ReactCodegen 전체 디렉토리 구조 생성 (모든 Codegen 기반 모듈 헤더 복사 오류 방지)
+    # lottie-react-native, react-native-reanimated, react-native-worklets 등
+    build_generated_base = File.join(EXPO_PROJECT_ROOT, "ios/build/generated/ios")
+    FileUtils.mkdir_p(build_generated_base)
+    
+    # Codegen이 생성할 수 있는 모든 디렉토리 구조 사전 생성
+    codegen_dirs = [
+      "react/renderer/components/lottiereactnative",
+      "react/renderer/components/reanimated",
+      "react/renderer/components/workletscore",
+      "react/renderer/components/safeareacontext",
+      "react/renderer/components/googlemobileads",
+      "react/renderer/components/rngesturehandler",
+      "react/renderer/components/rnscreens"
+    ]
+    
+    codegen_dirs.each do |dir|
+      full_path = File.join(build_generated_base, dir)
+      FileUtils.mkdir_p(full_path)
+      puts "✅ Codegen 디렉토리 생성: #{full_path}"
+    end
+    
     # 빌드 및 아카이브 (Match가 자동으로 코드 서명 설정)
     # 절대 경로 사용
     build_app(
