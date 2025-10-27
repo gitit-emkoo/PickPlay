@@ -29,7 +29,8 @@ target 'PickPlay' do
     :path => '../node_modules/react-native',
     :hermes_enabled => true,
     :fabric_enabled => true,
-    :app_path => "#{Pod::Config.instance.installation_root}/.."
+    :app_path => "#{Pod::Config.instance.installation_root}/..",
+    :excluding => ['lottie-react-native']  # Fabric Codegen에서 제외
   )
 
   # Pin Firebase iOS SDK versions to a stable line for RNFB v23.x
@@ -54,39 +55,38 @@ post_install do |installer|
   # Expo post install (must be after RN)
   Expo::PostInstall.install!(installer)
 
-  # ✅ GoogleUserMessagingPlatform XCFrameworks 복사 스크립트 안정화
+  # ✅ 모든 타겟에서 lottiereactnative Codegen 관련 빌드 스크립트 강제 제거 (최종 패치)
   installer.pods_project.targets.each do |target|
     target_name = target.name.to_s
     
+    # GoogleUserMessagingPlatform 처리
     if target_name == 'GoogleUserMessagingPlatform'
       puts "🔧 [GoogleUserMessagingPlatform] XCFrameworks 복사 스크립트 설정 확인..."
       
       target.build_phases.each do |build_phase|
         if build_phase.is_a?(Xcodeproj::Project::Object::PBXShellScriptBuildPhase) && 
            build_phase.name == '[CP] Copy XCFrameworks'
-          # 스크립트 실행 조건 조정
           build_phase.run_only_for_deployment_postprocessing = 0
           puts "🧩 [GoogleUserMessagingPlatform] XCFrameworks 복사 스크립트 감지 및 조정됨"
         end
       end
     end
     
-    if target_name == 'ReactCodegen'
-      puts "🔧 [ReactCodegen] lottiereactnative 관련 모든 빌드 단계 제거 중..."
+    # 모든 타겟에서 lottiereactnative 관련 빌드 단계 제거
+    puts "🔧 [#{target_name}] lottiereactnative 관련 빌드 단계 검사 중..."
+    
+    phases_to_remove = []
+    target.build_phases.to_a.each do |phase| # .to_a로 안전하게 순회
+      phase_display_name = phase.name || phase.display_name || ''
       
-      # 모든 Build Phase에서 lottiereactnative 관련 항목 제거
-      phases_to_remove = []
-      target.build_phases.each do |phase|
-        phase_display_name = phase.name || phase.display_name || ''
-        
-        if phase_display_name.downcase.include?('lottiereactnative')
-          puts "⏭️ [#{phase_display_name}] Build Phase 삭제"
-          phases_to_remove << phase
-        end
+      # 'lottiereactnative' 포함된 모든 Build Phase 제거
+      if phase_display_name.downcase.include?('lottiereactnative')
+        puts "⏭️ [#{target_name}] 타겟에서 [#{phase_display_name}] Build Phase 삭제"
+        phases_to_remove << phase
       end
-      
-      phases_to_remove.each { |phase| phase.remove_from_project }
     end
+    
+    phases_to_remove.each { |phase| phase.remove_from_project }
   end
   
   installer.pods_project.targets.each do |target|

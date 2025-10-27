@@ -143,7 +143,6 @@ jobs:
           
           # Codegen이 생성할 수 있는 모든 디렉토리 구조 사전 생성
           codegen_dirs=(
-            "react/renderer/components/lottiereactnative"
             "react/renderer/components/reanimated"
             "react/renderer/components/workletscore"
             "react/renderer/components/safeareacontext"
@@ -156,6 +155,14 @@ jobs:
             mkdir -p "ios/build/generated/ios/$dir"
             echo "✅ Codegen 디렉토리 생성: ios/build/generated/ios/$dir"
           done
+          
+          # lottiereactnative: 더미 헤더 파일 생성
+          mkdir -p "ios/build/generated/ios/react/renderer/components/lottiereactnative"
+          touch "ios/build/generated/ios/react/renderer/components/lottiereactnative/States.h"
+          touch "ios/build/generated/ios/react/renderer/components/lottiereactnative/ShadowNodes.h"
+          touch "ios/build/generated/ios/react/renderer/components/lottiereactnative/RCTComponentViewHelpers.h"
+          touch "ios/build/generated/ios/react/renderer/components/lottiereactnative/Props.h"
+          echo "✅ lottiereactnative 더미 헤더 파일 생성 완료"
           
           echo "✅ Codegen 디렉토리 사전 생성 완료"
           
