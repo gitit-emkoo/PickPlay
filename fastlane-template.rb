@@ -90,13 +90,18 @@ platform :ios do
       puts "⚠️ 빌드 번호 증분 중 오류 (무시하고 계속): #{ex.message}"
     end
     
-    # workspace 존재 여부만 간단히 확인
+    # workspace 존재 여부 확인 (존재하지 않으면 생성)
     puts "🔍 PickPlay.xcworkspace 확인 중..."
-    # 절대 경로 변수 사용 (bundle 확인)
+    
     unless File.exist?(File.join(ABSOLUTE_WORKSPACE_PATH, "contents.xcworkspacedata"))
-      UI.user_error!("❌ PickPlay.xcworkspace 번들이 올바르지 않습니다. Expo prebuild가 Pods 설치에 실패했습니다.")
+      puts "⚠️ PickPlay.xcworkspace가 없습니다. pod install을 실행합니다..."
+      Dir.chdir(File.join(EXPO_PROJECT_ROOT, "ios")) do
+        system("pod install") || UI.user_error!("pod install 실패")
+      end
+      puts "✅ pod install 완료"
+    else
+      puts "✅ PickPlay.xcworkspace 확인 완료"
     end
-    puts "✅ PickPlay.xcworkspace 확인 완료"
     
     # Xcode 버전 자동 감지 및 설정 (CI 환경 안정성 확보)
     puts "🔍 Xcode 버전 자동 감지 중..."
