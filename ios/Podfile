@@ -36,6 +36,9 @@ target 'PickPlay' do
     :fabric_enabled => false,  # Old Architecture
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
+  
+  # lottie-react-native는 Old Architecture에서 Codegen을 사용하지 않으므로 제외
+  # pod 'lottie-ios', '~> 4.5.0', :modular_headers => true
 
   # Pin Firebase iOS SDK versions to a stable line for RNFB v23.x
   # Xcode 16.3 호환성을 위해 안정적인 버전 사용
