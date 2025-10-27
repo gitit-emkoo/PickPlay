@@ -96,7 +96,7 @@ platform :ios do
     unless File.exist?(File.join(ABSOLUTE_WORKSPACE_PATH, "contents.xcworkspacedata"))
       puts "⚠️ PickPlay.xcworkspace가 없습니다. pod install을 실행합니다..."
       Dir.chdir(File.join(EXPO_PROJECT_ROOT, "ios")) do
-        # Reanimated 검사 통과를 위해 1로 설정 (실제 빌드는 fabric_enabled => false로 Old Arch)
+        # Reanimated 검사만 통과시키기 위해 환경변수 설정 (실제 빌드는 fabric_enabled => false로 Old Arch)
         system({"RCT_NEW_ARCH_ENABLED" => "1"}, "pod install") || UI.user_error!("pod install 실패")
       end
       puts "✅ pod install 완료"
@@ -259,14 +259,22 @@ platform :ios do
       puts "⚠️ 프로파일 UUID 또는 경로를 찾을 수 없습니다."
     end
     
-    # ReactAppDependencyProvider와 같은 헤더 파일 복사 오류 방지
+    # ReactAppDependencyProvider와 lottiereactnative 헤더 파일 복사 오류 방지
     build_generated_base = File.join(EXPO_PROJECT_ROOT, "ios/build/generated/ios")
     FileUtils.mkdir_p(build_generated_base)
     
-    # 빈 RCTAppDependencyProvider.h 파일 생성 (복사 오류 방지)
+    # 빈 RCTAppDependencyProvider.h 파일 생성
     FileUtils.touch(File.join(build_generated_base, "RCTAppDependencyProvider.h"))
     
-    puts "✅ build/generated/ios 디렉토리 생성 완료"
+    # lottiereactnative 더미 파일 생성
+    lottie_dir = File.join(build_generated_base, "react/renderer/components/lottiereactnative")
+    FileUtils.mkdir_p(lottie_dir)
+    FileUtils.touch(File.join(lottie_dir, "States.h"))
+    FileUtils.touch(File.join(lottie_dir, "ShadowNodes.h"))
+    FileUtils.touch(File.join(lottie_dir, "RCTComponentViewHelpers.h"))
+    FileUtils.touch(File.join(lottie_dir, "Props.h"))
+    
+    puts "✅ build/generated/ios 디렉토리 및 더미 파일 생성 완료"
     
     # 빌드 및 아카이브 (Match가 자동으로 코드 서명 설정)
     # 절대 경로 사용
