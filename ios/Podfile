@@ -40,6 +40,9 @@ target 'PickPlay' do
   pod 'FirebaseAuth', firebase_version
   pod 'FirebaseFirestore', firebase_version
   pod 'FirebaseFunctions', firebase_version
+  
+  # ✅ lottie-react-native Codegen 오류 방지: Old Architecture로 강제 사용
+  pod 'lottie-ios', '~> 4.5.0', :modular_headers => true
 end
 
 post_install do |installer|
@@ -51,19 +54,34 @@ post_install do |installer|
   # Expo post install (must be after RN)
   Expo::PostInstall.install!(installer)
 
-  # ✅ lottie-react-native Codegen 오류 방지: Codegen 빌드 스킵 설정
+  # ✅ GoogleUserMessagingPlatform XCFrameworks 복사 스크립트 안정화
   installer.pods_project.targets.each do |target|
     target_name = target.name.to_s
     
-    # lottiereactnative의 Codegen Build Phase를 비활성화
-    if target_name == 'ReactCodegen'
-      puts "🔧 [ReactCodegen] lottiereactnative Codegen 스킵 설정 중..."
+    if target_name == 'GoogleUserMessagingPlatform'
+      puts "🔧 [GoogleUserMessagingPlatform] XCFrameworks 복사 스크립트 설정 확인..."
       
+      target.build_phases.each do |build_phase|
+        if build_phase.is_a?(Xcodeproj::Project::Object::PBXShellScriptBuildPhase) && 
+           build_phase.name == '[CP] Copy XCFrameworks'
+          # 스크립트 실행 조건 조정
+          build_phase.run_only_for_deployment_postprocessing = 0
+          puts "🧩 [GoogleUserMessagingPlatform] XCFrameworks 복사 스크립트 감지 및 조정됨"
+        end
+      end
+    end
+    
+    if target_name == 'ReactCodegen'
+      puts "🔧 [ReactCodegen] lottiereactnative 관련 Copy Files Build Phase 제거 중..."
+      
+      # Copy Files Build Phase를 찾아서 삭제
       target.build_phases.each do |phase|
-        if phase.is_a?(Xcodeproj::Project::Object::PBXShellScriptBuildPhase)
-          if phase.name&.include?('Copy lottiereactnative')
-            puts "⏭️ [#{phase.name}] Codegen Build Phase 비활성화"
-            phase.run_only_for_deployment_postprocessing = 1
+        if phase.is_a?(Xcodeproj::Project::Object::PBXCopyFilesBuildPhase)
+          # lottiereactnative 관련 복사 작업 제거
+          if phase.name&.include?('lottiereactnative') || 
+             phase.dst_subfolder_spec == 6  # Copy to Generated Code
+            puts "⏭️ [#{phase.name || 'Copy Files'}] Build Phase 삭제"
+            phase.remove_from_project
           end
         end
       end
@@ -120,6 +138,14 @@ post_install do |installer|
       # ✅ 전역 빌드 안정성 설정
       config.build_settings['ENABLE_BITCODE'] = 'NO'
       config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
+      
+      # ✅ Google Pods의 XCFrameworks 처리 안정화 (CI 환경 오류 방지)
+      if name.include?('Google') || name.include?('Firebase')
+        config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+        config.build_settings['ALWAYS_SEARCH_USER_PATHS'] = 'NO'
+        config.build_settings['DEFINES_MODULE'] = 'YES'
+        puts "🧩 [#{name}] Google/Firebase Pods XCFrameworks 안정화 설정 적용"
+      end
       
       # ✅ 빌드 실패 방지 설정
       config.build_settings['SWIFT_VERSION'] = '5.0'
