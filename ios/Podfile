@@ -22,15 +22,14 @@ end
 use_frameworks! :linkage => :static
 
 target 'PickPlay' do
-  # Expo autolinking for native modules (lottie-react-native 제외)
-  use_expo_modules!(:config => {:suppress_autolinking_for => ['lottie-react-native']})
+  # Expo autolinking for native modules
+  use_expo_modules!
 
   use_react_native!(
     :path => '../node_modules/react-native',
     :hermes_enabled => true,
-    :fabric_enabled => true,
-    :app_path => "#{Pod::Config.instance.installation_root}/..",
-    :excluding => ['lottie-react-native']  # Fabric Codegen에서 제외
+    :fabric_enabled => false,  # SDK 54 의존성 충돌로 인한 lottie 문제 방지 (Old Architecture 사용)
+    :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
 
   # Pin Firebase iOS SDK versions to a stable line for RNFB v23.x
@@ -55,11 +54,10 @@ post_install do |installer|
   # Expo post install (must be after RN)
   Expo::PostInstall.install!(installer)
 
-  # ✅ 모든 타겟에서 lottiereactnative Codegen 관련 빌드 스크립트 강제 제거 (최종 패치)
+  # ✅ GoogleUserMessagingPlatform XCFrameworks 복사 스크립트 안정화
   installer.pods_project.targets.each do |target|
     target_name = target.name.to_s
     
-    # GoogleUserMessagingPlatform 처리
     if target_name == 'GoogleUserMessagingPlatform'
       puts "🔧 [GoogleUserMessagingPlatform] XCFrameworks 복사 스크립트 설정 확인..."
       
@@ -71,22 +69,6 @@ post_install do |installer|
         end
       end
     end
-    
-    # 모든 타겟에서 lottiereactnative 관련 빌드 단계 제거
-    puts "🔧 [#{target_name}] lottiereactnative 관련 빌드 단계 검사 중..."
-    
-    phases_to_remove = []
-    target.build_phases.to_a.each do |phase| # .to_a로 안전하게 순회
-      phase_display_name = phase.name || phase.display_name || ''
-      
-      # 'lottiereactnative' 포함된 모든 Build Phase 제거
-      if phase_display_name.downcase.include?('lottiereactnative')
-        puts "⏭️ [#{target_name}] 타겟에서 [#{phase_display_name}] Build Phase 삭제"
-        phases_to_remove << phase
-      end
-    end
-    
-    phases_to_remove.each { |phase| phase.remove_from_project }
   end
   
   installer.pods_project.targets.each do |target|

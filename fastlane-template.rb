@@ -253,38 +253,8 @@ platform :ios do
       puts "⚠️ 프로파일 UUID 또는 경로를 찾을 수 없습니다."
     end
     
-    # ReactCodegen 전체 디렉토리 구조 생성 (모든 Codegen 기반 모듈 헤더 복사 오류 방지)
-    # lottie-react-native, react-native-reanimated, react-native-worklets 등
-    build_generated_base = File.join(EXPO_PROJECT_ROOT, "ios/build/generated/ios")
-    FileUtils.mkdir_p(build_generated_base)
-    
-    # Codegen이 생성할 수 있는 모든 디렉토리 구조 사전 생성
-    codegen_dirs = [
-      "react/renderer/components/reanimated",
-      "react/renderer/components/workletscore",
-      "react/renderer/components/safeareacontext",
-      "react/renderer/components/googlemobileads",
-      "react/renderer/components/rngesturehandler",
-      "react/renderer/components/rnscreens"
-    ]
-    
-    codegen_dirs.each do |dir|
-      full_path = File.join(build_generated_base, dir)
-      FileUtils.mkdir_p(full_path)
-      puts "✅ Codegen 디렉토리 생성: #{full_path}"
-    end
-    
-    # lottiereactnative: 더미 헤더 파일 생성 (Copy 오류 방지)
-    lottie_dir = File.join(build_generated_base, "react/renderer/components/lottiereactnative")
-    FileUtils.mkdir_p(lottie_dir)
-    
-    # 빈 헤더 파일 생성
-    FileUtils.touch(File.join(lottie_dir, "States.h"))
-    FileUtils.touch(File.join(lottie_dir, "ShadowNodes.h"))
-    FileUtils.touch(File.join(lottie_dir, "RCTComponentViewHelpers.h"))
-    FileUtils.touch(File.join(lottie_dir, "Props.h"))
-    
-    puts "✅ lottiereactnative 더미 헤더 파일 생성: #{lottie_dir}"
+    # Old Architecture 사용 시 Codegen 파일 생성 불필요
+    # (fabric_enabled => false 로 설정했으므로 Codegen 생성되지 않음)
     
     # 빌드 및 아카이브 (Match가 자동으로 코드 서명 설정)
     # 절대 경로 사용

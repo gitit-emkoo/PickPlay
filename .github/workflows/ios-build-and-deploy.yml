@@ -180,6 +180,8 @@ jobs:
           pod deintegrate || echo "deintegrate 무시"
           rm -f Podfile.lock
           rm -rf Pods
+          rm -rf PickPlay.xcworkspace
+          echo "✅ Pods 완전 제거 완료"
           
           # 새로 설치 (재시도 로직 포함)
           for i in {1..3}; do
