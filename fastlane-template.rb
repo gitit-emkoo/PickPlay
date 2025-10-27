@@ -121,8 +121,8 @@ platform :ios do
       end
     end
     
-    # 4. Fastlane Match 설정 (읽기 전용으로 속도 최적화)
-    puts "🔐 Fastlane Match로 인증서 및 프로비저닝 프로파일 설정 중 (읽기 전용 모드)..."
+    # 4. Fastlane Match 설정 (프로파일 재생성 모드)
+    puts "🔐 Fastlane Match로 인증서 및 프로비저닝 프로파일 설정 중..."
     
     # App Store Connect API Key 설정
     api_key = app_store_connect_api_key(
@@ -135,9 +135,8 @@ platform :ios do
     
     match(
       type: "appstore",
-      force_for_new_certificates: true,  # 인증서 재생성
-      force_for_new_devices: true,  # 디바이스 프로파일 재생성
-      force: true,  # 모든 프로파일 강제 재생성
+      force_for_new_devices: true,  # Push Notifications capability를 위해 프로파일 재생성
+      force_for_new_certificates: false,  # 인증서는 유지
       readonly: false,  # 프로파일 생성 허용
       app_identifier: "com.pickplay.kwcc",
       team_id: ENV["APPLE_TEAM_ID"],
