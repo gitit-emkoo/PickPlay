@@ -135,7 +135,10 @@ platform :ios do
     
     match(
       type: "appstore",
-      force: true,  # 기존 프로파일을 강제로 재생성하여 Push Notifications 반영
+      force_for_new_certificates: true,  # 인증서 재생성
+      force_for_new_devices: true,  # 디바이스 프로파일 재생성
+      force: true,  # 모든 프로파일 강제 재생성
+      readonly: false,  # 프로파일 생성 허용
       app_identifier: "com.pickplay.kwcc",
       team_id: ENV["APPLE_TEAM_ID"],
       api_key: api_key,
@@ -165,6 +168,19 @@ platform :ios do
     FileUtils.touch(File.join(lottie_dir, "ComponentDescriptors.h"))
     
     puts "✅ build/generated/ios 디렉토리 및 더미 파일 생성 완료"
+    
+    # Push Notifications capability 강제 추가
+    begin
+      puts "🔔 Push Notifications capability 추가 중..."
+      add_capabilities(
+        project_path: ABSOLUTE_XCODEPROJ_PATH,
+        target: "PickPlay",
+        capabilities: [:push_notifications]
+      )
+      puts "✅ Push Notifications capability 추가 완료"
+    rescue => ex
+      puts "⚠️ add_capabilities 실패 (무시하고 계속): #{ex.message}"
+    end
     
     # 5. 빌드 및 아카이브
     build_app(
