@@ -198,6 +198,11 @@ platform :ios do
     FileUtils.mkdir_p(rncwebviewspec_root)
     FileUtils.touch(File.join(rncwebviewspec_root, "RNCWebViewSpec.h"))
     
+    # 5. 특수 케이스: rngesturehandler_codegen (루트 경로)
+    rngh_root = File.join(build_generated_base, "rngesturehandler_codegen")
+    FileUtils.mkdir_p(rngh_root)
+    FileUtils.touch(File.join(rngh_root, "rngesturehandler_codegen.h"))
+    
     puts "✅ 모든 Codegen 더미 파일 생성 완료"
     
     # 7. 빌드 및 아카이브

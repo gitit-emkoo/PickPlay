@@ -423,6 +423,11 @@ jobs:
           mkdir -p ios/build/generated/ios/RNCWebViewSpec
           touch ios/build/generated/ios/RNCWebViewSpec/RNCWebViewSpec.h
           echo "✅ RNCWebViewSpec 루트 헤더 파일 생성 완료"
+
+          # 5. 특수 케이스: rngesturehandler_codegen (루트 경로)
+          mkdir -p ios/build/generated/ios/rngesturehandler_codegen
+          touch ios/build/generated/ios/rngesturehandler_codegen/rngesturehandler_codegen.h
+          echo "✅ rngesturehandler_codegen 루트 헤더 파일 생성 완료"
           
           echo "✅ Codegen 디렉토리 및 더미 파일 재생성 완료"
       
