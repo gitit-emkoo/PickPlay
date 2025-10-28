@@ -160,46 +160,27 @@ platform :ios do
     )
     puts "✅ Code signing 설정 업데이트 완료"
     
-    # ReactAppDependencyProvider와 lottiereactnative 헤더 파일 복사 오류 방지
+    # React Native Codegen 오류 방지 - 근본적인 해결
+    puts "📁 모든 Codegen 경로에 더미 파일 생성 중..."
     build_generated_base = File.join(EXPO_PROJECT_ROOT, "ios/build/generated/ios")
     FileUtils.mkdir_p(build_generated_base)
     
-    # 빈 RCTAppDependencyProvider.h 파일 생성
+    # 1. 루트 레벨 파일들
     FileUtils.touch(File.join(build_generated_base, "RCTAppDependencyProvider.h"))
     
-    # lottiereactnative 더미 파일 생성 (6개 파일)
-    lottie_dir = File.join(build_generated_base, "react/renderer/components/lottiereactnative")
-    FileUtils.mkdir_p(lottie_dir)
-    FileUtils.touch(File.join(lottie_dir, "States.h"))
-    FileUtils.touch(File.join(lottie_dir, "ShadowNodes.h"))
-    FileUtils.touch(File.join(lottie_dir, "RCTComponentViewHelpers.h"))
-    FileUtils.touch(File.join(lottie_dir, "Props.h"))
-    FileUtils.touch(File.join(lottie_dir, "EventEmitters.h"))
-    FileUtils.touch(File.join(lottie_dir, "ComponentDescriptors.h"))
+    # 2. 알려진 모든 Codegen 모듈들 (프로액티브 생성)
+    known_modules = [
+      "lottiereactnative",
+      "RNCWebViewSpec",
+      "rngesturehandler_codegen",
+      "RNGoogleMobileAdsSpec",
+      "reanimated",
+      "workletscore",
+      "safeareacontext",
+      "rnscreens"
+    ]
     
-    # RNCWebViewSpec 더미 파일 생성 (6개 파일)
-    rncwebview_dir = File.join(build_generated_base, "react/renderer/components/RNCWebViewSpec")
-    FileUtils.mkdir_p(rncwebview_dir)
-    FileUtils.touch(File.join(rncwebview_dir, "States.h"))
-    FileUtils.touch(File.join(rncwebview_dir, "ShadowNodes.h"))
-    FileUtils.touch(File.join(rncwebview_dir, "RCTComponentViewHelpers.h"))
-    FileUtils.touch(File.join(rncwebview_dir, "Props.h"))
-    FileUtils.touch(File.join(rncwebview_dir, "EventEmitters.h"))
-    FileUtils.touch(File.join(rncwebview_dir, "ComponentDescriptors.h"))
-    
-    # rngesturehandler_codegen 더미 파일 생성 (6개 파일)
-    rngesturehandler_dir = File.join(build_generated_base, "react/renderer/components/rngesturehandler_codegen")
-    FileUtils.mkdir_p(rngesturehandler_dir)
-    FileUtils.touch(File.join(rngesturehandler_dir, "States.h"))
-    FileUtils.touch(File.join(rngesturehandler_dir, "ShadowNodes.h"))
-    FileUtils.touch(File.join(rngesturehandler_dir, "RCTComponentViewHelpers.h"))
-    FileUtils.touch(File.join(rngesturehandler_dir, "Props.h"))
-    FileUtils.touch(File.join(rngesturehandler_dir, "EventEmitters.h"))
-    FileUtils.touch(File.join(rngesturehandler_dir, "ComponentDescriptors.h"))
-    
-    # 기타 React Native 모듈 더미 파일 생성 (프로액티브 대응)
-    other_modules = ["reanimated", "workletscore", "safeareacontext", "RNGoogleMobileAdsSpec", "rnscreens"]
-    other_modules.each do |module_name|
+    known_modules.each do |module_name|
       module_dir = File.join(build_generated_base, "react/renderer/components/#{module_name}")
       FileUtils.mkdir_p(module_dir)
       %w[States ShadowNodes RCTComponentViewHelpers Props EventEmitters ComponentDescriptors].each do |file|
@@ -207,12 +188,12 @@ platform :ios do
       end
     end
     
-    # rnasyncstorage는 루트 경로에 직접 생성 (특수 케이스)
+    # 3. 특수 케이스: rnasyncstorage (루트 경로)
     rnasyncstorage_dir = File.join(build_generated_base, "rnasyncstorage")
     FileUtils.mkdir_p(rnasyncstorage_dir)
     FileUtils.touch(File.join(rnasyncstorage_dir, "rnasyncstorage.h"))
     
-    puts "✅ build/generated/ios 디렉토리 및 더미 파일 생성 완료"
+    puts "✅ 모든 Codegen 더미 파일 생성 완료"
     
     # 7. 빌드 및 아카이브
     build_app(
