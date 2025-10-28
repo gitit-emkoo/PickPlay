@@ -12,6 +12,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.pickplay.kwcc",
       "buildNumber": "10",
+      "deploymentTarget": "15.1",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSUserTrackingUsageDescription": "이 정보를 사용하여 더 관련성 높은 맞춤형 광고를 제공합니다.",
