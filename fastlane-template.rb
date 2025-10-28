@@ -243,6 +243,30 @@ platform :ios do
     ].each do |header_name|
       FileUtils.touch(File.join(build_generated_base, header_name))
     end
+
+    # 10. Codegen이 기대하는 generated 소스 파일들도 선제 생성
+    #    - <module>/<module>-generated.mm (Objective-C++)
+    #    - <module>JSI-generated.cpp (C++)
+    generated_modules = %w[
+      safeareacontext
+      rnworklets
+      rnscreens
+      rnreanimated
+      rngesturehandler_codegen
+      rnasyncstorage
+      RNGoogleMobileAdsSpec
+      RNCWebViewSpec
+    ]
+
+    generated_modules.each do |mod|
+      # 모듈 디렉터리와 .mm 파일
+      mod_dir = File.join(build_generated_base, mod)
+      FileUtils.mkdir_p(mod_dir)
+      FileUtils.touch(File.join(mod_dir, "#{mod}-generated.mm"))
+
+      # 루트 위치의 JSI 생성 cpp 파일
+      FileUtils.touch(File.join(build_generated_base, "#{mod}JSI-generated.cpp"))
+    end
     
     puts "✅ 모든 Codegen 더미 파일 생성 완료"
     
