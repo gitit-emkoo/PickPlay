@@ -121,23 +121,8 @@ platform :ios do
       end
     end
     
-    # 🌟 4. Capability 강제 추가 🌟 (가장 먼저 실행하여 프로젝트 파일 수정)
-    # Xcode 프로젝트에 Push Notification Capability를 명시적으로 추가합니다.
-    puts "🚀 Xcode 프로젝트에 Push Notifications Capability 활성화 중..."
-    begin
-      add_capabilities(
-        path: ABSOLUTE_XCODEPROJ_PATH,
-        target_name: "PickPlay",
-        capabilities: [
-          { capability: "Push Notifications" }
-        ]
-      )
-      puts "✅ PickPlay 타겟에 Push Notification Capability 강제 활성화 완료"
-    rescue => ex
-      puts "⚠️ add_capabilities 실패 (무시하고 계속): #{ex.message}"
-    end
-    
-    # 5. Fastlane Match 설정
+    # 4. Match 실행으로 프로파일 다운로드 (entitlement 포함)
+    # 5. Code Signing 설정 업데이트 (과거에 사용한 방법 재사용)
     puts "🔐 Fastlane Match로 인증서 및 프로비저닝 프로파일 설정 중 (프로파일 강제 재생성)..."
     
     # App Store Connect API Key 설정
@@ -151,7 +136,8 @@ platform :ios do
     
     match(
       type: "appstore",
-      force: true, # Entitlement 변경사항 반영을 위해 강제 재생성
+      force: true,  # Entitlement 변경사항 반영을 위해 강제 재생성
+      force_for_new_devices: true,  # 새로운 디바이스/능력 추가 시 프로파일 재생성
       app_identifier: "com.pickplay.kwcc",
       team_id: ENV["APPLE_TEAM_ID"],
       api_key: api_key,
@@ -161,7 +147,18 @@ platform :ios do
       keychain_password: "actions"
     )
     
-    puts "✅ Fastlane Match 설정 완료 (최신 Entitlement 반영된 프로파일로 업데이트)"
+    puts "✅ Fastlane Match 설정 완료"
+    
+    # Match 후 Xcode 프로젝트 파일에 provisioning profile 설정 업데이트
+    # (과거 경험을 바탕으로 한 추가 조치)
+    puts "🔧 Xcode 프로젝트에 provisioning profile 설정 업데이트 중..."
+    update_code_signing_settings(
+      path: ABSOLUTE_XCODEPROJ_PATH,
+      code_sign_identity: "Apple Distribution",
+      profile_name: "match AppStore com.pickplay.kwcc",
+      bundle_identifier: "com.pickplay.kwcc"
+    )
+    puts "✅ Code signing 설정 업데이트 완료"
     
     # ReactAppDependencyProvider와 lottiereactnative 헤더 파일 복사 오류 방지
     build_generated_base = File.join(EXPO_PROJECT_ROOT, "ios/build/generated/ios")

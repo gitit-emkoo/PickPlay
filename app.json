@@ -20,6 +20,9 @@
         ],
         "ITSAppUsesNonExemptEncryption": false
       },
+      "entitlements": {
+        "aps-environment": "production"
+      },
       "runtimeVersion": {
         "policy": "appVersion"
       }
