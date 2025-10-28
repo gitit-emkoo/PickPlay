@@ -404,6 +404,16 @@ jobs:
           touch ios/build/generated/ios/react/renderer/components/lottiereactnative/ComponentDescriptors.h
           echo "✅ lottiereactnative 더미 파일 6개 생성 완료"
           
+          # 2.5. RNCWebViewSpec 디렉토리 및 더미 파일 생성
+          mkdir -p ios/build/generated/ios/react/renderer/components/RNCWebViewSpec
+          touch ios/build/generated/ios/react/renderer/components/RNCWebViewSpec/States.h
+          touch ios/build/generated/ios/react/renderer/components/RNCWebViewSpec/ShadowNodes.h
+          touch ios/build/generated/ios/react/renderer/components/RNCWebViewSpec/RCTComponentViewHelpers.h
+          touch ios/build/generated/ios/react/renderer/components/RNCWebViewSpec/Props.h
+          touch ios/build/generated/ios/react/renderer/components/RNCWebViewSpec/EventEmitters.h
+          touch ios/build/generated/ios/react/renderer/components/RNCWebViewSpec/ComponentDescriptors.h
+          echo "✅ RNCWebViewSpec 더미 파일 6개 생성 완료"
+          
           # 3. 기타 Codegen 디렉토리 생성 (Optional)
           codegen_dirs=(
             "react/renderer/components/reanimated"

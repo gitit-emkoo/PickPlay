@@ -177,6 +177,16 @@ platform :ios do
     FileUtils.touch(File.join(lottie_dir, "EventEmitters.h"))
     FileUtils.touch(File.join(lottie_dir, "ComponentDescriptors.h"))
     
+    # RNCWebViewSpec 더미 파일 생성 (6개 파일)
+    rncwebview_dir = File.join(build_generated_base, "react/renderer/components/RNCWebViewSpec")
+    FileUtils.mkdir_p(rncwebview_dir)
+    FileUtils.touch(File.join(rncwebview_dir, "States.h"))
+    FileUtils.touch(File.join(rncwebview_dir, "ShadowNodes.h"))
+    FileUtils.touch(File.join(rncwebview_dir, "RCTComponentViewHelpers.h"))
+    FileUtils.touch(File.join(rncwebview_dir, "Props.h"))
+    FileUtils.touch(File.join(rncwebview_dir, "EventEmitters.h"))
+    FileUtils.touch(File.join(rncwebview_dir, "ComponentDescriptors.h"))
+    
     puts "✅ build/generated/ios 디렉토리 및 더미 파일 생성 완료"
     
     # 7. 빌드 및 아카이브
