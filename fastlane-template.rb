@@ -286,16 +286,4 @@ platform :ios do
     end
   end
 end
-
-          release_notes: "Automated build from GitHub Actions"
-        )
-        puts "✅ Firebase App Distribution 업로드 완료"
-      rescue => e
-        puts "⚠️ Firebase App Distribution 실패: #{e.message}"
-        puts "🔧 Firebase 설정을 확인하세요."
-      end
-    else
-      puts "⚠️ Firebase 토큰이 없습니다. Firebase App Distribution을 건너뜁니다."
-    end
-  end
-end
+ 
