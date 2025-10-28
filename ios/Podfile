@@ -1,6 +1,12 @@
 platform :ios, '15.1'
 ENV['RCT_NEW_ARCH_ENABLED'] ||= '0'
 
+# RN autolinking 스크립트 로드 (필수)
+require_relative '../node_modules/@react-native-community/cli-platform-ios/native_modules'
+
+# Xcode 프로젝트 명시
+project 'PickPlay.xcodeproj'
+
 require_relative '../node_modules/react-native/scripts/react_native_pods'
 # Expo autolinking (handle path variations across versions)
 begin
@@ -30,6 +36,9 @@ $RNReanimated = { :codegen_disabled => true }
 target 'PickPlay' do
   # Expo autolinking for native modules
   use_expo_modules!
+
+  # RN autolinking (반드시 호출)
+  use_native_modules!
 
   use_react_native!(
     :path => '../node_modules/react-native',

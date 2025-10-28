@@ -75,6 +75,14 @@ jobs:
             npm install --omit=dev --legacy-peer-deps
           fi
 
+      - name: Debug iOS folder
+        run: |
+          cd "$PROJ_DIR/ios"
+          echo "== ios contents =="
+          ls -la
+          echo "== Xcode projects =="
+          ls -1 *.xcodeproj || true
+
       - name: Install CocoaPods
         run: |
           cd "$PROJ_DIR/ios"
