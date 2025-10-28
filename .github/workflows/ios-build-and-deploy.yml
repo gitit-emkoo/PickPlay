@@ -424,18 +424,24 @@ jobs:
           touch ios/build/generated/ios/react/renderer/components/rngesturehandler_codegen/ComponentDescriptors.h
           echo "✅ rngesturehandler_codegen 더미 파일 6개 생성 완료"
           
-          # 3. 기타 Codegen 디렉토리 생성 (Optional - 향후 에러 방지)
-          codegen_dirs=(
-            "react/renderer/components/reanimated"
-            "react/renderer/components/workletscore"
-            "react/renderer/components/safeareacontext"
-            "react/renderer/components/googlemobileads"
-            "react/renderer/components/rnscreens"
+          # 3. 기타 Codegen 디렉토리 생성 및 더미 파일 추가 (프로액티브 대응)
+          codegen_modules=(
+            "reanimated"
+            "workletscore"
+            "safeareacontext"
+            "googlemobileads"
+            "rnscreens"
           )
           
-          for dir in "${codegen_dirs[@]}"; do
-            mkdir -p "ios/build/generated/ios/$dir"
-            echo "✅ Codegen 디렉토리 생성: ios/build/generated/ios/$dir"
+          for module in "${codegen_modules[@]}"; do
+            mkdir -p "ios/build/generated/ios/react/renderer/components/$module"
+            touch "ios/build/generated/ios/react/renderer/components/$module/States.h"
+            touch "ios/build/generated/ios/react/renderer/components/$module/ShadowNodes.h"
+            touch "ios/build/generated/ios/react/renderer/components/$module/RCTComponentViewHelpers.h"
+            touch "ios/build/generated/ios/react/renderer/components/$module/Props.h"
+            touch "ios/build/generated/ios/react/renderer/components/$module/EventEmitters.h"
+            touch "ios/build/generated/ios/react/renderer/components/$module/ComponentDescriptors.h"
+            echo "✅ $module 더미 파일 6개 생성 완료"
           done
           
           echo "✅ Codegen 디렉토리 및 더미 파일 재생성 완료"
