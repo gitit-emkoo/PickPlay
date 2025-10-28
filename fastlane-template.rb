@@ -268,6 +268,27 @@ platform :ios do
       FileUtils.touch(File.join(build_generated_base, "#{mod}JSI-generated.cpp"))
     end
     
+    # 11. react/renderer/components/<module>/States.cpp 등 컴포넌트 소스 파일 생성
+    renderer_modules = %w[
+      RNCWebViewSpec
+      RNGoogleMobileAdsSpec
+    ]
+    
+    renderer_modules.each do |mod|
+      renderer_dir = File.join(build_generated_base, "react/renderer/components/#{mod}")
+      FileUtils.mkdir_p(renderer_dir)
+      %w[
+        States.cpp
+        Props.cpp
+        EventEmitters.cpp
+        ComponentDescriptors.cpp
+        ShadowNodes.cpp
+        RCTComponentViewHelpers.mm
+      ].each do |src_file|
+        FileUtils.touch(File.join(renderer_dir, src_file))
+      end
+    end
+    
     puts "✅ 모든 Codegen 더미 파일 생성 완료"
     
     # 7. 빌드 및 아카이브
