@@ -431,17 +431,26 @@ jobs:
             "safeareacontext"
             "RNGoogleMobileAdsSpec"
             "rnscreens"
+            "rnasyncstorage"
           )
           
           for module in "${codegen_modules[@]}"; do
-            mkdir -p "ios/build/generated/ios/react/renderer/components/$module"
-            touch "ios/build/generated/ios/react/renderer/components/$module/States.h"
-            touch "ios/build/generated/ios/react/renderer/components/$module/ShadowNodes.h"
-            touch "ios/build/generated/ios/react/renderer/components/$module/RCTComponentViewHelpers.h"
-            touch "ios/build/generated/ios/react/renderer/components/$module/Props.h"
-            touch "ios/build/generated/ios/react/renderer/components/$module/EventEmitters.h"
-            touch "ios/build/generated/ios/react/renderer/components/$module/ComponentDescriptors.h"
-            echo "✅ $module 더미 파일 6개 생성 완료"
+            if [ "$module" == "rnasyncstorage" ]; then
+              # rnasyncstorage는 루트 경로에 직접 생성
+              mkdir -p "ios/build/generated/ios/$module"
+              touch "ios/build/generated/ios/$module/${module}.h"
+              echo "✅ $module 헤더 파일 생성 완료"
+            else
+              # 다른 모듈들은 components 아래 생성
+              mkdir -p "ios/build/generated/ios/react/renderer/components/$module"
+              touch "ios/build/generated/ios/react/renderer/components/$module/States.h"
+              touch "ios/build/generated/ios/react/renderer/components/$module/ShadowNodes.h"
+              touch "ios/build/generated/ios/react/renderer/components/$module/RCTComponentViewHelpers.h"
+              touch "ios/build/generated/ios/react/renderer/components/$module/Props.h"
+              touch "ios/build/generated/ios/react/renderer/components/$module/EventEmitters.h"
+              touch "ios/build/generated/ios/react/renderer/components/$module/ComponentDescriptors.h"
+              echo "✅ $module 더미 파일 6개 생성 완료"
+            fi
           done
           
           echo "✅ Codegen 디렉토리 및 더미 파일 재생성 완료"
