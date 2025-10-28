@@ -17,15 +17,16 @@ jobs:
       - name: Select Xcode 16.2
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: "16.2.0"
+          xcode-version: "16.2"
 
-      - name: Setup Node.js
+      - name: Setup Node.js (cache lockfile anywhere)
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: "pickplay/package-lock.json"
+          cache-dependency-path: "**/package-lock.json"
 
+      # p8 내용을 파일로 저장 → Fastlane에서 key_filepath로 사용
       - name: Write App Store Connect API key to file
         env:
           ASC_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
@@ -35,7 +36,7 @@ jobs:
           echo "$ASC_P8" > "$KEY_PATH"
           echo "APP_STORE_CONNECT_API_KEY_PATH=$KEY_PATH" >> $GITHUB_ENV
 
-      - name: Setup Ruby
+      - name: Setup Ruby & tools
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.2"
@@ -46,42 +47,68 @@ jobs:
           gem install fastlane --no-document
           gem install cocoapods --no-document
 
-      - name: Clean build caches
-        working-directory: pickplay
+      # 프로젝트 디렉토리: pickplay
+      - name: Detect project dir
         run: |
-          rm -rf node_modules
-          rm -rf ios/Pods ios/Podfile.lock ios/build
+          if [ -f ./pickplay/ios/Podfile ]; then
+            echo "PROJ_DIR=pickplay" >> $GITHUB_ENV
+          elif [ -f ./ios/Podfile ]; then
+            echo "PROJ_DIR=." >> $GITHUB_ENV
+          else
+            echo "::error::ios/Podfile not found"; exit 1
+          fi
+          echo "Detected PROJ_DIR=$PROJ_DIR"
+
+      - name: Clean caches
+        run: |
+          rm -rf "$PROJ_DIR/node_modules"
+          rm -rf "$PROJ_DIR/ios/Pods" "$PROJ_DIR/ios/Podfile.lock" "$PROJ_DIR/ios/build"
           rm -rf ~/Library/Developer/Xcode/DerivedData/*
 
-      - name: Install JS deps
-        working-directory: pickplay
-        run: npm ci
+      - name: Install JS deps (npm ci)
+        run: |
+          cd "$PROJ_DIR"
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            echo "::warning::package-lock.json not found; running npm install"
+            npm install --legacy-peer-deps
+          fi
 
       - name: Install CocoaPods
-        working-directory: pickplay/ios
-        run: pod install --repo-update
+        run: |
+          cd "$PROJ_DIR/ios"
+          pod install --repo-update
 
       - name: Cache Pods
         uses: actions/cache@v4
         with:
           path: |
-            pickplay/ios/Pods
-            pickplay/ios/Podfile.lock
-          key: ${{ runner.os }}-pods-${{ hashFiles('pickplay/ios/Podfile.lock') }}
+            ${{ env.PROJ_DIR }}/ios/Pods
+            ${{ env.PROJ_DIR }}/ios/Podfile.lock
+          key: ${{ runner.os }}-pods-${{ hashFiles(format('{0}/ios/Podfile.lock', env.PROJ_DIR)) }}
           restore-keys: ${{ runner.os }}-pods-
 
       - name: Fastlane beta
-        working-directory: pickplay
         env:
+          # App Store Connect
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
           APP_STORE_CONNECT_API_KEY_PATH: ${{ env.APP_STORE_CONNECT_API_KEY_PATH }}
+          # Apple/Match
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
           MATCH_GIT_USERNAME: ${{ secrets.MATCH_GIT_USERNAME }}
           MATCH_GIT_PASSWORD: ${{ secrets.MATCH_GIT_PASSWORD }}
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          # (옵션) Firebase
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
           FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
-        run: fastlane ios beta
+        run: |
+          cd "$PROJ_DIR"
+          if [ -f Gemfile ]; then
+            bundle exec fastlane ios beta
+          else
+            fastlane ios beta
+          fi
