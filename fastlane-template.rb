@@ -202,6 +202,28 @@ platform :ios do
     rngh_root = File.join(build_generated_base, "rngesturehandler_codegen")
     FileUtils.mkdir_p(rngh_root)
     FileUtils.touch(File.join(rngh_root, "rngesturehandler_codegen.h"))
+
+    # 6. 특수 케이스: RNGoogleMobileAdsSpec (루트 경로)
+    rnads_root = File.join(build_generated_base, "RNGoogleMobileAdsSpec")
+    FileUtils.mkdir_p(rnads_root)
+    FileUtils.touch(File.join(rnads_root, "RNGoogleMobileAdsSpec.h"))
+
+    # 7. 특수 케이스: rnreanimated (루트 경로)
+    rnreanimated_root = File.join(build_generated_base, "rnreanimated")
+    FileUtils.mkdir_p(rnreanimated_root)
+    FileUtils.touch(File.join(rnreanimated_root, "rnreanimated.h"))
+
+    # 8. 선제 대응: 기타 모듈 루트 헤더 (재발 방지)
+    %w[
+      lottiereactnative
+      workletscore
+      safeareacontext
+      rnscreens
+    ].each do |root_module|
+      root_dir = File.join(build_generated_base, root_module)
+      FileUtils.mkdir_p(root_dir)
+      FileUtils.touch(File.join(root_dir, "#{root_module}.h"))
+    end
     
     puts "✅ 모든 Codegen 더미 파일 생성 완료"
     
@@ -252,6 +274,19 @@ platform :ios do
         firebase_app_distribution(
           app: ENV["FIREBASE_APP_ID"],
           groups: "testers",
+          release_notes: "Automated build from GitHub Actions"
+        )
+        puts "✅ Firebase App Distribution 업로드 완료"
+      rescue => e
+        puts "⚠️ Firebase App Distribution 실패: #{e.message}"
+        puts "🔧 Firebase 설정을 확인하세요."
+      end
+    else
+      puts "⚠️ Firebase 토큰이 없습니다. Firebase App Distribution을 건너뜁니다."
+    end
+  end
+end
+
           release_notes: "Automated build from GitHub Actions"
         )
         puts "✅ Firebase App Distribution 업로드 완료"

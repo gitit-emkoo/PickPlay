@@ -5,6 +5,30 @@ EAS Build에서 GitHub Actions + Fastlane으로 전환한 이후 발생한 주�
 
 ---
 
+## ⚠️ 반복 발생하는 문제
+
+### 🔄 Push Notifications 프로파일 미싱 (근본 원인)
+**현상:**
+- 에러가 한 번 해결되었다가 다시 발생
+- 빌드할 때마다 다른 결과가 나옴
+
+**원인:**
+- Apple Developer Portal에는 Push Notifications가 활성화되어 있음
+- 하지만 Match Git 저장소의 프로파일은 과거 버전을 유지
+- `force: true`로 재생성해도 Git에 제대로 반영되지 않을 수 있음
+
+**근본 해결:**
+```bash
+# 로컬에서 실행 (최초 1회)
+cd pickplay
+fastlane match appstore --force
+
+# 또는 Apple Developer Portal에서 수동 재생성 후
+# Match 저장소에 다시 커밋
+```
+
+---
+
 ## 🎯 해결된 주요 문제들
 
 ### 1️⃣ lottie-react-native Codegen 헤더 파일 누락

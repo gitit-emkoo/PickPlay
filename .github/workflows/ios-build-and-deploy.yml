@@ -428,6 +428,23 @@ jobs:
           mkdir -p ios/build/generated/ios/rngesturehandler_codegen
           touch ios/build/generated/ios/rngesturehandler_codegen/rngesturehandler_codegen.h
           echo "✅ rngesturehandler_codegen 루트 헤더 파일 생성 완료"
+
+          # 6. 특수 케이스: RNGoogleMobileAdsSpec (루트 경로)
+          mkdir -p ios/build/generated/ios/RNGoogleMobileAdsSpec
+          touch ios/build/generated/ios/RNGoogleMobileAdsSpec/RNGoogleMobileAdsSpec.h
+          echo "✅ RNGoogleMobileAdsSpec 루트 헤더 파일 생성 완료"
+
+          # 7. 특수 케이스: rnreanimated (루트 경로)
+          mkdir -p ios/build/generated/ios/rnreanimated
+          touch ios/build/generated/ios/rnreanimated/rnreanimated.h
+          echo "✅ rnreanimated 루트 헤더 파일 생성 완료"
+
+          # 8. 선제 대응: 기타 모듈 루트 헤더 (재발 방지)
+          for root_module in lottiereactnative workletscore safeareacontext rnscreens; do
+            mkdir -p "ios/build/generated/ios/$root_module"
+            touch "ios/build/generated/ios/$root_module/$root_module.h"
+            echo "✅ $root_module 루트 헤더 파일 생성 완료"
+          done
           
           echo "✅ Codegen 디렉토리 및 더미 파일 재생성 완료"
       
