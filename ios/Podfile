@@ -1,4 +1,5 @@
 platform :ios, '15.1'
+ENV['RCT_NEW_ARCH_ENABLED'] ||= '0'
 
 require_relative '../node_modules/react-native/scripts/react_native_pods'
 # Expo autolinking (handle path variations across versions)
