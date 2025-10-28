@@ -198,7 +198,7 @@ platform :ios do
     FileUtils.touch(File.join(rngesturehandler_dir, "ComponentDescriptors.h"))
     
     # 기타 React Native 모듈 더미 파일 생성 (프로액티브 대응)
-    other_modules = ["reanimated", "workletscore", "safeareacontext", "googlemobileads", "rnscreens"]
+    other_modules = ["reanimated", "workletscore", "safeareacontext", "RNGoogleMobileAdsSpec", "rnscreens"]
     other_modules.each do |module_name|
       module_dir = File.join(build_generated_base, "react/renderer/components/#{module_name}")
       FileUtils.mkdir_p(module_dir)
