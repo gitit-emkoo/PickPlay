@@ -219,6 +219,7 @@ platform :ios do
       workletscore
       safeareacontext
       rnscreens
+      rnworklets
     ].each do |root_module|
       root_dir = File.join(build_generated_base, root_module)
       FileUtils.mkdir_p(root_dir)
