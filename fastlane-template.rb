@@ -193,6 +193,11 @@ platform :ios do
     FileUtils.mkdir_p(rnasyncstorage_dir)
     FileUtils.touch(File.join(rnasyncstorage_dir, "rnasyncstorage.h"))
     
+    # 4. 특수 케이스: RNCWebViewSpec (루트 경로)
+    rncwebviewspec_root = File.join(build_generated_base, "RNCWebViewSpec")
+    FileUtils.mkdir_p(rncwebviewspec_root)
+    FileUtils.touch(File.join(rncwebviewspec_root, "RNCWebViewSpec.h"))
+    
     puts "✅ 모든 Codegen 더미 파일 생성 완료"
     
     # 7. 빌드 및 아카이브
