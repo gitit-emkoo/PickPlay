@@ -226,6 +226,24 @@ platform :ios do
       FileUtils.touch(File.join(root_dir, "#{root_module}.h"))
     end
     
+    # 9. 루트 JSI 및 RCT Provider 헤더 선제 생성 (ReactCodegen 루트 복사 대비)
+    %w[
+      safeareacontextJSI.h
+      rnworkletsJSI.h
+      rnscreensJSI.h
+      rnreanimatedJSI.h
+      rngesturehandler_codegenJSI.h
+      rnasyncstorageJSI.h
+      RNGoogleMobileAdsSpecJSI.h
+      RNCWebViewSpecJSI.h
+      RCTUnstableModulesRequiringMainQueueSetupProvider.h
+      RCTThirdPartyComponentsProvider.h
+      RCTModulesConformingToProtocolsProvider.h
+      RCTModuleProviders.h
+    ].each do |header_name|
+      FileUtils.touch(File.join(build_generated_base, header_name))
+    end
+    
     puts "✅ 모든 Codegen 더미 파일 생성 완료"
     
     # 7. 빌드 및 아카이브
