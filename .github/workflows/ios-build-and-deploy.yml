@@ -414,13 +414,22 @@ jobs:
           touch ios/build/generated/ios/react/renderer/components/RNCWebViewSpec/ComponentDescriptors.h
           echo "✅ RNCWebViewSpec 더미 파일 6개 생성 완료"
           
-          # 3. 기타 Codegen 디렉토리 생성 (Optional)
+          # 2.7. rngesturehandler_codegen 디렉토리 및 더미 파일 생성
+          mkdir -p ios/build/generated/ios/react/renderer/components/rngesturehandler_codegen
+          touch ios/build/generated/ios/react/renderer/components/rngesturehandler_codegen/States.h
+          touch ios/build/generated/ios/react/renderer/components/rngesturehandler_codegen/ShadowNodes.h
+          touch ios/build/generated/ios/react/renderer/components/rngesturehandler_codegen/RCTComponentViewHelpers.h
+          touch ios/build/generated/ios/react/renderer/components/rngesturehandler_codegen/Props.h
+          touch ios/build/generated/ios/react/renderer/components/rngesturehandler_codegen/EventEmitters.h
+          touch ios/build/generated/ios/react/renderer/components/rngesturehandler_codegen/ComponentDescriptors.h
+          echo "✅ rngesturehandler_codegen 더미 파일 6개 생성 완료"
+          
+          # 3. 기타 Codegen 디렉토리 생성 (Optional - 향후 에러 방지)
           codegen_dirs=(
             "react/renderer/components/reanimated"
             "react/renderer/components/workletscore"
             "react/renderer/components/safeareacontext"
             "react/renderer/components/googlemobileads"
-            "react/renderer/components/rngesturehandler"
             "react/renderer/components/rnscreens"
           )
           

@@ -187,6 +187,16 @@ platform :ios do
     FileUtils.touch(File.join(rncwebview_dir, "EventEmitters.h"))
     FileUtils.touch(File.join(rncwebview_dir, "ComponentDescriptors.h"))
     
+    # rngesturehandler_codegen 더미 파일 생성 (6개 파일)
+    rngesturehandler_dir = File.join(build_generated_base, "react/renderer/components/rngesturehandler_codegen")
+    FileUtils.mkdir_p(rngesturehandler_dir)
+    FileUtils.touch(File.join(rngesturehandler_dir, "States.h"))
+    FileUtils.touch(File.join(rngesturehandler_dir, "ShadowNodes.h"))
+    FileUtils.touch(File.join(rngesturehandler_dir, "RCTComponentViewHelpers.h"))
+    FileUtils.touch(File.join(rngesturehandler_dir, "Props.h"))
+    FileUtils.touch(File.join(rngesturehandler_dir, "EventEmitters.h"))
+    FileUtils.touch(File.join(rngesturehandler_dir, "ComponentDescriptors.h"))
+    
     puts "✅ build/generated/ios 디렉토리 및 더미 파일 생성 완료"
     
     # 7. 빌드 및 아카이브
