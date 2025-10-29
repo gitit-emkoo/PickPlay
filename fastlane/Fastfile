@@ -50,12 +50,37 @@ def extract_profile_uuid(profile_path)
   # 모바일프로비전 파일에서 UUID 값을 추출
   return "" if profile_path.to_s.strip.empty?
   begin
-    result = sh %(
-      /usr/bin/security cms -D -i "#{profile_path}" > /tmp/profile.plist &&
-      /usr/libexec/PlistBuddy -c "Print :UUID" /tmp/profile.plist 2>/dev/null
-    ), log: false
-    result.to_s.strip
-  rescue
+    # 프로파일 파일이 존재하는지 확인
+    unless File.exist?(profile_path)
+      UI.important("⚠️ 프로파일 파일이 존재하지 않습니다: #{profile_path}")
+      return ""
+    end
+    
+    # security 명령으로 디코딩 후 UUID 추출
+    plist_path = "/tmp/profile_#{Time.now.to_i}.plist"
+    sh("/usr/bin/security cms -D -i '#{profile_path}' > '#{plist_path}' 2>&1")
+    
+    unless File.exist?(plist_path)
+      UI.important("⚠️ 프로파일 디코딩 실패")
+      return ""
+    end
+    
+    uuid_result = sh("/usr/libexec/PlistBuddy -c 'Print :UUID' '#{plist_path}' 2>&1", log: false)
+    uuid = uuid_result.to_s.strip
+    
+    # 임시 파일 정리
+    File.delete(plist_path) if File.exist?(plist_path)
+    
+    # UUID 검증 (36자리 형태: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+    if uuid.length == 36 && uuid.match?(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+      UI.success("✅ 프로파일에서 UUID 추출 성공: #{uuid}")
+      return uuid
+    else
+      UI.important("⚠️ 추출된 값이 유효한 UUID 형식이 아닙니다: #{uuid}")
+      return ""
+    end
+  rescue => e
+    UI.important("⚠️ UUID 추출 실패: #{e.message}")
     ""
   end
 end
@@ -126,21 +151,36 @@ platform :ios do
       keychain_password: KEYCHAIN_PW
     )
 
-    # 프로파일 정보 (UUID/Name 모두 사용, 비어있으면 안전 폴백)
+    # 프로파일 정보 수집
     pp_uuid = (lane_context[SharedValues::SIGH_UDID] || "").to_s.strip
     pp_path = (lane_context[SharedValues::SIGH_PROFILE_PATH] || "").to_s.strip
     
+    UI.message("🔍 match 결과 확인:")
+    UI.message("  - SIGH_UDID: #{pp_uuid.empty? ? '(비어있음)' : pp_uuid}")
+    UI.message("  - SIGH_PROFILE_PATH: #{pp_path.empty? ? '(비어있음)' : pp_path}")
+    
     # UUID가 없으면 프로파일 파일에서 직접 추출
-    if pp_uuid.empty? && !pp_path.empty?
-      pp_uuid = extract_profile_uuid(pp_path)
+    if pp_uuid.empty? || pp_uuid.length != 36
+      if pp_path.empty?
+        UI.user_error!("❌ 프로파일 경로를 찾을 수 없습니다. match 실행 결과를 확인하세요.")
+      end
+      UI.message("🔄 프로파일 파일에서 UUID 추출 시도...")
+      extracted_uuid = extract_profile_uuid(pp_path)
+      if extracted_uuid.empty? || extracted_uuid.length != 36
+        UI.user_error!("❌ 프로파일에서 UUID 추출 실패. 파일 경로: #{pp_path}")
+      end
+      pp_uuid = extracted_uuid
     end
     
     mapping = (lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING] || {})
     mapped_name = (mapping[BUNDLE_ID] || "").to_s.strip  # e.g. "match AppStore com.pickplay.kwcc"
     decoded_name = decode_profile_name(pp_path).strip
     pp_name = !mapped_name.empty? ? mapped_name : decoded_name
-    UI.message("📋 Using provisioning profile UUID: #{pp_uuid}")
-    UI.message("📋 Using provisioning profile Name: #{pp_name}")
+    
+    UI.success("✅ 프로파일 정보:")
+    UI.success("  - UUID: #{pp_uuid}")
+    UI.success("  - Name: #{pp_name}")
+    
     assert_push_in_profile!(pp_path)
 
     # Pods 재설치 (post_install 설정 적용)
