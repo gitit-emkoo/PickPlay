@@ -13,6 +13,7 @@ BUNDLE_ID   = "com.pickplay.kwcc"
 
 TEAM_ID     = ENV["APPLE_TEAM_ID"]                  # GitHub Secrets에서 주입됨
 KEYCHAIN_PW = ENV.fetch("KEYCHAIN_PASSWORD", "actions")
+MATCH_BRANCH = ENV.fetch("MATCH_GIT_BRANCH", "master")  # certs repo 기본 브랜치 (에러 로그에서 master 확인됨)
 
 # --- 공통 CI 준비 ---
 def prepare_ci!
@@ -123,7 +124,10 @@ platform :ios do
       git_url: ENV["MATCH_GIT_URL"],
       git_basic_authorization: Base64.strict_encode64("#{ENV['MATCH_GIT_USERNAME']}:#{ENV['MATCH_GIT_PASSWORD']}"),
       keychain_name: "build",
-      keychain_password: KEYCHAIN_PW
+      keychain_password: KEYCHAIN_PW,
+      git_branch: MATCH_BRANCH,
+      clone_branch_directly: true,
+      shallow_clone: true
     )
 
     UI.message("  → 3. 다음부터는 readonly=true로 사용")
@@ -161,7 +165,10 @@ platform :ios do
       git_url: ENV["MATCH_GIT_URL"],
       git_basic_authorization: Base64.strict_encode64("#{ENV['MATCH_GIT_USERNAME']}:#{ENV['MATCH_GIT_PASSWORD']}"),
       keychain_name: "build",
-      keychain_password: KEYCHAIN_PW
+      keychain_password: KEYCHAIN_PW,
+      git_branch: MATCH_BRANCH,
+      clone_branch_directly: true,
+      shallow_clone: true
     )
 
     # 프로파일 정보 수집
@@ -279,8 +286,9 @@ platform :ios do
       end
     end
     
+    # 1) 매핑 키 타입 보정: Symbol과 String 둘 다 체크
     mapping = (lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING] || {})
-    mapped_name = (mapping[BUNDLE_ID] || "").to_s.strip  # e.g. "match AppStore com.pickplay.kwcc"
+    mapped_name = (mapping[BUNDLE_ID] || mapping[BUNDLE_ID.to_sym] || "").to_s.strip  # e.g. "match AppStore com.pickplay.kwcc"
     decoded_name = decode_profile_name(pp_path).strip
     pp_name = !mapped_name.empty? ? mapped_name : decoded_name
     
@@ -404,6 +412,10 @@ platform :ios do
       UI.important("⚠️ 프로젝트 파일 수정 실패 (xcargs로 대체): #{e.message}")
     end
     
+    # 2) export_options는 이름(Name)만 사용, 없으면 생략 (이미 xcodeproj/xcargs/임베드로 지정됨)
+    export_profiles = {}
+    export_profiles[BUNDLE_ID] = pp_name unless pp_name.empty?
+    
     # 메인 앱 타겟에만 프로비저닝 프로파일 적용 (Pods 제외)
     build_app(
       workspace:     WORKSPACE,
@@ -420,10 +432,8 @@ platform :ios do
         "#{SCHEME}.PROVISIONING_PROFILE_SPECIFIER=#{specifier}",  # 메인 앱 타겟만 지정
         "SWIFT_OPTIMIZATION_LEVEL=-O"
       ].compact.join(" "),
-      export_options: {
-        provisioningProfiles: {
-          BUNDLE_ID => (pp_name.to_s.strip.empty? ? specifier : pp_name)
-        }
+      export_options: export_profiles.empty? ? nil : {
+        provisioningProfiles: export_profiles
       }
     )
 
