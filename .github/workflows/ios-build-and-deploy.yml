@@ -121,6 +121,19 @@ jobs:
           cd "$PROJ_DIR/ios"
           pod install --repo-update
 
+      # ✅ -G 플래그 강제 제거(안전장치)
+      - name: Scrub invalid '-G' flags from xcconfigs (safety)
+        run: |
+          cd "$PROJ_DIR/ios"
+          files=$(grep -RIl " -G " "Pods/Target Support Files" 2>/dev/null || true)
+          if [ -n "$files" ]; then
+            echo "$files" | xargs -I{} perl -i -pe 's/\s-G(\s|$)/ /g' "{}"
+            echo "🧽 Scrubbed -G from:"
+            echo "$files"
+          else
+            echo "👍 No -G flags found in xcconfigs."
+          fi
+
       # 스킴/워크스페이스 점검 — 스킴 누락/오탈자 즉시 발견
       - name: Verify Xcode workspace & schemes (optional but helpful)
         run: |
