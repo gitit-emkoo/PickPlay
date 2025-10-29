@@ -203,6 +203,24 @@ jobs:
             echo "👍 No -G flags found in build config files."
           fi
 
+      # 🎯 BoringSSL-GRPC 전용 정밀 진단/스크럽
+      - name: Targeted scrub and diagnose for BoringSSL-GRPC
+        run: |
+          cd "$PROJ_DIR/ios"
+          set +e
+          echo "🔎 Checking BoringSSL-GRPC Target Support Files for -G..."
+          if [ -d "Pods/Target Support Files/BoringSSL-GRPC" ]; then
+            grep -Rne '\\s-G(\\s|$)' "Pods/Target Support Files/BoringSSL-GRPC" 2>/dev/null || true
+            find "Pods/Target Support Files/BoringSSL-GRPC" -name "*.xcconfig" -type f -exec perl -i -pe 's/\\s-G(?=\\s|$)/ /g' {} \\; 2>/dev/null || true
+          fi
+          echo "🔎 Checking xcodebuild settings for BoringSSL-GRPC..."
+          xcodebuild -showBuildSettings -project Pods/Pods.xcodeproj -target BoringSSL-GRPC -configuration Release 2>/dev/null | grep -n ' -G ' || true
+          set -e
+          # 최종 안전장치: Pods 프로젝트 전체에서 -G 재제거
+          if [ -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
+            perl -i -pe 's/\\s-G(?=\\s|$)/ /g' "Pods/Pods.xcodeproj/project.pbxproj"
+          fi
+
       # Verify/patch aps-environment for Release
       - name: Verify/patch aps-environment for Release
         run: |
