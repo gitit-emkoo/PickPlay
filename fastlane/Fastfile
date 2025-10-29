@@ -300,6 +300,13 @@ platform :ios do
 
     # Pods 재설치 (post_install 설정 적용)
     sh("cd #{IOS_DIR} && pod install")
+    
+    # post_install 후에도 -G 플래그가 남을 수 있으므로 추가 스크럽
+    UI.message("🧽 Additional -G flag scrubbing after pod install...")
+    sh("cd #{IOS_DIR} && " +
+       "find 'Pods/Target Support Files' -name '*.xcconfig' -type f -exec perl -i -pe 's/\\s-G(?=\\s|$)/ /g' {} \\; 2>/dev/null || true && " +
+       "[ -f 'Pods/Pods.xcodeproj/project.pbxproj' ] && " +
+       "perl -i -pe 's/\\s-G(?=\\s|$)/ /g' 'Pods/Pods.xcodeproj/project.pbxproj' 2>/dev/null || true")
 
     # (선택) 빌드 번호 자동 증가
     increment_build_number(xcodeproj: XCODEPROJ)

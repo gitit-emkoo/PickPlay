@@ -169,13 +169,14 @@ jobs:
             echo "✅ [Checkpoint 1] No '-G' flags found in build config files (0 instances confirmed)"
           fi
 
-      # ✅ -G 플래그 강제 제거(안전장치) - 더 강력한 검사/제거
-      - name: Scrub invalid '-G' flags from xcconfigs (safety)
+      # ✅ -G 플래그 강제 제거(안전장치) - BoringSSL-GRPC 타겟 포함 모든 곳 스크럽
+      - name: Scrub invalid '-G' flags from xcconfigs and pbxproj (safety)
         run: |
           cd "$PROJ_DIR/ios"
-          # 모든 xcconfig 파일 검색 및 스크럽
+          
+          # 1. 모든 .xcconfig 파일에서 -G 제거
           find "Pods/Target Support Files" -name "*.xcconfig" -type f 2>/dev/null | while read file; do
-            if grep -q " -G " "$file" 2>/dev/null; then
+            if grep -qE '\s-G(\s|$)' "$file" 2>/dev/null; then
               perl -i -pe 's/\s-G(\s|$)/ /g' "$file"
               perl -i -pe 's/-G\s/ /g' "$file"
               perl -i -pe 's/^-G\b//g' "$file"
@@ -183,13 +184,23 @@ jobs:
             fi
           done
           
-          # 검증: 남아있는 -G 플래그 확인
-          remaining=$(grep -r " -G " "Pods/Target Support Files" 2>/dev/null | wc -l || echo 0)
+          # 2. Pods.xcodeproj의 project.pbxproj에서도 -G 제거 (BoringSSL-GRPC 등 모든 타겟)
+          if [ -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
+            if grep -qE '\s-G(\s|$)' "Pods/Pods.xcodeproj/project.pbxproj" 2>/dev/null; then
+              perl -i -pe 's/\s-G(\s|$)/ /g' "Pods/Pods.xcodeproj/project.pbxproj"
+              perl -i -pe 's/-G\s/ /g' "Pods/Pods.xcodeproj/project.pbxproj"
+              perl -i -pe 's/^-G\b//g' "Pods/Pods.xcodeproj/project.pbxproj"
+              echo "🧽 Scrubbed -G from Pods.xcodeproj/project.pbxproj"
+            fi
+          fi
+          
+          # 3. 검증: 남아있는 -G 플래그 확인 (BoringSSL-GRPC 포함)
+          remaining=$(grep -rE '\s-G(\s|$)' "Pods/Target Support Files" "Pods/Pods.xcodeproj" 2>/dev/null | grep -v "README\|\.md\|cmake" | wc -l || echo 0)
           if [ "$remaining" -gt 0 ]; then
             echo "::warning::Still found $remaining instances of '-G' flag"
-            grep -rn " -G " "Pods/Target Support Files" 2>/dev/null | head -5
+            grep -rnE '\s-G(\s|$)' "Pods/Target Support Files" "Pods/Pods.xcodeproj" 2>/dev/null | grep -v "README\|\.md\|cmake" | head -10
           else
-            echo "👍 No -G flags found in xcconfigs."
+            echo "👍 No -G flags found in build config files."
           fi
 
       # Verify/patch aps-environment for Release
