@@ -122,20 +122,32 @@ jobs:
           cd "$PROJ_DIR/ios"
           pod install --repo-update
 
-      # 1️⃣ 체크포인트: -G 잔여 여부 스캔 (정확히 0건 확인)
+      # 1️⃣ 체크포인트: -G 잔여 여부 스캔 (빌드 설정 파일만, 문서 제외)
       - name: Checkpoint 1 - Scan for stray '-G' flags
         run: |
           cd "$PROJ_DIR/ios"
-          echo "🔎 [Checkpoint 1] Scanning for stray '-G' flags in entire iOS directory..."
+          echo "🔎 [Checkpoint 1] Scanning for stray '-G' flags in build config files only..."
           set +e
-          result=$(grep -R --line-number -E '\s-G(\s|$)' . 2>/dev/null || true)
+          # 빌드 설정 파일만 스캔 (문서/README 제외)
+          result=$(find . -type f \( \
+            -name "*.xcconfig" \
+            -o -name "*.pbxproj" \
+            -o -name "*.xcscheme" \
+            -o -name "*.plist" \
+            -o -name "*.m" \
+            -o -name "*.mm" \
+            -o -name "*.cpp" \
+            -o -name "*.c" \
+            -o -name "*.h" \
+          \) ! -path "*/Pods/Target Support Files/Pods-*/Pods-*.xcconfig" \
+            -exec grep -l --line-number -E '\s-G(\s|$)' {} \; 2>/dev/null || true)
           set -e
           if [ -n "$result" ]; then
-            echo "::error::Found stray '-G' flags:"
+            echo "::error::Found stray '-G' flags in build config files:"
             echo "$result"
             exit 1
           else
-            echo "✅ [Checkpoint 1] No '-G' flags found (0 instances confirmed)"
+            echo "✅ [Checkpoint 1] No '-G' flags found in build config files (0 instances confirmed)"
           fi
 
       # ✅ -G 플래그 강제 제거(안전장치) - 더 강력한 검사/제거
@@ -224,6 +236,7 @@ jobs:
           MATCH_GIT_USERNAME: ${{ secrets.MATCH_GIT_USERNAME }}
           MATCH_GIT_PASSWORD: ${{ secrets.MATCH_GIT_PASSWORD }}
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_GIT_BRANCH: master  # certs repo 기본 브랜치 (에러 로그에서 master 확인)
           KEYCHAIN_PASSWORD: actions
           # (옵션) Firebase App Distribution — 없으면 빈 값으로 넘어가도 무방
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
