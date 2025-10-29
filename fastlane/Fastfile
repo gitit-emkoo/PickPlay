@@ -1,46 +1,74 @@
-# This file contains the fastlane.tools configuration
-# You can find the documentation at https://docs.fastlane.tools
+﻿# frozen_string_literal: true
+require "base64"
 
 default_platform(:ios)
 
+EXPO_PROJECT_ROOT = File.expand_path("..", __dir__)
+XCODEPROJ = File.join(EXPO_PROJECT_ROOT, "ios/PickPlay.xcodeproj")
+WORKSPACE = File.join(EXPO_PROJECT_ROOT, "ios/PickPlay.xcworkspace")
+SCHEME    = "PickPlay"
+BUNDLE_ID = "com.pickplay.kwcc"
+
 platform :ios do
-  desc "Build and upload to TestFlight"
+  desc "TestFlight 배포 (Match만 사용, p12 수동 import 제거)"
   lane :beta do
-    # 인증서 및 프로파일 설정
+    opt_out_usage
+    setup_ci
+    ensure_xcode_version(version: "16.2")
+
     create_keychain(
       name: "build",
-      password: "temp123",
+      password: ENV.fetch("KEYCHAIN_PASSWORD", "actions"),
       default_keychain: true,
       unlock: true,
-      timeout: 3600
+      timeout: 3600,
+      add_to_search_list: true
     )
-    
-    # 인증서 가져오기
-    import_certificate(
-      certificate_path: "../certificate.p12",
-      certificate_password: ENV["P12_PASSWORD"],
-      keychain_name: "build"
+
+    api_key = app_store_connect_api_key(
+      key_id:      ENV["APP_STORE_CONNECT_API_KEY_ID"],
+      issuer_id:   ENV["APP_STORE_CONNECT_API_ISSUER_ID"],
+      key_filepath: ENV["APP_STORE_CONNECT_API_KEY_PATH"],
+      duration:    1200,
+      in_house:    false
     )
-    
-    # 프로비저닝 프로파일 설치
-    install_provisioning_profile(
-      path: "../provisioning_profile.mobileprovision"
+
+    match(
+      type: "appstore",
+      readonly: true,
+      app_identifier: BUNDLE_ID,
+      team_id: ENV["APPLE_TEAM_ID"],
+      api_key: api_key,
+      git_url: ENV["MATCH_GIT_URL"],
+      git_basic_authorization: Base64.strict_encode64("#{ENV['MATCH_GIT_USERNAME']}:#{ENV['MATCH_GIT_PASSWORD']}"),
+      keychain_name: "build",
+      keychain_password: ENV.fetch("KEYCHAIN_PASSWORD", "actions")
     )
-    
-    # 빌드 및 아카이브
+
+    increment_build_number(xcodeproj: XCODEPROJ)
+
     build_app(
-      workspace: "PickPlay.xcworkspace",
-      scheme: "PickPlay",
+      workspace: WORKSPACE,
+      scheme: SCHEME,
       configuration: "Release",
       export_method: "app-store",
-      export_options: "ExportOptions.plist"
+      clean: true,
+      skip_codesigning: false,
+      xcargs: "SWIFT_OPTIMIZATION_LEVEL=-O",
+      export_options: {
+        provisioningProfiles: {
+          BUNDLE_ID => "match AppStore #{BUNDLE_ID}"
+        }
+      }
     )
-    
-    # TestFlight 업로드
+
     upload_to_testflight(
-      apple_id: ENV["APPLE_ID"],
-      app_identifier: "com.kwcc.pickplay",
-      skip_waiting_for_build_processing: true
+      api_key: api_key,
+      app_identifier: BUNDLE_ID,
+      skip_waiting_for_build_processing: true,
+      skip_submission: true
     )
+
+    UI.success("TestFlight 업로드 성공")
   end
 end

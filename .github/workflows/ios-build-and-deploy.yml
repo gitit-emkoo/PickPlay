@@ -106,11 +106,7 @@ jobs:
           echo "== Xcode projects =="
           ls -1 *.xcodeproj || true
 
-      - name: Install CocoaPods
-        run: |
-          cd "$PROJ_DIR/ios"
-          pod install --repo-update
-
+      # Pods 캐시를 pod install 이전에 두어 복원 효과를 누림
       - name: Cache Pods
         uses: actions/cache@v4
         with:
@@ -119,6 +115,28 @@ jobs:
             ${{ env.PROJ_DIR }}/ios/Podfile.lock
           key: ${{ runner.os }}-pods-${{ hashFiles(format('{0}/ios/Podfile.lock', env.PROJ_DIR)) }}
           restore-keys: ${{ runner.os }}-pods-
+
+      - name: Install CocoaPods
+        run: |
+          cd "$PROJ_DIR/ios"
+          pod install --repo-update
+
+      # 스킴/워크스페이스 점검 — 스킴 누락/오탈자 즉시 발견
+      - name: Verify Xcode workspace & schemes (optional but helpful)
+        run: |
+          cd "$PROJ_DIR/ios"
+          if [ -f "PickPlay.xcworkspace/contents.xcworkspacedata" ]; then
+            xcodebuild -list -workspace PickPlay.xcworkspace
+          else
+            # 동적 감지: 첫 번째 xcworkspace에 대해 목록 출력
+            WS=$(ls -1 *.xcworkspace 2>/dev/null | head -n1 || true)
+            if [ -n "$WS" ]; then
+              echo "Detected workspace: $WS"
+              xcodebuild -list -workspace "$WS"
+            else
+              echo "::warning::No .xcworkspace found yet."
+            fi
+          fi
 
       - name: Fastlane beta
         env:
@@ -133,9 +151,10 @@ jobs:
           MATCH_GIT_USERNAME: ${{ secrets.MATCH_GIT_USERNAME }}
           MATCH_GIT_PASSWORD: ${{ secrets.MATCH_GIT_PASSWORD }}
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-          # (옵션) Firebase App Distribution - 없으면 생략됨
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN || '' }}
-          FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID || '' }}
+          KEYCHAIN_PASSWORD: actions
+          # (옵션) Firebase App Distribution — 없으면 빈 값으로 넘어가도 무방
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+          FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
         run: |
           cd "$PROJ_DIR"
           if [ -f Gemfile ]; then
