@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       branch:
-        description: 'Branch to run on'
+        description: 'Branch to checkout'
         required: false
         default: 'release'
         type: string
