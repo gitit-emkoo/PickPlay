@@ -82,6 +82,65 @@ post_install do |installer|
     end
   end
 
+  # --- 공통 스크럽 로직: 빌드설정에서 '-G' 제거 ---
+  scrub_keys = %w[
+    OTHER_CFLAGS
+    OTHER_CPLUSPLUSFLAGS
+    OTHER_LDFLAGS
+    WARNING_CFLAGS
+    OTHER_CFLAGS[arch=arm64]
+    OTHER_CPLUSPLUSFLAGS[arch=arm64]
+    OTHER_LDFLAGS[arch=arm64]
+    OTHER_CFLAGS[sdk=iphoneos*]
+    OTHER_CPLUSPLUSFLAGS[sdk=iphoneos*]
+    OTHER_LDFLAGS[sdk=iphoneos*]
+    OTHER_CFLAGS[sdk=iphonesimulator*]
+    OTHER_CPLUSPLUSFLAGS[sdk=iphonesimulator*]
+    OTHER_LDFLAGS[sdk=iphonesimulator*]
+  ]
+
+  scrub_values = lambda do |config|
+    scrub_keys.each do |key|
+      v = config.build_settings[key]
+      next if v.nil? || (v.is_a?(String) && v.strip.empty?)
+      if v.is_a?(Array)
+        cleaned = v.map { |s| s.to_s.gsub(/(^|\s)-G(?=\s|$)/, ' ').squeeze(' ').strip }.reject(&:empty?)
+        config.build_settings[key] = cleaned.empty? ? ['$(inherited)'] : cleaned
+      elsif v.is_a?(String)
+        cleaned = v.gsub(/(^|\s)-G(?=\s|$)/, ' ').squeeze(' ').strip
+        config.build_settings[key] = cleaned.empty? ? '$(inherited)' : cleaned
+      end
+    end
+  end
+
+  # 1) Pods 프로젝트 전체 스크럽
+  installer.pods_project.targets.each do |t|
+    t.build_configurations.each { |c| scrub_values.call(c) }
+  end
+
+  # 2) 사용자(App) 프로젝트도 스크럽 ✅ 핵심 추가
+  installer.aggregate_targets.each do |agg|
+    user_project = agg.user_project
+    next if user_project.nil?
+    user_project.targets.each do |t|
+      t.build_configurations.each { |c| scrub_values.call(c) }
+    end
+    user_project.build_configurations.each { |c| scrub_values.call(c) } # 프로젝트 레벨도
+    user_project.save
+  end
+
+  # 3) .xcconfig 직접 치환 (최종 안전장치)
+  pods_root = installer.sandbox.root.to_s
+  Dir.glob(File.join(pods_root, 'Target Support Files', '**', '*.xcconfig')).each do |xc|
+    txt = File.read(xc)
+    cleaned = txt.gsub(/\s-G(?=\s|$)/, ' ').squeeze(' ')
+    if cleaned != txt
+      File.write(xc, cleaned)
+      puts "🧽 scrubbed '-G' in #{File.basename(xc)}"
+    end
+  end
+
+  # === 기존 커스텀 빌드 설정 ===
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
       name = target.name.to_s
@@ -91,24 +150,6 @@ post_install do |installer|
         puts "⚠️ [#{name}] iOS deployment target 업그레이드: #{old_target} → 15.1"
       end
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-
-      if name.include?('BoringSSL') || name.include?('gRPC')
-        %w[
-          OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS WARNING_CFLAGS
-          OTHER_CFLAGS[sdk=iphoneos*] OTHER_CPLUSPLUSFLAGS[sdk=iphoneos*] WARNING_CFLAGS[sdk=iphoneos*]
-          OTHER_CFLAGS[sdk=iphonesimulator*] OTHER_CPLUSPLUSFLAGS[sdk=iphonesimulator*]
-        ].each do |key|
-          next unless config.build_settings[key]
-          flags = config.build_settings[key]
-          if flags.is_a?(Array)
-            flags.reject! { |f| f.to_s =~ /-G(\s|$)/ }
-            config.build_settings[key] = flags.empty? ? ['$(inherited)'] : flags
-          elsif flags.is_a?(String)
-            flags = flags.gsub(/(^|\s)-G(\s|$)/, ' ').strip
-            config.build_settings[key] = flags.empty? ? '$(inherited)' : flags
-          end
-        end
-      end
 
       config.build_settings['ENABLE_BITCODE'] = 'NO'
       config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'

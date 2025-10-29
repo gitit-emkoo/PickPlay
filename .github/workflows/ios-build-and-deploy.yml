@@ -122,15 +122,34 @@ jobs:
           cd "$PROJ_DIR/ios"
           pod install --repo-update
 
-      # ✅ -G 플래그 강제 제거(안전장치)
+      # Debug: '-G' 플래그가 어디서 오는지 즉시 탐지
+      - name: Scan for stray '-G' flags
+        run: |
+          cd "$PROJ_DIR/ios"
+          echo "🔎 scanning for stray '-G' flags..."
+          set +e
+          grep -R --line-number -E '\s-G(\s|$)' . || true
+          set -e
+
+      # ✅ -G 플래그 강제 제거(안전장치) - 더 강력한 검사/제거
       - name: Scrub invalid '-G' flags from xcconfigs (safety)
         run: |
           cd "$PROJ_DIR/ios"
-          files=$(grep -RIl " -G " "Pods/Target Support Files" 2>/dev/null || true)
-          if [ -n "$files" ]; then
-            echo "$files" | xargs -I{} perl -i -pe 's/\s-G(\s|$)/ /g' "{}"
-            echo "🧽 Scrubbed -G from:"
-            echo "$files"
+          # 모든 xcconfig 파일 검색 및 스크럽
+          find "Pods/Target Support Files" -name "*.xcconfig" -type f 2>/dev/null | while read file; do
+            if grep -q " -G " "$file" 2>/dev/null; then
+              perl -i -pe 's/\s-G(\s|$)/ /g' "$file"
+              perl -i -pe 's/-G\s/ /g' "$file"
+              perl -i -pe 's/^-G\b//g' "$file"
+              echo "🧽 Scrubbed -G from: $file"
+            fi
+          done
+          
+          # 검증: 남아있는 -G 플래그 확인
+          remaining=$(grep -r " -G " "Pods/Target Support Files" 2>/dev/null | wc -l || echo 0)
+          if [ "$remaining" -gt 0 ]; then
+            echo "::warning::Still found $remaining instances of '-G' flag"
+            grep -rn " -G " "Pods/Target Support Files" 2>/dev/null | head -5
           else
             echo "👍 No -G flags found in xcconfigs."
           fi
