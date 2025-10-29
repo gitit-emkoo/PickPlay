@@ -42,10 +42,11 @@ jobs:
           ruby-version: "3.2"
           bundler-cache: true
 
-      - name: Install Fastlane/CocoaPods
+      - name: Install Fastlane/CocoaPods/xcodeproj
         run: |
           gem install fastlane --no-document
           gem install cocoapods --no-document
+          gem install xcodeproj --no-document
 
       # 프로젝트 디렉토리: pickplay
       - name: Detect project dir

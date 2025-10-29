@@ -296,6 +296,64 @@ platform :ios do
     specifier = pp_uuid
     UI.message("📋 Using provisioning profile specifier: #{specifier}")
     
+    # ✅ entitlements 파일 확인 및 Push Notifications 강제 설정
+    entitlements_files = Dir.glob(File.join(IOS_DIR, "**", "*.entitlements"))
+    if entitlements_files.empty?
+      UI.important("⚠️ entitlements 파일을 찾을 수 없습니다.")
+    else
+      entitlements_files.each do |ent_file|
+        UI.message("🔍 entitlements 확인: #{ent_file}")
+        # aps-environment가 없으면 추가
+        result = sh("/usr/libexec/PlistBuddy -c 'Print :aps-environment' '#{ent_file}' 2>&1", log: false)
+        if result.to_s.strip.empty? || result.to_s.include?("Does Not Exist")
+          UI.message("  → aps-environment 추가: production")
+          sh("/usr/libexec/PlistBuddy -c 'Add :aps-environment string production' '#{ent_file}' 2>&1", log: false)
+        elsif result.to_s.strip != "production"
+          UI.message("  → aps-environment 수정: #{result.strip} → production")
+          sh("/usr/libexec/PlistBuddy -c 'Set :aps-environment production' '#{ent_file}' 2>&1")
+        else
+          UI.success("  ✅ aps-environment=production 확인됨")
+        end
+      end
+    end
+    
+    # ✅ 프로파일을 프로젝트에 직접 임베드 (Xcode 인식 확실히 보장)
+    if !pp_path.empty? && File.exist?(pp_path)
+      embedded_profile_path = File.join(IOS_DIR, SCHEME, "embedded.mobileprovision")
+      FileUtils.mkdir_p(File.dirname(embedded_profile_path))
+      FileUtils.cp(pp_path, embedded_profile_path)
+      UI.success("✅ 프로파일 임베드 완료: #{embedded_profile_path}")
+    end
+    
+    # ✅ xcodeproj gem으로 프로젝트 파일 직접 수정 (가장 확실한 방법)
+    begin
+      require 'xcodeproj'
+      project = Xcodeproj::Project.open(XCODEPROJ)
+      
+      project.targets.each do |target|
+        next unless target.name == SCHEME
+        
+        target.build_configurations.each do |config|
+          next unless config.name == "Release"
+          
+          # 프로비저닝 프로파일 UUID 강제 설정
+          config.build_settings['PROVISIONING_PROFILE_SPECIFIER'] = specifier
+          config.build_settings['CODE_SIGN_STYLE'] = 'Manual'
+          config.build_settings['DEVELOPMENT_TEAM'] = TEAM_ID
+          config.build_settings['CODE_SIGN_IDENTITY'] = 'Apple Distribution'
+          
+          UI.message("✅ #{target.name} (#{config.name}): 프로파일 설정 완료")
+        end
+      end
+      
+      project.save
+      UI.success("✅ Xcode 프로젝트 파일 업데이트 완료")
+    rescue LoadError
+      UI.important("⚠️ xcodeproj gem 없음 - gem install xcodeproj 필요하지만 xcargs로도 진행 가능")
+    rescue => e
+      UI.important("⚠️ 프로젝트 파일 수정 실패 (xcargs로 대체): #{e.message}")
+    end
+    
     # 메인 앱 타겟에만 프로비저닝 프로파일 적용 (Pods 제외)
     build_app(
       workspace:     WORKSPACE,
