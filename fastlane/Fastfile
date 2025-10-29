@@ -46,6 +46,20 @@ def decode_profile_name(profile_path)
   end
 end
 
+def extract_profile_uuid(profile_path)
+  # 모바일프로비전 파일에서 UUID 값을 추출
+  return "" if profile_path.to_s.strip.empty?
+  begin
+    result = sh %(
+      /usr/bin/security cms -D -i "#{profile_path}" > /tmp/profile.plist &&
+      /usr/libexec/PlistBuddy -c "Print :UUID" /tmp/profile.plist 2>/dev/null
+    ), log: false
+    result.to_s.strip
+  rescue
+    ""
+  end
+end
+
 def assert_push_in_profile!(profile_path)
   # 푸시 권한 포함 여부 로그 출력(aps-environment)
   return if profile_path.to_s.strip.empty?
@@ -115,6 +129,12 @@ platform :ios do
     # 프로파일 정보 (UUID/Name 모두 사용, 비어있으면 안전 폴백)
     pp_uuid = (lane_context[SharedValues::SIGH_UDID] || "").to_s.strip
     pp_path = (lane_context[SharedValues::SIGH_PROFILE_PATH] || "").to_s.strip
+    
+    # UUID가 없으면 프로파일 파일에서 직접 추출
+    if pp_uuid.empty? && !pp_path.empty?
+      pp_uuid = extract_profile_uuid(pp_path)
+    end
+    
     mapping = (lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING] || {})
     mapped_name = (mapping[BUNDLE_ID] || "").to_s.strip  # e.g. "match AppStore com.pickplay.kwcc"
     decoded_name = decode_profile_name(pp_path).strip
@@ -135,8 +155,11 @@ platform :ios do
       teamid: TEAM_ID
     )
 
-    # 🚀 아카이브 (UUID 우선, 없으면 Name 사용)
-    specifier = (!pp_uuid.empty? && pp_uuid.length == 36) ? pp_uuid : pp_name
+    # 🚀 아카이브 — specifier는 반드시 UUID로 고정 (공백 파싱 문제 방지)
+    if pp_uuid.empty? || pp_uuid.length != 36
+      UI.user_error!("유효한 프로비저닝 프로파일 UUID를 찾지 못했습니다. match 결과를 확인하세요.")
+    end
+    specifier = pp_uuid
     UI.message("📋 Using provisioning profile specifier: #{specifier}")
     
     build_app(
@@ -155,7 +178,7 @@ platform :ios do
       ].compact.join(" "),
       export_options: {
         provisioningProfiles: {
-          BUNDLE_ID => (specifier.length == 36 ? specifier : pp_name)
+          BUNDLE_ID => (pp_name.to_s.strip.empty? ? specifier : pp_name)
         }
       }
     )
