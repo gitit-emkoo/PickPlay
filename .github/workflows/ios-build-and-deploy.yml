@@ -122,6 +122,25 @@ jobs:
           cd "$PROJ_DIR/ios"
           pod install --repo-update
 
+      # Diagnose build settings for unexpected -G flags
+      - name: Diagnose build settings for '-G'
+        run: |
+          cd "$PROJ_DIR/ios"
+          if [ -f "PickPlay.xcworkspace/contents.xcworkspacedata" ]; then
+            echo "🔎 Checking build settings for '-G'..."
+            xcodebuild -showBuildSettings -workspace PickPlay.xcworkspace -scheme PickPlay -configuration Release | grep -n " -G " || true
+          fi
+
+      # Scrub '-G' directly from project.pbxproj (app and pods)
+      - name: Scrub '-G' from pbxproj (app and pods)
+        run: |
+          cd "$PROJ_DIR/ios"
+          for f in "PickPlay.xcodeproj/project.pbxproj" "Pods/Pods.xcodeproj/project.pbxproj"; do
+            if [ -f "$f" ]; then
+              perl -i -pe 's/\s-G(?=\s|\"|$)/ /g' "$f"
+            fi
+          done
+
       # 1️⃣ 체크포인트: -G 잔여 여부 스캔 (빌드 설정 파일만, 문서 제외)
       - name: Checkpoint 1 - Scan for stray '-G' flags
         run: |
