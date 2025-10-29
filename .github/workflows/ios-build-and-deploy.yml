@@ -80,9 +80,23 @@ jobs:
           cd "$PROJ_DIR"
           npm i --save --legacy-peer-deps \
             @react-native-community/cli \
-            @react-native-community/cli-platform-ios
-          # 확인 로그
+            @react-native-community/cli-platform-ios \
+            expo-modules-autolinking
           node -e "console.log('RN CLI:', require('@react-native-community/cli/package.json').version); console.log('CLI iOS:', require('@react-native-community/cli-platform-ios/package.json').version)"
+
+      - name: Ensure iOS native project (conditional Expo prebuild)
+        run: |
+          cd "$PROJ_DIR"
+          if [ -z "$(ls -1 ios/*.xcodeproj 2>/dev/null)" ]; then
+            echo "🛠  No .xcodeproj found — running Expo prebuild (iOS only)..."
+            npx expo prebuild --platform ios --no-install --clean
+            # ✅ 커밋된 Podfile로 복원 (prebuild가 덮어썼을 수 있음)
+            git checkout -- ios/Podfile || true
+            echo "== ios contents after prebuild =="
+            ls -la ios
+          else
+            echo "✅ .xcodeproj found; skipping prebuild."
+          fi
 
       - name: Debug iOS folder
         run: |
@@ -119,9 +133,9 @@ jobs:
           MATCH_GIT_USERNAME: ${{ secrets.MATCH_GIT_USERNAME }}
           MATCH_GIT_PASSWORD: ${{ secrets.MATCH_GIT_PASSWORD }}
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-          # (옵션) Firebase
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
-          FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
+          # (옵션) Firebase App Distribution - 없으면 생략됨
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN || '' }}
+          FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID || '' }}
         run: |
           cd "$PROJ_DIR"
           if [ -f Gemfile ]; then

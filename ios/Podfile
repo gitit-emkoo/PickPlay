@@ -1,7 +1,7 @@
 platform :ios, '15.1'
 ENV['RCT_NEW_ARCH_ENABLED'] ||= '0'
 
-# RN autolinking 스크립트 로드 (양쪽 경로 시도 + 폴백)
+# ✅ RN iOS autolinking 스크립트 로드 (양쪽 경로 시도 + 폴백)
 begin
   require_relative '../node_modules/@react-native-community/cli-platform-ios/native_modules'
 rescue LoadError
@@ -13,11 +13,10 @@ rescue LoadError
   end
 end
 
-# Xcode 프로젝트 명시
-project 'PickPlay.xcodeproj'
-
 require_relative '../node_modules/react-native/scripts/react_native_pods'
-# Expo autolinking (handle path variations across versions)
+prepare_react_native_project!  # ✅ React Native 표준 초기화
+
+# ✅ Expo autolinking (없어도 빌드 진행되도록 폴백)
 begin
   require_relative '../node_modules/expo-modules-autolinking/scripts/autolinking'
 rescue LoadError
@@ -25,42 +24,39 @@ rescue LoadError
     require_relative '../node_modules/expo-modules-autolinking/build/scripts/autolinking'
   rescue LoadError
     Pod::UI.puts '⚠️  expo-modules-autolinking not found; continuing without it'
-    # Fallback no-ops to avoid Podfile crash (keeps build going)
     def use_expo_modules!(*args); end
-    module Expo
-      module PostInstall
-        def self.install!(*args); end
-      end
-    end
+    module Expo; module PostInstall; def self.install!(*args); end; end; end
   end
 end
 
 use_frameworks! :linkage => :static
+$RNReanimated = { :codegen_disabled => true } # Old Arch에서 Reanimated codegen 비활성
 
-# --- REANIMATED CodeGen 비활성화 (Old Architecture) ---
-# reanimated가 New Architecture를 필수로 요구하는 것을 우회
-$RNReanimated = { :codegen_disabled => true }
-# ----------------------------------------------------
+# ✅ .xcodeproj 동적 감지 (이름/유무 차이 자동 처리)
+xcodeproj_path = Dir.glob(File.join(__dir__, '*.xcodeproj')).first
+if xcodeproj_path.nil?
+  Pod::UI.puts "❌ No .xcodeproj found under ios/. Make sure to commit ios/ or let CI run Expo prebuild."
+  raise "Missing Xcode project"
+end
+xcodeproj_name = File.basename(xcodeproj_path)               # e.g. "PickPlay.xcodeproj"
+target_name    = File.basename(xcodeproj_path, '.xcodeproj') # e.g. "PickPlay"
 
-target 'PickPlay' do
-  # Expo autolinking for native modules
-  use_expo_modules!
+project xcodeproj_name
 
-  # RN autolinking (반드시 호출)
-  use_native_modules!
+target target_name do
+  use_expo_modules!   # 있으면 사용
+
+  # ✅ RN autolinking (config 받아서 reactNativePath 사용)
+  config = use_native_modules!
 
   use_react_native!(
-    :path => '../node_modules/react-native',
+    :path => (config && config[:reactNativePath]) || '../node_modules/react-native',
     :hermes_enabled => true,
-    :fabric_enabled => false,  # Old Architecture
-    :app_path => "#{Pod::Config.instance.installation_root}/.."
+    :fabric_enabled => false,   # Old Architecture
+    :app_path => ".."
   )
-  
-  # lottie-react-native는 Old Architecture에서 Codegen을 사용하지 않으므로 제외
-  # pod 'lottie-ios', '~> 4.5.0', :modular_headers => true
 
-  # Pin Firebase iOS SDK versions to a stable line for RNFB v23.x
-  # Xcode 16.3 호환성을 위해 안정적인 버전 사용
+  # (선택) Firebase 직접 핀 — RNFirebase를 안 쓸 때만 유지
   firebase_version = '10.25.0'
   pod 'FirebaseCore', firebase_version
   pod 'FirebaseCoreInternal', firebase_version
@@ -71,92 +67,57 @@ end
 
 post_install do |installer|
   puts "🔧 [post_install] Custom Podfile post_install hook executing..."
-  
-  # React Native post install tweaks
   react_native_post_install(installer)
-  
-  # Expo post install (must be after RN)
   Expo::PostInstall.install!(installer)
 
-  # ✅ GoogleUserMessagingPlatform XCFrameworks 복사 스크립트 안정화
+  # === 아래는 기존 커스텀 유지 ===
   installer.pods_project.targets.each do |target|
     target_name = target.name.to_s
-    
     if target_name == 'GoogleUserMessagingPlatform'
-      puts "🔧 [GoogleUserMessagingPlatform] XCFrameworks 복사 스크립트 설정 확인..."
-      
-      target.build_phases.each do |build_phase|
-        if build_phase.is_a?(Xcodeproj::Project::Object::PBXShellScriptBuildPhase) && 
-           build_phase.name == '[CP] Copy XCFrameworks'
-          build_phase.run_only_for_deployment_postprocessing = 0
-          puts "🧩 [GoogleUserMessagingPlatform] XCFrameworks 복사 스크립트 감지 및 조정됨"
+      target.build_phases.each do |phase|
+        if phase.is_a?(Xcodeproj::Project::Object::PBXShellScriptBuildPhase) && phase.name == '[CP] Copy XCFrameworks'
+          phase.run_only_for_deployment_postprocessing = 0
         end
       end
     end
   end
-  
+
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
       name = target.name.to_s
 
-      # ✅ iOS Deployment Target 강제 설정 (가장 먼저 처리)
-      # 모든 Pod에서 15.1 이상으로 강제 설정 (경고 제거)
       old_target = config.build_settings['IPHONEOS_DEPLOYMENT_TARGET']
       if old_target && (old_target.to_f < 15.1)
         puts "⚠️ [#{name}] iOS deployment target 업그레이드: #{old_target} → 15.1"
       end
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
 
-      # ✅ BoringSSL-GRPC: -G 플래그 제거 (iOS arm64 타겟에서 에러)
       if name.include?('BoringSSL') || name.include?('gRPC')
-        # 모든 C/C++ 플래그 키에서 -G 제거
-        flag_keys = [
-          'OTHER_CFLAGS',
-          'OTHER_CPLUSPLUSFLAGS', 
-          'WARNING_CFLAGS',
-          'OTHER_CFLAGS[sdk=iphoneos*]',
-          'OTHER_CPLUSPLUSFLAGS[sdk=iphoneos*]',
-          'WARNING_CFLAGS[sdk=iphoneos*]',
-          'OTHER_CFLAGS[sdk=iphonesimulator*]',
-          'OTHER_CPLUSPLUSFLAGS[sdk=iphonesimulator*]'
-        ]
-        
-        flag_keys.each do |key|
+        %w[
+          OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS WARNING_CFLAGS
+          OTHER_CFLAGS[sdk=iphoneos*] OTHER_CPLUSPLUSFLAGS[sdk=iphoneos*] WARNING_CFLAGS[sdk=iphoneos*]
+          OTHER_CFLAGS[sdk=iphonesimulator*] OTHER_CPLUSPLUSFLAGS[sdk=iphonesimulator*]
+        ].each do |key|
           next unless config.build_settings[key]
-          
           flags = config.build_settings[key]
-          
-          # 배열 처리
           if flags.is_a?(Array)
             flags.reject! { |f| f.to_s =~ /-G(\s|$)/ }
             config.build_settings[key] = flags.empty? ? ['$(inherited)'] : flags
-          # 문자열 처리
           elsif flags.is_a?(String)
-            flags.gsub!(/ -G /, ' ')
-            flags.gsub!(/ -G$/, '')
-            flags.gsub!(/^-G /, '')
-            config.build_settings[key] = flags.strip.empty? ? '$(inherited)' : flags
+            flags = flags.gsub(/(^|\s)-G(\s|$)/, ' ').strip
+            config.build_settings[key] = flags.empty? ? '$(inherited)' : flags
           end
         end
-
-        puts "🧩 [#{name}] Scrubbed -G flags from all build settings (#{config.name})"
       end
-      
-      # ✅ 전역 빌드 안정성 설정
+
       config.build_settings['ENABLE_BITCODE'] = 'NO'
       config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
-      
-      # ✅ Google Pods의 XCFrameworks 처리 안정화 (CI 환경 오류 방지)
       if name.include?('Google') || name.include?('Firebase')
         config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
         config.build_settings['ALWAYS_SEARCH_USER_PATHS'] = 'NO'
         config.build_settings['DEFINES_MODULE'] = 'YES'
-        puts "🧩 [#{name}] Google/Firebase Pods XCFrameworks 안정화 설정 적용"
       end
-      
-      # ✅ 빌드 실패 방지 설정
       config.build_settings['SWIFT_VERSION'] = '5.0'
-      # Swift 최적화 레벨을 조건부로 설정 (Debug/Release 구분)
       if config.name == 'Debug'
         config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
       else
@@ -164,23 +125,17 @@ post_install do |installer|
       end
       config.build_settings['GCC_OPTIMIZATION_LEVEL'] = '0'
       config.build_settings['SWIFT_COMPILATION_MODE'] = 'wholemodule'
-      
-      # ✅ 아카이브 실패 방지 설정
       config.build_settings['VALIDATE_PRODUCT'] = 'NO'
       config.build_settings['SKIP_INSTALL'] = 'YES'
-      
-      # ✅ Xcode 16.3 호환성 설정
       config.build_settings['SUPPORTED_PLATFORMS'] = 'iphoneos iphonesimulator'
       config.build_settings['TARGETED_DEVICE_FAMILY'] = '1,2'
-      
-      # ✅ React Native Dependencies 스크립트 최적화
+
       if name.include?('ReactNativeDependencies')
         config.build_settings['RUN_CLANG_STATIC_ANALYZER'] = 'NO'
         config.build_settings['CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED'] = 'NO'
-        puts "🔧 [#{name}] React Native Dependencies 스크립트 최적화 적용"
       end
     end
   end
-    
+
   puts "✅ [post_install] Custom build settings applied successfully"
 end
