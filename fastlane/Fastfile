@@ -152,24 +152,118 @@ platform :ios do
     )
 
     # 프로파일 정보 수집
+    # 1차: lane_context에서 읽기
     pp_uuid = (lane_context[SharedValues::SIGH_UDID] || "").to_s.strip
     pp_path = (lane_context[SharedValues::SIGH_PROFILE_PATH] || "").to_s.strip
     
-    UI.message("🔍 match 결과 확인:")
-    UI.message("  - SIGH_UDID: #{pp_uuid.empty? ? '(비어있음)' : pp_uuid}")
-    UI.message("  - SIGH_PROFILE_PATH: #{pp_path.empty? ? '(비어있음)' : pp_path}")
+    # 2차: 환경 변수에서 읽기 (점을 언더스코어로 변환)
+    env_key = "sigh_#{BUNDLE_ID.gsub('.', '_')}_appstore"
+    env_path_key = "sigh_#{BUNDLE_ID.gsub('.', '_')}_appstore_profile-path"
     
-    # UUID가 없으면 프로파일 파일에서 직접 추출
+    if pp_uuid.empty?
+      pp_uuid = (ENV[env_key] || "").to_s.strip
+    end
+    if pp_path.empty?
+      pp_path = (ENV[env_path_key] || "").to_s.strip
+    end
+    
+    # 3차: 표준 프로파일 디렉토리에서 UUID로 파일 찾기
+    if pp_path.empty? && !pp_uuid.empty? && pp_uuid.length == 36
+      profiles_dir = File.join(ENV["HOME"] || Dir.home, "Library", "MobileDevice", "Provisioning Profiles")
+      standard_path = File.join(profiles_dir, "#{pp_uuid}.mobileprovision")
+      if File.exist?(standard_path)
+        pp_path = standard_path
+        UI.message("✅ 표준 위치에서 프로파일 발견: #{pp_path}")
+      elsif Dir.exist?(profiles_dir)
+        # 디렉토리 전체 검색
+        found = Dir.glob(File.join(profiles_dir, "*.mobileprovision")).find { |p|
+          begin
+            uuid_from_file = extract_profile_uuid(p)
+            uuid_from_file == pp_uuid
+          rescue
+            false
+          end
+        }
+        if found
+          pp_path = found
+          UI.message("✅ 프로파일 검색 발견: #{pp_path}")
+        end
+      end
+    end
+    
+    UI.message("🔍 match 결과 확인:")
+    UI.message("  - UUID (lane_context): #{lane_context[SharedValues::SIGH_UDID] || '(비어있음)'}")
+    UI.message("  - UUID (env #{env_key}): #{ENV[env_key] || '(비어있음)'}")
+    UI.message("  - 최종 UUID: #{pp_uuid.empty? ? '(비어있음)' : pp_uuid}")
+    UI.message("  - Path (lane_context): #{lane_context[SharedValues::SIGH_PROFILE_PATH] || '(비어있음)'}")
+    UI.message("  - Path (env #{env_path_key}): #{ENV[env_path_key] || '(비어있음)'}")
+    UI.message("  - 최종 Path: #{pp_path.empty? ? '(비어있음)' : pp_path}")
+    
+    # UUID가 없으면 프로파일 디렉토리에서 검색 (match가 설치한 프로파일 찾기)
     if pp_uuid.empty? || pp_uuid.length != 36
-      if pp_path.empty?
-        UI.user_error!("❌ 프로파일 경로를 찾을 수 없습니다. match 실행 결과를 확인하세요.")
+      profiles_dir = File.join(ENV["HOME"] || Dir.home, "Library", "MobileDevice", "Provisioning Profiles")
+      UI.message("🔍 프로파일 디렉토리 검색: #{profiles_dir}")
+      
+      if Dir.exist?(profiles_dir)
+        # bundle_id로 매칭되는 프로파일 찾기
+        all_profiles = Dir.glob(File.join(profiles_dir, "*.mobileprovision"))
+        UI.message("  - 발견된 프로파일 수: #{all_profiles.length}")
+        
+        found_profile = nil
+        found_uuid = nil
+        
+        all_profiles.each do |profile_path|
+          begin
+            test_uuid = extract_profile_uuid(profile_path)
+            next if test_uuid.empty? || test_uuid.length != 36
+            
+            # 프로파일에서 bundle identifier 확인
+            sh("/usr/bin/security cms -D -i '#{profile_path}' > /tmp/check_profile.plist 2>&1")
+            bundle_ids = sh("/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' /tmp/check_profile.plist 2>&1", log: false).to_s.strip
+            File.delete("/tmp/check_profile.plist") if File.exist?("/tmp/check_profile.plist")
+            
+            # team_id 제거 후 비교 (예: ABC123.com.pickplay.kwcc -> com.pickplay.kwcc)
+            bundle_ids = bundle_ids.split(',').map(&:strip)
+            if bundle_ids.any? { |bid| bid.end_with?(".#{BUNDLE_ID}") || bid == BUNDLE_ID }
+              found_profile = profile_path
+              found_uuid = test_uuid
+              UI.success("✅ 프로파일 발견: UUID=#{found_uuid}, Path=#{found_profile}")
+              break
+            end
+          rescue => e
+            UI.important("⚠️ 프로파일 검사 중 오류 (#{File.basename(profile_path)}): #{e.message}")
+            next
+          end
+        end
+        
+        if found_profile && found_uuid
+          pp_path = found_profile
+          pp_uuid = found_uuid
+        elsif pp_path.empty?
+          UI.user_error!("❌ #{BUNDLE_ID}에 해당하는 프로파일을 찾을 수 없습니다.")
+        end
+      elsif pp_path.empty?
+        UI.user_error!("❌ 프로파일 디렉토리가 존재하지 않습니다: #{profiles_dir}")
       end
-      UI.message("🔄 프로파일 파일에서 UUID 추출 시도...")
-      extracted_uuid = extract_profile_uuid(pp_path)
-      if extracted_uuid.empty? || extracted_uuid.length != 36
-        UI.user_error!("❌ 프로파일에서 UUID 추출 실패. 파일 경로: #{pp_path}")
+      
+      # 경로는 있지만 UUID가 없으면 추출
+      if !pp_path.empty? && (pp_uuid.empty? || pp_uuid.length != 36)
+        UI.message("🔄 프로파일 파일에서 UUID 추출 시도...")
+        extracted_uuid = extract_profile_uuid(pp_path)
+        if extracted_uuid.empty? || extracted_uuid.length != 36
+          UI.user_error!("❌ 프로파일에서 UUID 추출 실패. 파일 경로: #{pp_path}")
+        end
+        pp_uuid = extracted_uuid
+        UI.message("✅ 프로파일에서 UUID 추출 성공: #{pp_uuid}")
       end
-      pp_uuid = extracted_uuid
+    end
+    
+    # 경로가 없으면 UUID로 구성
+    if pp_path.empty? && !pp_uuid.empty? && pp_uuid.length == 36
+      pp_path = File.join(ENV["HOME"] || Dir.home, "Library", "MobileDevice", "Provisioning Profiles", "#{pp_uuid}.mobileprovision")
+      unless File.exist?(pp_path)
+        UI.user_error!("❌ 예상 위치에 프로파일이 없습니다: #{pp_path}")
+      end
     end
     
     mapping = (lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING] || {})
