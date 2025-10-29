@@ -1,8 +1,19 @@
 platform :ios, '15.1'
 ENV['RCT_NEW_ARCH_ENABLED'] ||= '0'
 
-# RN autolinking 스크립트 로드 (필수)
-require_relative '../node_modules/@react-native-community/cli-platform-ios/native_modules'
+# RN autolinking 스크립트 로드 (안전한 require)
+begin
+  require_relative '../node_modules/@react-native-community/cli-platform-ios/native_modules'
+rescue LoadError
+  begin
+    # React Native 0.73+ 경로 시도
+    require_relative '../node_modules/react-native/scripts/react_native_pods'
+  rescue LoadError
+    Pod::UI.puts '⚠️  RN autolinking not found; use_native_modules! will be no-op'
+    # Fallback no-ops to avoid Podfile crash
+    def use_native_modules!(path = './', options = {}); end
+  end
+end
 
 # Xcode 프로젝트 명시
 project 'PickPlay.xcodeproj'

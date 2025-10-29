@@ -75,6 +75,11 @@ jobs:
             npm install --omit=dev --legacy-peer-deps
           fi
 
+      - name: Install RN CLI for autolinking
+        run: |
+          cd "$PROJ_DIR"
+          npm install --save-dev @react-native-community/cli-platform-ios --legacy-peer-deps
+
       - name: Debug iOS folder
         run: |
           cd "$PROJ_DIR/ios"
