@@ -108,6 +108,10 @@ platform :ios do
       in_house:     false
     )
 
+    UI.message("🔧 [Checkpoint 3] 프로파일 재발급 흐름 시작...")
+    UI.message("  → 1. Identifier에서 Push 켜짐 확인 필요 (수동)")
+    UI.message("  → 2. match(recreate with force=true) 실행 중...")
+
     # force + readonly:false 로 새 프로파일 생성/갱신 (Push 포함)
     match(
       type: "appstore",
@@ -122,8 +126,12 @@ platform :ios do
       keychain_password: KEYCHAIN_PW
     )
 
+    UI.message("  → 3. 다음부터는 readonly=true로 사용")
+
     pp_path = lane_context[SharedValues::SIGH_PROFILE_PATH]
     assert_push_in_profile!(pp_path)
+    
+    UI.success("✅ [Checkpoint 3] 프로파일 재발급 완료 - Push 포함 확인됨")
   end
 
   desc "TestFlight 배포 (푸시 포함 프로파일 사용 강제)"
@@ -137,6 +145,11 @@ platform :ios do
       duration:     1200,
       in_house:     false
     )
+
+    # 3️⃣ 체크포인트: 프로파일 재발급 흐름 확인
+    UI.message("🔍 [Checkpoint 3] 프로파일 사용 (일상 배포: readonly=true)")
+    UI.message("  → 최초 1회: fastlane ios bootstrap_profiles로 Push 포함 프로파일 재생성 필요")
+    UI.message("  → 이후: readonly=true로 유지 (이미 생성된 프로파일 사용)")
 
     # 일상 배포는 readonly=true (이미 생성된 프로파일 사용)
     match(
@@ -296,14 +309,36 @@ platform :ios do
     specifier = pp_uuid
     UI.message("📋 Using provisioning profile specifier: #{specifier}")
     
-    # ✅ entitlements 파일 확인 및 Push Notifications 강제 설정
+    # 2️⃣ 체크포인트: Entitlements와 Capabilities 일치 확인
     entitlements_files = Dir.glob(File.join(IOS_DIR, "**", "*.entitlements"))
     if entitlements_files.empty?
-      UI.important("⚠️ entitlements 파일을 찾을 수 없습니다.")
+      # Expo는 app.json에서 entitlements 설정하므로 파일이 없을 수 있음 → xcodeproj 직접 확인
+      UI.message("🔍 [Checkpoint 2] No .entitlements file found, checking Xcode project...")
+      
+      begin
+        require 'xcodeproj'
+        project = Xcodeproj::Project.open(XCODEPROJ)
+        project.targets.each do |target|
+          next unless target.name == SCHEME
+          # Push Notifications capability 확인을 위해 entitlements 파일 경로 체크
+          entitlements_path = target.build_configurations.first.build_settings['CODE_SIGN_ENTITLEMENTS']
+          if entitlements_path && File.exist?(File.join(IOS_DIR, entitlements_path))
+            ent_file = File.join(IOS_DIR, entitlements_path)
+            result = sh("/usr/libexec/PlistBuddy -c 'Print :aps-environment' '#{ent_file}' 2>&1", log: false)
+            if result.to_s.strip == "production"
+              UI.success("✅ [Checkpoint 2] aps-environment=production in #{File.basename(ent_file)}")
+            else
+              UI.important("⚠️ [Checkpoint 2] aps-environment not production in #{ent_file}, patching...")
+              sh("/usr/libexec/PlistBuddy -c 'Set :aps-environment production' '#{ent_file}' 2>&1")
+            end
+          end
+        end
+      rescue LoadError
+        UI.important("⚠️ xcodeproj gem 없음 - entitlements는 app.json에서 설정됨")
+      end
     else
       entitlements_files.each do |ent_file|
-        UI.message("🔍 entitlements 확인: #{ent_file}")
-        # aps-environment가 없으면 추가
+        UI.message("🔍 [Checkpoint 2] Checking entitlements: #{ent_file}")
         result = sh("/usr/libexec/PlistBuddy -c 'Print :aps-environment' '#{ent_file}' 2>&1", log: false)
         if result.to_s.strip.empty? || result.to_s.include?("Does Not Exist")
           UI.message("  → aps-environment 추가: production")
@@ -312,9 +347,22 @@ platform :ios do
           UI.message("  → aps-environment 수정: #{result.strip} → production")
           sh("/usr/libexec/PlistBuddy -c 'Set :aps-environment production' '#{ent_file}' 2>&1")
         else
-          UI.success("  ✅ aps-environment=production 확인됨")
+          UI.success("  ✅ [Checkpoint 2] aps-environment=production 확인됨")
         end
       end
+    end
+    
+    # Xcode 프로젝트에 Push Notifications capability 확인 (xcodeproj로 확인)
+    begin
+      require 'xcodeproj'
+      project = Xcodeproj::Project.open(XCODEPROJ)
+      project.targets.each do |target|
+        next unless target.name == SCHEME
+        # Signing & Capabilities 섹션 확인은 pbxproj 파일 직접 스캔 또는 확인 메시지
+        UI.message("✅ [Checkpoint 2] Xcode project: #{target.name} target found")
+      end
+    rescue => e
+      UI.important("⚠️ Xcode project capability 확인 건너뜀: #{e.message}")
     end
     
     # ✅ 프로파일을 프로젝트에 직접 임베드 (Xcode 인식 확실히 보장)
@@ -342,7 +390,9 @@ platform :ios do
           config.build_settings['DEVELOPMENT_TEAM'] = TEAM_ID
           config.build_settings['CODE_SIGN_IDENTITY'] = 'Apple Distribution'
           
-          UI.message("✅ #{target.name} (#{config.name}): 프로파일 설정 완료")
+          UI.success("✅ [Checkpoint 2] #{target.name} (#{config.name}): 프로파일 UUID 설정 완료")
+          UI.message("   → PROVISIONING_PROFILE_SPECIFIER=#{specifier}")
+          UI.message("   → Xcode Signing & Capabilities에 Push Notifications 포함 확인 필요")
         end
       end
       

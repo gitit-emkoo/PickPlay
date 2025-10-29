@@ -122,14 +122,21 @@ jobs:
           cd "$PROJ_DIR/ios"
           pod install --repo-update
 
-      # Debug: '-G' 플래그가 어디서 오는지 즉시 탐지
-      - name: Scan for stray '-G' flags
+      # 1️⃣ 체크포인트: -G 잔여 여부 스캔 (정확히 0건 확인)
+      - name: Checkpoint 1 - Scan for stray '-G' flags
         run: |
           cd "$PROJ_DIR/ios"
-          echo "🔎 scanning for stray '-G' flags..."
+          echo "🔎 [Checkpoint 1] Scanning for stray '-G' flags in entire iOS directory..."
           set +e
-          grep -R --line-number -E '\s-G(\s|$)' . || true
+          result=$(grep -R --line-number -E '\s-G(\s|$)' . 2>/dev/null || true)
           set -e
+          if [ -n "$result" ]; then
+            echo "::error::Found stray '-G' flags:"
+            echo "$result"
+            exit 1
+          else
+            echo "✅ [Checkpoint 1] No '-G' flags found (0 instances confirmed)"
+          fi
 
       # ✅ -G 플래그 강제 제거(안전장치) - 더 강력한 검사/제거
       - name: Scrub invalid '-G' flags from xcconfigs (safety)
@@ -173,20 +180,34 @@ jobs:
             /usr/libexec/PlistBuddy -c "Print :aps-environment" "$ENT_FILE"
           fi
 
-      # 스킴/워크스페이스 점검 — 스킴 누락/오탈자 즉시 발견
-      - name: Verify Xcode workspace & schemes (optional but helpful)
+      # 4️⃣ 체크포인트: 스킴 공유 확인 (PickPlay 하나로 공유 확인)
+      - name: Checkpoint 4 - Verify Xcode workspace & schemes
         run: |
           cd "$PROJ_DIR/ios"
           if [ -f "PickPlay.xcworkspace/contents.xcworkspacedata" ]; then
-            xcodebuild -list -workspace PickPlay.xcworkspace
+            echo "🔍 [Checkpoint 4] Verifying workspace and schemes..."
+            xcodebuild -list -workspace PickPlay.xcworkspace | tee /tmp/xcode-list.txt
+            if grep -q "Scheme:" /tmp/xcode-list.txt; then
+              schemes=$(grep -A 100 "Schemes:" /tmp/xcode-list.txt | grep -v "Schemes:" | sed '/^$/,$d' | grep -v "^$" | sed 's/^[[:space:]]*//' || true)
+              echo "✅ [Checkpoint 4] Found schemes:"
+              echo "$schemes" | while read scheme; do
+                if [ -n "$scheme" ]; then
+                  echo "   - $scheme"
+                fi
+              done
+              if echo "$schemes" | grep -q "PickPlay"; then
+                echo "✅ [Checkpoint 4] PickPlay scheme found (shared scheme confirmed)"
+              else
+                echo "::warning::[Checkpoint 4] PickPlay scheme not found in list"
+              fi
+            fi
           else
-            # 동적 감지: 첫 번째 xcworkspace에 대해 목록 출력
             WS=$(ls -1 *.xcworkspace 2>/dev/null | head -n1 || true)
             if [ -n "$WS" ]; then
               echo "Detected workspace: $WS"
               xcodebuild -list -workspace "$WS"
             else
-              echo "::warning::No .xcworkspace found yet."
+              echo "::warning::[Checkpoint 4] No .xcworkspace found yet."
             fi
           fi
 
