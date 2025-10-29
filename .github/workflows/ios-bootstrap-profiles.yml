@@ -45,6 +45,7 @@ jobs:
           MATCH_GIT_USERNAME: ${{ secrets.MATCH_GIT_USERNAME }}
           MATCH_GIT_PASSWORD: ${{ secrets.MATCH_GIT_PASSWORD }}
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_GIT_BRANCH: master  # certs repo 기본 브랜치 (에러 로그에서 master 확인)
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           KEYCHAIN_PASSWORD: actions
         run: |
