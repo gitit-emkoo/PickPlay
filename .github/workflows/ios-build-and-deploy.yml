@@ -134,6 +134,25 @@ jobs:
             echo "👍 No -G flags found in xcconfigs."
           fi
 
+      # Verify/patch aps-environment for Release
+      - name: Verify/patch aps-environment for Release
+        run: |
+          set -e
+          cd "$PROJ_DIR/ios"
+          ENT_FILE="$(/usr/bin/find . -name '*.entitlements' -maxdepth 2 | head -n1 || true)"
+          if [ -z "$ENT_FILE" ]; then
+            echo "::warning::No entitlements file found; skipping check."
+            exit 0
+          fi
+          echo "Found entitlements: $ENT_FILE"
+          CURRENT=$(/usr/libexec/PlistBuddy -c "Print :aps-environment" "$ENT_FILE" 2>/dev/null || echo "")
+          echo "aps-environment in entitlements: ${CURRENT:-<none>}"
+          if [ "$CURRENT" = "development" ]; then
+            echo "Patching aps-environment to production"
+            /usr/libexec/PlistBuddy -c "Set :aps-environment production" "$ENT_FILE"
+            /usr/libexec/PlistBuddy -c "Print :aps-environment" "$ENT_FILE"
+          fi
+
       # 스킴/워크스페이스 점검 — 스킴 누락/오탈자 즉시 발견
       - name: Verify Xcode workspace & schemes (optional but helpful)
         run: |
