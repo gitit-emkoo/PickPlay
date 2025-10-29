@@ -149,7 +149,7 @@ platform :ios do
       xcargs: [
         "DEVELOPMENT_TEAM=#{TEAM_ID}",
         "CODE_SIGN_STYLE=Manual",
-        "CODE_SIGN_IDENTITY=Apple Distribution",
+        "CODE_SIGN_IDENTITY=\"Apple Distribution\"",
         "PRODUCT_BUNDLE_IDENTIFIER=#{BUNDLE_ID}",
         (pp_uuid.empty? ? nil : "PROVISIONING_PROFILE=#{pp_uuid}"),
         (pp_name.empty? ? nil : "PROVISIONING_PROFILE_SPECIFIER='#{pp_name}'"),
