@@ -137,7 +137,8 @@ jobs:
           cd "$PROJ_DIR/ios"
           for f in "PickPlay.xcodeproj/project.pbxproj" "Pods/Pods.xcodeproj/project.pbxproj"; do
             if [ -f "$f" ]; then
-              perl -i -pe 's/\s-G(?=\s|\"|$)/ /g' "$f"
+              # 공백 앞뿐 아니라 문자열 시작(^) 위치도 커버
+              perl -i -pe 's/(^|\s)-G(?=\s|\"|$)/ /g' "$f"
             fi
           done
 
@@ -253,6 +254,38 @@ jobs:
             end
             p.save
             puts "✅ BoringSSL-GRPC flags reset to $(inherited)"
+          '
+
+      # 🔧 Pods 전역: 모든 빌드 파일의 COMPILER_FLAGS에서 -G 제거 (BoringSSL-GRPC 포함)
+      - name: Purge -G from build file COMPILER_FLAGS in Pods
+        run: |
+          cd "$PROJ_DIR/ios"
+          ruby -r xcodeproj -e '
+            proj_path = "Pods/Pods.xcodeproj"
+            abort("no Pods.xcodeproj") unless File.exist?(proj_path)
+            p = Xcodeproj::Project.open(proj_path)
+            changed = 0
+            p.targets.each do |t|
+              t.build_phases.grep(Xcodeproj::Project::Object::PBXSourcesBuildPhase).each do |phase|
+                phase.files.each do |bf|
+                  settings = bf.settings ||= {}
+                  flags = settings["COMPILER_FLAGS"]
+                  next unless flags.is_a?(String) || flags.is_a?(Array)
+                  new_flags = if flags.is_a?(Array)
+                    flags.map { |s| s.to_s.gsub(/(^|\s)-G(?=\s|$)/, " ").squeeze(" ").strip }.reject(&:empty?)
+                  else
+                    v = flags.to_s.gsub(/(^|\s)-G(?=\s|$)/, " ").squeeze(" ").strip
+                    v
+                  end
+                  unless new_flags == flags
+                    settings["COMPILER_FLAGS"] = new_flags
+                    changed += 1
+                  end
+                end
+              end
+            end
+            p.save if changed > 0
+            puts "✅ Purged -G from #{changed} build file COMPILER_FLAGS entries"
           '
 
       # Verify/patch aps-environment for Release
