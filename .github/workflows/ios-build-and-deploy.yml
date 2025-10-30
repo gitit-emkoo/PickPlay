@@ -122,6 +122,39 @@ jobs:
           cd "$PROJ_DIR/ios"
           pod install --repo-update
 
+      # 🔍 Post-install 검증: BoringSSL-GRPC 소스 파일 COMPILER_FLAGS 확인
+      - name: Verify post_install cleaned BoringSSL-GRPC COMPILER_FLAGS
+        run: |
+          cd "$PROJ_DIR/ios"
+          ruby -r xcodeproj -e '
+            proj_path = "Pods/Pods.xcodeproj"
+            abort("no Pods.xcodeproj") unless File.exist?(proj_path)
+            p = Xcodeproj::Project.open(proj_path)
+            tgt = p.targets.find { |t| t.name == "BoringSSL-GRPC" }
+            abort("no BoringSSL-GRPC target") unless tgt
+            found_g = []
+            tgt.build_phases.grep(Xcodeproj::Project::Object::PBXSourcesBuildPhase).each do |phase|
+              phase.files.each do |bf|
+                next unless bf.settings
+                flags = bf.settings["COMPILER_FLAGS"]
+                next unless flags
+                file_ref = bf.file_ref&.path || "unknown"
+                if flags.is_a?(String) && flags.include?("-G")
+                  found_g << "#{file_ref}: #{flags}"
+                elsif flags.is_a?(Array) && flags.any? { |s| s.to_s.include?("-G") }
+                  found_g << "#{file_ref}: #{flags.inspect}"
+                end
+              end
+            end
+            if found_g.empty?
+              puts "✅ [Post-install Verification] No -G found in BoringSSL-GRPC COMPILER_FLAGS"
+            else
+              puts "::error::[Post-install Verification] Found -G in #{found_g.size} files:"
+              found_g.each { |f| puts "  - #{f}" }
+              exit 1
+            end
+          '
+
       # Diagnose build settings for unexpected -G flags
       - name: Diagnose build settings for '-G'
         run: |
@@ -395,6 +428,52 @@ jobs:
               echo "::warning::[Checkpoint 4] No .xcworkspace found yet."
             fi
           fi
+
+      # 🔒 Fastlane 빌드 직전 최종 검증: BoringSSL-GRPC에서 -G 완전 제거 보장
+      - name: Final -G purge before build (BoringSSL-GRPC only)
+        run: |
+          cd "$PROJ_DIR/ios"
+          ruby -r xcodeproj -e '
+            proj_path = "Pods/Pods.xcodeproj"
+            abort("no Pods.xcodeproj") unless File.exist?(proj_path)
+            p = Xcodeproj::Project.open(proj_path)
+            tgt = p.targets.find { |t| t.name == "BoringSSL-GRPC" }
+            abort("no BoringSSL-GRPC target") unless tgt
+            changes = 0
+            
+            # 1) 타겟 빌드 설정: 모든 FLAGS 키를 $(inherited)로 강제 초기화
+            %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_LDFLAGS WARNING_CFLAGS].each do |k|
+              tgt.build_configurations.each do |cfg|
+                old = cfg.build_settings[k]
+                next if old == "$(inherited)" || old.nil?
+                cfg.build_settings[k] = "$(inherited)"
+                changes += 1
+              end
+            end
+            
+            # 2) 소스 파일 COMPILER_FLAGS에서 -G 제거
+            tgt.build_phases.grep(Xcodeproj::Project::Object::PBXSourcesBuildPhase).each do |phase|
+              phase.files.each do |bf|
+                next unless bf.settings
+                flags = bf.settings["COMPILER_FLAGS"]
+                next unless flags
+                if flags.is_a?(String) && flags.include?("-G")
+                  cleaned = flags.gsub(/(^|\s)-G(?=\s|$)/, " ").squeeze(" ").strip
+                  bf.settings["COMPILER_FLAGS"] = cleaned.empty? ? "" : cleaned
+                  changes += 1
+                  puts "🔧 [Final] Cleaned COMPILER_FLAGS: #{flags} → #{cleaned}"
+                elsif flags.is_a?(Array) && flags.any? { |s| s.to_s.include?("-G") }
+                  cleaned = flags.map { |s| s.to_s.gsub(/(^|\s)-G(?=\s|$)/, " ").squeeze(" ").strip }.reject(&:empty?)
+                  bf.settings["COMPILER_FLAGS"] = cleaned.empty? ? "" : cleaned
+                  changes += 1
+                  puts "🔧 [Final] Cleaned COMPILER_FLAGS array: #{flags.inspect} → #{cleaned.inspect}"
+                end
+              end
+            end
+            
+            p.save if changes > 0
+            puts "✅ [Final] Made #{changes} changes to remove -G from BoringSSL-GRPC"
+          '
 
       - name: Fastlane beta
         env:
