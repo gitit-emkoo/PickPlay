@@ -3,6 +3,11 @@
 # dependencies
 node_modules/
 
+# iOS build outputs (never commit)
+ios/Pods/
+ios/build/
+**/DerivedData/
+
 # Expo
 .expo/
 dist/
