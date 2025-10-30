@@ -9,7 +9,7 @@ jobs:
   ios-beta:
     runs-on: macos-14
     timeout-minutes: 60
-
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -212,7 +212,10 @@ jobs:
           echo "🔎 Checking BoringSSL-GRPC Target Support Files for -G..."
           if [ -d "Pods/Target Support Files/BoringSSL-GRPC" ]; then
             grep -Rne '\\s-G(\\s|$)' "Pods/Target Support Files/BoringSSL-GRPC" 2>/dev/null || true
-            find "Pods/Target Support Files/BoringSSL-GRPC" -name "*.xcconfig" -type f -exec perl -i -pe 's/\\s-G(?=\\s|$)/ /g' {} \\; 2>/dev/null || true
+            # -exec 대신 쉘 루프로 세미콜론 이슈 회피
+            while IFS= read -r f; do
+              perl -i -pe 's/\\s-G(?=\\s|$)/ /g' "$f" 2>/dev/null || true
+            done < <(find "Pods/Target Support Files/BoringSSL-GRPC" -type f -name "*.xcconfig" 2>/dev/null)
           fi
           echo "🔎 Checking xcodebuild settings for BoringSSL-GRPC..."
           xcodebuild -showBuildSettings -project Pods/Pods.xcodeproj -target BoringSSL-GRPC -configuration Release 2>/dev/null | grep -n ' -G ' || true
@@ -221,6 +224,12 @@ jobs:
           if [ -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
             perl -i -pe 's/\\s-G(?=\\s|$)/ /g' "Pods/Pods.xcodeproj/project.pbxproj"
           fi
+
+      # 🔎 BoringSSL-GRPC 빌드 설정 덤프 (-G가 걸린 키 식별)
+      - name: Dump BoringSSL-GRPC build settings (grep FLAGS)
+        run: |
+          cd "$PROJ_DIR/ios"
+          xcodebuild -showBuildSettings -project Pods/Pods.xcodeproj -target BoringSSL-GRPC -configuration Release | egrep -n '(^| )OTHER_.*FLAGS|CLANG_.*FLAGS|GCC_.*FLAGS' | sed -n '1,200p'
 
       # 🔧 Pods.xcodeproj를 직접 수정하여 BoringSSL-GRPC 플래그 초기화 (xcodeproj 사용)
       - name: Force reset flags for BoringSSL-GRPC via xcodeproj
@@ -286,6 +295,55 @@ jobs:
             end
             p.save if changed > 0
             puts "✅ Purged -G from #{changed} build file COMPILER_FLAGS entries"
+          '
+
+      # 🔧 Pods 전역: 모든 타겟의 FLAGS 계열 키에서 -G 토큰 제거 (광범위)
+      - name: Purge -G from all FLAGS keys across Pods targets
+        run: |
+          cd "$PROJ_DIR/ios"
+          ruby -r xcodeproj -e '
+            proj_path = "Pods/Pods.xcodeproj"
+            abort("no Pods.xcodeproj") unless File.exist?(proj_path)
+            p = Xcodeproj::Project.open(proj_path)
+            keys = %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_LDFLAGS WARNING_CFLAGS
+                      GCC_PREPROCESSOR_DEFINITIONS CLANG_CXX_LIBRARY CLANG_CXX_LANGUAGE_STANDARD
+                      CLANG_CXX_LIBRARY CLANG_CXX_LANGUAGE_STANDARD CLANG_WARN_DOCUMENTATION_COMMENTS]
+            # 위 키 외에도 *_FLAGS 로 끝나는 모든 키 포함
+            def scrub_val(v)
+              case v
+              when Array
+                v.map { |s| s.to_s.gsub(/(^|\s)-G(?=\s|$)/, " ").squeeze(" ").strip }.reject(&:empty?)
+              when String
+                nv = v.gsub(/(^|\s)-G(?=\s|$)/, " ").squeeze(" ").strip
+                nv.empty? ? "$(inherited)" : nv
+              else
+                v
+              end
+            end
+            changed = 0
+            p.targets.each do |t|
+              t.build_configurations.each do |cfg|
+                # 1) 미리 정의한 키들
+                keys.each do |k|
+                  next unless cfg.build_settings.key?(k)
+                  old = cfg.build_settings[k]
+                  nv = scrub_val(old)
+                  next if nv == old
+                  cfg.build_settings[k] = nv
+                  changed += 1
+                end
+                # 2) *_FLAGS 패턴 키 전수
+                cfg.build_settings.keys.grep(/FLAGS$/).each do |k|
+                  old = cfg.build_settings[k]
+                  nv = scrub_val(old)
+                  next if nv == old
+                  cfg.build_settings[k] = nv
+                  changed += 1
+                end
+              end
+            end
+            p.save if changed > 0
+            puts "✅ Purged -G tokens from FLAGS keys: #{changed} updates"
           '
 
       # Verify/patch aps-environment for Release
