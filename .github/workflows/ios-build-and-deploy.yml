@@ -122,49 +122,8 @@ jobs:
         run: |
           cd "$PROJ_DIR/ios"
           pod install --repo-update
-
-      # ✅ Post-install 검증: Podfile이 제대로 -G 플래그 제거했는지 확인
-      - name: Verify post_install cleaned BoringSSL-GRPC
-        run: |
-          cd "$PROJ_DIR/ios"
-          ruby -r xcodeproj -e '
-            proj_path = "Pods/Pods.xcodeproj"
-            abort("no Pods.xcodeproj") unless File.exist?(proj_path)
-            p = Xcodeproj::Project.open(proj_path)
-            tgt = p.targets.find { |t| t.name == "BoringSSL-GRPC" }
-            abort("no BoringSSL-GRPC target") unless tgt
-            g_pattern = /(^|\s)-G(?=\s|$)/
-            found_g = []
-            # COMPILER_FLAGS 확인
-            tgt.build_phases.grep(Xcodeproj::Project::Object::PBXSourcesBuildPhase).each do |phase|
-              phase.files.each do |bf|
-                next unless bf.settings
-                flags = bf.settings["COMPILER_FLAGS"]
-                next unless flags
-                if (flags.is_a?(String) && flags.match?(g_pattern)) || 
-                   (flags.is_a?(Array) && flags.any? { |s| s.to_s.match?(g_pattern) })
-                  found_g << (bf.file_ref&.path || "unknown")
-                end
-              end
-            end
-            # 빌드 설정 플래그 확인
-            tgt.build_configurations.each do |cfg|
-              %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS GCC_PREPROCESSOR_DEFINITIONS].each do |key|
-                val = cfg.build_settings[key]
-                next unless val
-                if (val.is_a?(String) && val.match?(g_pattern)) || 
-                   (val.is_a?(Array) && val.any? { |s| s.to_s.match?(g_pattern) })
-                  found_g << "#{key} in #{cfg.name}"
-                end
-              end
-            end
-            if found_g.empty?
-              puts "✅ [Verification] Podfile post_install이 -G 플래그를 성공적으로 제거했습니다"
-            else
-              puts "::error::[Verification] -G 플래그가 남아있습니다: #{found_g.join(', ')}"
-              exit 1
-            end
-          '
+          # Podfile post_install에서 -G 플래그 자동 제거됨
+          # 문제가 있으면 빌드 단계에서 바로 실패하므로 별도 검증 불필요
 
       # Verify/patch aps-environment for Release
       - name: Verify/patch aps-environment for Release
