@@ -60,11 +60,12 @@ jobs:
           fi
           echo "Detected PROJ_DIR=$PROJ_DIR"
 
-      - name: Clean caches
+      - name: Clean caches (clean build)
         run: |
           rm -rf "$PROJ_DIR/node_modules"
           rm -rf "$PROJ_DIR/ios/Pods" "$PROJ_DIR/ios/Podfile.lock" "$PROJ_DIR/ios/build"
           rm -rf ~/Library/Developer/Xcode/DerivedData/*
+          echo "✅ Clean build: 모든 Pods 및 빌드 아티팩트 제거 완료"
 
       - name: Install JS deps (npm ci, no dev deps)
         run: |
@@ -122,8 +123,8 @@ jobs:
           cd "$PROJ_DIR/ios"
           pod install --repo-update
 
-      # 🔍 Post-install 검증: BoringSSL-GRPC 소스 파일 COMPILER_FLAGS 확인
-      - name: Verify post_install cleaned BoringSSL-GRPC COMPILER_FLAGS
+      # ✅ Post-install 검증: Podfile이 제대로 -G 플래그 제거했는지 확인
+      - name: Verify post_install cleaned BoringSSL-GRPC
         run: |
           cd "$PROJ_DIR/ios"
           ruby -r xcodeproj -e '
@@ -132,251 +133,37 @@ jobs:
             p = Xcodeproj::Project.open(proj_path)
             tgt = p.targets.find { |t| t.name == "BoringSSL-GRPC" }
             abort("no BoringSSL-GRPC target") unless tgt
+            g_pattern = /(^|\s)-G(?=\s|$)/
             found_g = []
+            # COMPILER_FLAGS 확인
             tgt.build_phases.grep(Xcodeproj::Project::Object::PBXSourcesBuildPhase).each do |phase|
               phase.files.each do |bf|
                 next unless bf.settings
                 flags = bf.settings["COMPILER_FLAGS"]
                 next unless flags
-                file_ref = bf.file_ref&.path || "unknown"
-                if flags.is_a?(String) && flags.include?("-G")
-                  found_g << "#{file_ref}: #{flags}"
-                elsif flags.is_a?(Array) && flags.any? { |s| s.to_s.include?("-G") }
-                  found_g << "#{file_ref}: #{flags.inspect}"
+                if (flags.is_a?(String) && flags.match?(g_pattern)) || 
+                   (flags.is_a?(Array) && flags.any? { |s| s.to_s.match?(g_pattern) })
+                  found_g << (bf.file_ref&.path || "unknown")
+                end
+              end
+            end
+            # 빌드 설정 플래그 확인
+            tgt.build_configurations.each do |cfg|
+              %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS GCC_PREPROCESSOR_DEFINITIONS].each do |key|
+                val = cfg.build_settings[key]
+                next unless val
+                if (val.is_a?(String) && val.match?(g_pattern)) || 
+                   (val.is_a?(Array) && val.any? { |s| s.to_s.match?(g_pattern) })
+                  found_g << "#{key} in #{cfg.name}"
                 end
               end
             end
             if found_g.empty?
-              puts "✅ [Post-install Verification] No -G found in BoringSSL-GRPC COMPILER_FLAGS"
+              puts "✅ [Verification] Podfile post_install이 -G 플래그를 성공적으로 제거했습니다"
             else
-              puts "::error::[Post-install Verification] Found -G in #{found_g.size} files:"
-              found_g.each { |f| puts "  - #{f}" }
+              puts "::error::[Verification] -G 플래그가 남아있습니다: #{found_g.join(', ')}"
               exit 1
             end
-          '
-
-      # Diagnose build settings for unexpected -G flags
-      - name: Diagnose build settings for '-G'
-        run: |
-          cd "$PROJ_DIR/ios"
-          if [ -f "PickPlay.xcworkspace/contents.xcworkspacedata" ]; then
-            echo "🔎 Checking build settings for '-G'..."
-            xcodebuild -showBuildSettings -workspace PickPlay.xcworkspace -scheme PickPlay -configuration Release | grep -n " -G " || true
-          fi
-
-      # Scrub '-G' directly from project.pbxproj (app and pods)
-      - name: Scrub '-G' from pbxproj (app and pods)
-        run: |
-          cd "$PROJ_DIR/ios"
-          for f in "PickPlay.xcodeproj/project.pbxproj" "Pods/Pods.xcodeproj/project.pbxproj"; do
-            if [ -f "$f" ]; then
-              # 공백 앞뿐 아니라 문자열 시작(^) 위치도 커버
-              perl -i -pe 's/(^|\s)-G(?=\s|\"|$)/ /g' "$f"
-            fi
-          done
-
-      # 1️⃣ 체크포인트: -G 잔여 여부 스캔 (빌드 설정 파일만, 문서 제외)
-      - name: Checkpoint 1 - Scan for stray '-G' flags
-        run: |
-          cd "$PROJ_DIR/ios"
-          echo "🔎 [Checkpoint 1] Scanning for stray '-G' flags in build config files only..."
-          set +e
-          # 빌드 설정 파일만 스캔 (문서/README 제외)
-          result=$(find . -type f \( \
-            -name "*.xcconfig" \
-            -o -name "*.pbxproj" \
-            -o -name "*.xcscheme" \
-            -o -name "*.plist" \
-            -o -name "*.m" \
-            -o -name "*.mm" \
-            -o -name "*.cpp" \
-            -o -name "*.c" \
-            -o -name "*.h" \
-          \) ! -path "*/Pods/Target Support Files/Pods-*/Pods-*.xcconfig" \
-            -exec grep -l --line-number -E '\s-G(\s|$)' {} \; 2>/dev/null || true)
-          set -e
-          if [ -n "$result" ]; then
-            echo "::error::Found stray '-G' flags in build config files:"
-            echo "$result"
-            exit 1
-          else
-            echo "✅ [Checkpoint 1] No '-G' flags found in build config files (0 instances confirmed)"
-          fi
-
-      # ✅ -G 플래그 강제 제거(안전장치) - BoringSSL-GRPC 타겟 포함 모든 곳 스크럽
-      - name: Scrub invalid '-G' flags from xcconfigs and pbxproj (safety)
-        run: |
-          cd "$PROJ_DIR/ios"
-          
-          # 1. 모든 .xcconfig 파일에서 -G 제거
-          find "Pods/Target Support Files" -name "*.xcconfig" -type f 2>/dev/null | while read file; do
-            if grep -qE '\s-G(\s|$)' "$file" 2>/dev/null; then
-              perl -i -pe 's/\s-G(\s|$)/ /g' "$file"
-              perl -i -pe 's/-G\s/ /g' "$file"
-              perl -i -pe 's/^-G\b//g' "$file"
-              echo "🧽 Scrubbed -G from: $file"
-            fi
-          done
-          
-          # 2. Pods.xcodeproj의 project.pbxproj에서도 -G 제거 (BoringSSL-GRPC 등 모든 타겟)
-          if [ -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
-            if grep -qE '\s-G(\s|$)' "Pods/Pods.xcodeproj/project.pbxproj" 2>/dev/null; then
-              perl -i -pe 's/\s-G(\s|$)/ /g' "Pods/Pods.xcodeproj/project.pbxproj"
-              perl -i -pe 's/-G\s/ /g' "Pods/Pods.xcodeproj/project.pbxproj"
-              perl -i -pe 's/^-G\b//g' "Pods/Pods.xcodeproj/project.pbxproj"
-              echo "🧽 Scrubbed -G from Pods.xcodeproj/project.pbxproj"
-            fi
-          fi
-          
-          # 3. 검증: 남아있는 -G 플래그 확인 (BoringSSL-GRPC 포함)
-          remaining=$(grep -rE '\s-G(\s|$)' "Pods/Target Support Files" "Pods/Pods.xcodeproj" 2>/dev/null | grep -v "README\|\.md\|cmake" | wc -l || echo 0)
-          if [ "$remaining" -gt 0 ]; then
-            echo "::warning::Still found $remaining instances of '-G' flag"
-            grep -rnE '\s-G(\s|$)' "Pods/Target Support Files" "Pods/Pods.xcodeproj" 2>/dev/null | grep -v "README\|\.md\|cmake" | head -10
-          else
-            echo "👍 No -G flags found in build config files."
-          fi
-
-      # 🎯 BoringSSL-GRPC 전용 정밀 진단/스크럽
-      - name: Targeted scrub and diagnose for BoringSSL-GRPC
-        run: |
-          cd "$PROJ_DIR/ios"
-          set +e
-          echo "🔎 Checking BoringSSL-GRPC Target Support Files for -G..."
-          if [ -d "Pods/Target Support Files/BoringSSL-GRPC" ]; then
-            grep -Rne '\\s-G(\\s|$)' "Pods/Target Support Files/BoringSSL-GRPC" 2>/dev/null || true
-            # -exec 대신 쉘 루프로 세미콜론 이슈 회피
-            while IFS= read -r f; do
-              perl -i -pe 's/\\s-G(?=\\s|$)/ /g' "$f" 2>/dev/null || true
-            done < <(find "Pods/Target Support Files/BoringSSL-GRPC" -type f -name "*.xcconfig" 2>/dev/null)
-          fi
-          echo "🔎 Checking xcodebuild settings for BoringSSL-GRPC..."
-          xcodebuild -showBuildSettings -project Pods/Pods.xcodeproj -target BoringSSL-GRPC -configuration Release 2>/dev/null | grep -n ' -G ' || true
-          set -e
-          # 최종 안전장치: Pods 프로젝트 전체에서 -G 재제거
-          if [ -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
-            perl -i -pe 's/\\s-G(?=\\s|$)/ /g' "Pods/Pods.xcodeproj/project.pbxproj"
-          fi
-
-      # 🔎 BoringSSL-GRPC 빌드 설정 덤프 (-G가 걸린 키 식별)
-      - name: Dump BoringSSL-GRPC build settings (grep FLAGS)
-        run: |
-          cd "$PROJ_DIR/ios"
-          xcodebuild -showBuildSettings -project Pods/Pods.xcodeproj -target BoringSSL-GRPC -configuration Release | egrep -n '(^| )OTHER_.*FLAGS|CLANG_.*FLAGS|GCC_.*FLAGS' | sed -n '1,200p'
-
-      # 🔧 Pods.xcodeproj를 직접 수정하여 BoringSSL-GRPC 플래그 초기화 (xcodeproj 사용)
-      - name: Force reset flags for BoringSSL-GRPC via xcodeproj
-        run: |
-          cd "$PROJ_DIR/ios"
-          ruby -r xcodeproj -e '
-            proj_path = "Pods/Pods.xcodeproj"
-            abort("no Pods.xcodeproj") unless File.exist?(proj_path)
-            p = Xcodeproj::Project.open(proj_path)
-            tgt = p.targets.find { |t| t.name == "BoringSSL-GRPC" }
-            abort("no BoringSSL-GRPC target") unless tgt
-            keys = %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_LDFLAGS WARNING_CFLAGS GCC_PREPROCESSOR_DEFINITIONS]
-            scrub = proc do |val|
-              case val
-              when Array
-                val.map { |s| s.to_s.gsub(/(^|\s)-G(?=\s|$)/, " ").squeeze(" ").strip }.reject(&:empty?)
-              when String
-                v = val.gsub(/(^|\s)-G(?=\s|$)/, " ").squeeze(" ").strip
-                v.empty? ? "$(inherited)" : v
-              else
-                "$(inherited)"
-              end
-            end
-            tgt.build_configurations.each do |cfg|
-              keys.each do |k|
-                v = cfg.build_settings[k]
-                v = scrub.call(v)
-                v = ["$(inherited)"] if v.is_a?(Array) && v.empty?
-                cfg.build_settings[k] = v.nil? || (v.respond_to?(:empty?) && v.empty?) ? "$(inherited)" : v
-              end
-            end
-            p.save
-            puts "✅ BoringSSL-GRPC flags reset to $(inherited)"
-          '
-
-      # 🔧 Pods 전역: 모든 빌드 파일의 COMPILER_FLAGS에서 -G 제거 (BoringSSL-GRPC 포함)
-      - name: Purge -G from build file COMPILER_FLAGS in Pods
-        run: |
-          cd "$PROJ_DIR/ios"
-          ruby -r xcodeproj -e '
-            proj_path = "Pods/Pods.xcodeproj"
-            abort("no Pods.xcodeproj") unless File.exist?(proj_path)
-            p = Xcodeproj::Project.open(proj_path)
-            changed = 0
-            p.targets.each do |t|
-              t.build_phases.grep(Xcodeproj::Project::Object::PBXSourcesBuildPhase).each do |phase|
-                phase.files.each do |bf|
-                  settings = bf.settings ||= {}
-                  flags = settings["COMPILER_FLAGS"]
-                  next unless flags.is_a?(String) || flags.is_a?(Array)
-                  new_flags = if flags.is_a?(Array)
-                    flags.map { |s| s.to_s.gsub(/(^|\s)-G(?=\s|$)/, " ").squeeze(" ").strip }.reject(&:empty?)
-                  else
-                    v = flags.to_s.gsub(/(^|\s)-G(?=\s|$)/, " ").squeeze(" ").strip
-                    v
-                  end
-                  unless new_flags == flags
-                    settings["COMPILER_FLAGS"] = new_flags
-                    changed += 1
-                  end
-                end
-              end
-            end
-            p.save if changed > 0
-            puts "✅ Purged -G from #{changed} build file COMPILER_FLAGS entries"
-          '
-
-      # 🔧 Pods 전역: 모든 타겟의 FLAGS 계열 키에서 -G 토큰 제거 (광범위)
-      - name: Purge -G from all FLAGS keys across Pods targets
-        run: |
-          cd "$PROJ_DIR/ios"
-          ruby -r xcodeproj -e '
-            proj_path = "Pods/Pods.xcodeproj"
-            abort("no Pods.xcodeproj") unless File.exist?(proj_path)
-            p = Xcodeproj::Project.open(proj_path)
-            keys = %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_LDFLAGS WARNING_CFLAGS
-                      GCC_PREPROCESSOR_DEFINITIONS CLANG_CXX_LIBRARY CLANG_CXX_LANGUAGE_STANDARD
-                      CLANG_CXX_LIBRARY CLANG_CXX_LANGUAGE_STANDARD CLANG_WARN_DOCUMENTATION_COMMENTS]
-            # 위 키 외에도 *_FLAGS 로 끝나는 모든 키 포함
-            def scrub_val(v)
-              case v
-              when Array
-                v.map { |s| s.to_s.gsub(/(^|\s)-G(?=\s|$)/, " ").squeeze(" ").strip }.reject(&:empty?)
-              when String
-                nv = v.gsub(/(^|\s)-G(?=\s|$)/, " ").squeeze(" ").strip
-                nv.empty? ? "$(inherited)" : nv
-              else
-                v
-              end
-            end
-            changed = 0
-            p.targets.each do |t|
-              t.build_configurations.each do |cfg|
-                # 1) 미리 정의한 키들
-                keys.each do |k|
-                  next unless cfg.build_settings.key?(k)
-                  old = cfg.build_settings[k]
-                  nv = scrub_val(old)
-                  next if nv == old
-                  cfg.build_settings[k] = nv
-                  changed += 1
-                end
-                # 2) *_FLAGS 패턴 키 전수
-                cfg.build_settings.keys.grep(/FLAGS$/).each do |k|
-                  old = cfg.build_settings[k]
-                  nv = scrub_val(old)
-                  next if nv == old
-                  cfg.build_settings[k] = nv
-                  changed += 1
-                end
-              end
-            end
-            p.save if changed > 0
-            puts "✅ Purged -G tokens from FLAGS keys: #{changed} updates"
           '
 
       # Verify/patch aps-environment for Release
@@ -428,52 +215,6 @@ jobs:
               echo "::warning::[Checkpoint 4] No .xcworkspace found yet."
             fi
           fi
-
-      # 🔒 Fastlane 빌드 직전 최종 검증: BoringSSL-GRPC에서 -G 완전 제거 보장
-      - name: Final -G purge before build (BoringSSL-GRPC only)
-        run: |
-          cd "$PROJ_DIR/ios"
-          ruby -r xcodeproj -e '
-            proj_path = "Pods/Pods.xcodeproj"
-            abort("no Pods.xcodeproj") unless File.exist?(proj_path)
-            p = Xcodeproj::Project.open(proj_path)
-            tgt = p.targets.find { |t| t.name == "BoringSSL-GRPC" }
-            abort("no BoringSSL-GRPC target") unless tgt
-            changes = 0
-            
-            # 1) 타겟 빌드 설정: 모든 FLAGS 키를 $(inherited)로 강제 초기화
-            %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_LDFLAGS WARNING_CFLAGS].each do |k|
-              tgt.build_configurations.each do |cfg|
-                old = cfg.build_settings[k]
-                next if old == "$(inherited)" || old.nil?
-                cfg.build_settings[k] = "$(inherited)"
-                changes += 1
-              end
-            end
-            
-            # 2) 소스 파일 COMPILER_FLAGS에서 -G 제거
-            tgt.build_phases.grep(Xcodeproj::Project::Object::PBXSourcesBuildPhase).each do |phase|
-              phase.files.each do |bf|
-                next unless bf.settings
-                flags = bf.settings["COMPILER_FLAGS"]
-                next unless flags
-                if flags.is_a?(String) && flags.include?("-G")
-                  cleaned = flags.gsub(/(^|\s)-G(?=\s|$)/, " ").squeeze(" ").strip
-                  bf.settings["COMPILER_FLAGS"] = cleaned.empty? ? "" : cleaned
-                  changes += 1
-                  puts "🔧 [Final] Cleaned COMPILER_FLAGS: #{flags} → #{cleaned}"
-                elsif flags.is_a?(Array) && flags.any? { |s| s.to_s.include?("-G") }
-                  cleaned = flags.map { |s| s.to_s.gsub(/(^|\s)-G(?=\s|$)/, " ").squeeze(" ").strip }.reject(&:empty?)
-                  bf.settings["COMPILER_FLAGS"] = cleaned.empty? ? "" : cleaned
-                  changes += 1
-                  puts "🔧 [Final] Cleaned COMPILER_FLAGS array: #{flags.inspect} → #{cleaned.inspect}"
-                end
-              end
-            end
-            
-            p.save if changes > 0
-            puts "✅ [Final] Made #{changes} changes to remove -G from BoringSSL-GRPC"
-          '
 
       - name: Fastlane beta
         env:

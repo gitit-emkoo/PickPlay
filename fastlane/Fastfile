@@ -18,20 +18,20 @@ MATCH_BRANCH = ENV.fetch("MATCH_GIT_BRANCH", "master")  # certs repo 기본 브�
 # --- 공통 CI 준비 ---
 def prepare_ci!
   opt_out_usage
-  setup_ci
+    setup_ci
 
   # Runner에서 Xcode는 워크플로우에서 선택되므로 여기선 버전 로깅만 수행
   sh("xcodebuild -version | tee /dev/stderr")
   xcode_select("/Applications/Xcode_16.2.app")
 
-  create_keychain(
-    name: "build",
+    create_keychain(
+      name: "build",
     password: KEYCHAIN_PW,
-    default_keychain: true,
-    unlock: true,
-    timeout: 3600,
-    add_to_search_list: true
-  )
+      default_keychain: true,
+      unlock: true,
+      timeout: 3600,
+      add_to_search_list: true
+    )
 end
 
 def decode_profile_name(profile_path)
@@ -299,14 +299,10 @@ platform :ios do
     assert_push_in_profile!(pp_path)
 
     # Pods 재설치 (post_install 설정 적용)
+    # Clean 빌드 강제로 깨끗한 상태에서 시작
+    UI.message("🧹 Clean build: removing Pods and build artifacts...")
+    sh("cd #{IOS_DIR} && rm -rf Pods && rm -rf build && rm -rf ~/Library/Developer/Xcode/DerivedData/*")
     sh("cd #{IOS_DIR} && pod install")
-    
-    # post_install 후에도 -G 플래그가 남을 수 있으므로 추가 스크럽
-    UI.message("🧽 Additional -G flag scrubbing after pod install...")
-    sh("cd #{IOS_DIR} && " +
-       "find 'Pods/Target Support Files' -name '*.xcconfig' -type f -exec perl -i -pe 's/\\s-G(?=\\s|$)/ /g' {} \\; 2>/dev/null || true && " +
-       "[ -f 'Pods/Pods.xcodeproj/project.pbxproj' ] && " +
-       "perl -i -pe 's/\\s-G(?=\\s|$)/ /g' 'Pods/Pods.xcodeproj/project.pbxproj' 2>/dev/null || true")
 
     # (선택) 빌드 번호 자동 증가
     increment_build_number(xcodeproj: XCODEPROJ)
@@ -419,7 +415,7 @@ platform :ios do
       UI.important("⚠️ 프로젝트 파일 수정 실패 (xcargs로 대체): #{e.message}")
     end
     
-    # 2) export_options는 이름(Name)만 사용, 없으면 생략 (이미 xcodeproj/xcargs/임베드로 지정됨)
+    # export_options는 이름(Name)만 사용, 없으면 생략 (이미 xcodeproj/xcargs/임베드로 지정됨)
     export_profiles = {}
     export_profiles[BUNDLE_ID] = pp_name unless pp_name.empty?
     
