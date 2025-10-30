@@ -1,6 +1,9 @@
 platform :ios, '15.1'
 ENV['RCT_NEW_ARCH_ENABLED'] ||= '0'
 
+# CocoaPods install behavior
+install! 'cocoapods', :disable_input_output_paths => true
+
 # ✅ RN iOS autolinking 스크립트 로드 (양쪽 경로 시도 + 폴백)
 begin
   require_relative '../node_modules/@react-native-community/cli-platform-ios/native_modules'
@@ -63,12 +66,28 @@ target target_name do
   pod 'FirebaseAuth', firebase_version
   pod 'FirebaseFirestore', firebase_version
   pod 'FirebaseFunctions', firebase_version
+
+  # Force Firebase/GRPC to use BoringSSL only (avoid openssl_grpc variant)
+  pod 'gRPC-Core', '1.52.2', :modular_headers => true
+  pod 'gRPC-ObjC', '1.52.2', :modular_headers => true
+  pod 'gRPC-C++', '1.52.2', :modular_headers => true
 end
 
 post_install do |installer|
   puts "🔧 [post_install] Custom Podfile post_install hook executing..."
   react_native_post_install(installer)
   Expo::PostInstall.install!(installer)
+
+  # 🔥 Remove OpenSSL-based GRPC target completely (prevents -G reintroduction)
+  begin
+    openssl_t = installer.pods_project.targets.find { |t| t.name == 'BoringSSL-GRPC-openssl_grpc' }
+    if openssl_t
+      openssl_t.remove_from_project
+      puts "🔥 [post_install] Removed target: BoringSSL-GRPC-openssl_grpc"
+    end
+  rescue => e
+    puts "⚠️  [post_install] Failed to remove openssl_grpc target: #{e.message}"
+  end
 
   # === 아래는 기존 커스텀 유지 ===
   installer.pods_project.targets.each do |target|
