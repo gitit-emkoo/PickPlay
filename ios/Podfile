@@ -195,6 +195,23 @@ post_install do |installer|
         ].each do |k|
           config.build_settings[k] = '$(inherited)'
         end
+        
+        # 🔒 BoringSSL-GRPC 개별 소스 파일의 COMPILER_FLAGS에서도 -G 제거
+        target.build_phases.grep(Xcodeproj::Project::Object::PBXSourcesBuildPhase).each do |phase|
+          phase.files.each do |bf|
+            next unless bf.settings
+            flags = bf.settings['COMPILER_FLAGS']
+            next unless flags
+            if flags.is_a?(String)
+              cleaned = flags.gsub(/(^|\s)-G(?=\s|$)/, ' ').squeeze(' ').strip
+              bf.settings['COMPILER_FLAGS'] = cleaned.empty? ? '' : cleaned
+            elsif flags.is_a?(Array)
+              cleaned = flags.map { |s| s.to_s.gsub(/(^|\s)-G(?=\s|$)/, ' ').squeeze(' ').strip }.reject(&:empty?)
+              bf.settings['COMPILER_FLAGS'] = cleaned.empty? ? '' : cleaned
+            end
+          end
+        end
+        puts "✅ [BoringSSL-GRPC] Cleaned COMPILER_FLAGS in source files"
       end
 
       if name.include?('ReactNativeDependencies')
