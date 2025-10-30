@@ -26,7 +26,7 @@ jobs:
           cache: "npm"
           cache-dependency-path: "**/package-lock.json"
 
-      # p8 내용을 파일로 저장 → Fastlane에서 key_filepath로 사용
+      # Save p8 key to temporary file for Fastlane
       - name: Write App Store Connect API key to file
         env:
           ASC_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
@@ -48,7 +48,7 @@ jobs:
           gem install cocoapods --no-document
           gem install xcodeproj --no-document
 
-      # 프로젝트 디렉토리: pickplay
+      # 프로젝트 디렉토리 감지
       - name: Detect project dir
         run: |
           if [ -f ./pickplay/ios/Podfile ]; then
@@ -60,6 +60,7 @@ jobs:
           fi
           echo "Detected PROJ_DIR=$PROJ_DIR"
 
+      # ✅ 캐시 및 빌드 잔재 완전 삭제
       - name: Clean caches (clean build)
         run: |
           rm -rf "$PROJ_DIR/node_modules"
@@ -77,25 +78,22 @@ jobs:
             npm install --omit=dev --legacy-peer-deps
           fi
 
-      - name: Install RN autolinking CLI (as prod deps)
+      - name: Install RN autolinking CLI (prod)
         run: |
           cd "$PROJ_DIR"
           npm i --save --legacy-peer-deps \
             @react-native-community/cli \
             @react-native-community/cli-platform-ios \
             expo-modules-autolinking
-          node -e "console.log('RN CLI:', require('@react-native-community/cli/package.json').version); console.log('CLI iOS:', require('@react-native-community/cli-platform-ios/package.json').version)"
 
+      # Expo prebuild 필요 시만 실행
       - name: Ensure iOS native project (conditional Expo prebuild)
         run: |
           cd "$PROJ_DIR"
           if [ -z "$(ls -1 ios/*.xcodeproj 2>/dev/null)" ]; then
             echo "🛠  No .xcodeproj found — running Expo prebuild (iOS only)..."
             npx expo prebuild --platform ios --no-install --clean
-            # ✅ 커밋된 Podfile로 복원 (prebuild가 덮어썼을 수 있음)
-            git checkout -- ios/Podfile || true
-            echo "== ios contents after prebuild =="
-            ls -la ios
+            git checkout -- ios/Podfile || true # ✅ Podfile 되살리기
           else
             echo "✅ .xcodeproj found; skipping prebuild."
           fi
@@ -103,29 +101,18 @@ jobs:
       - name: Debug iOS folder
         run: |
           cd "$PROJ_DIR/ios"
-          echo "== ios contents =="
-          ls -la
-          echo "== Xcode projects =="
-          ls -1 *.xcodeproj || true
+          echo "== ios contents ==" && ls -la
+          echo "== Xcode projects ==" && ls -1 *.xcodeproj || true
 
-      # Pods 캐시를 pod install 이전에 두어 복원 효과를 누림
-      - name: Cache Pods
-        uses: actions/cache@v4
-        with:
-          path: |
-            ${{ env.PROJ_DIR }}/ios/Pods
-            ${{ env.PROJ_DIR }}/ios/Podfile.lock
-          key: ${{ runner.os }}-pods-${{ hashFiles(format('{0}/ios/Podfile.lock', env.PROJ_DIR)) }}
-          restore-keys: ${{ runner.os }}-pods-
+      # ✅ Pods 캐시 제거됨!! (가장 중요한 변경사항)
+      # - name: Cache Pods
+      #   ...
 
       - name: Install CocoaPods
         run: |
           cd "$PROJ_DIR/ios"
           pod install --repo-update
-          # Podfile post_install에서 -G 플래그 자동 제거됨
-          # 문제가 있으면 빌드 단계에서 바로 실패하므로 별도 검증 불필요
 
-      # Verify/patch aps-environment for Release
       - name: Verify/patch aps-environment for Release
         run: |
           set -e
@@ -137,60 +124,25 @@ jobs:
           fi
           echo "Found entitlements: $ENT_FILE"
           CURRENT=$(/usr/libexec/PlistBuddy -c "Print :aps-environment" "$ENT_FILE" 2>/dev/null || echo "")
-          echo "aps-environment in entitlements: ${CURRENT:-<none>}"
+          echo "aps-environment: ${CURRENT:-<none>}"
           if [ "$CURRENT" = "development" ]; then
             echo "Patching aps-environment to production"
             /usr/libexec/PlistBuddy -c "Set :aps-environment production" "$ENT_FILE"
-            /usr/libexec/PlistBuddy -c "Print :aps-environment" "$ENT_FILE"
-          fi
-
-      # 4️⃣ 체크포인트: 스킴 공유 확인 (PickPlay 하나로 공유 확인)
-      - name: Checkpoint 4 - Verify Xcode workspace & schemes
-        run: |
-          cd "$PROJ_DIR/ios"
-          if [ -f "PickPlay.xcworkspace/contents.xcworkspacedata" ]; then
-            echo "🔍 [Checkpoint 4] Verifying workspace and schemes..."
-            xcodebuild -list -workspace PickPlay.xcworkspace | tee /tmp/xcode-list.txt
-            if grep -q "Scheme:" /tmp/xcode-list.txt; then
-              schemes=$(grep -A 100 "Schemes:" /tmp/xcode-list.txt | grep -v "Schemes:" | sed '/^$/,$d' | grep -v "^$" | sed 's/^[[:space:]]*//' || true)
-              echo "✅ [Checkpoint 4] Found schemes:"
-              echo "$schemes" | while read scheme; do
-                if [ -n "$scheme" ]; then
-                  echo "   - $scheme"
-                fi
-              done
-              if echo "$schemes" | grep -q "PickPlay"; then
-                echo "✅ [Checkpoint 4] PickPlay scheme found (shared scheme confirmed)"
-              else
-                echo "::warning::[Checkpoint 4] PickPlay scheme not found in list"
-              fi
-            fi
-          else
-            WS=$(ls -1 *.xcworkspace 2>/dev/null | head -n1 || true)
-            if [ -n "$WS" ]; then
-              echo "Detected workspace: $WS"
-              xcodebuild -list -workspace "$WS"
-            else
-              echo "::warning::[Checkpoint 4] No .xcworkspace found yet."
-            fi
           fi
 
       - name: Fastlane beta
         env:
-          # App Store Connect
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
           APP_STORE_CONNECT_API_KEY_PATH: ${{ env.APP_STORE_CONNECT_API_KEY_PATH }}
-          # Apple/Match
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
           MATCH_GIT_USERNAME: ${{ secrets.MATCH_GIT_USERNAME }}
           MATCH_GIT_PASSWORD: ${{ secrets.MATCH_GIT_PASSWORD }}
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-          MATCH_GIT_BRANCH: master  # certs repo 기본 브랜치 (에러 로그에서 master 확인)
+          MATCH_GIT_BRANCH: master
           KEYCHAIN_PASSWORD: actions
-          # (옵션) Firebase App Distribution — 없으면 빈 값으로 넘어가도 무방
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
           FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
         run: |
