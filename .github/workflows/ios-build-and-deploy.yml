@@ -221,6 +221,40 @@ jobs:
             perl -i -pe 's/\\s-G(?=\\s|$)/ /g' "Pods/Pods.xcodeproj/project.pbxproj"
           fi
 
+      # 🔧 Pods.xcodeproj를 직접 수정하여 BoringSSL-GRPC 플래그 초기화 (xcodeproj 사용)
+      - name: Force reset flags for BoringSSL-GRPC via xcodeproj
+        run: |
+          cd "$PROJ_DIR/ios"
+          ruby -r xcodeproj -e '
+            proj_path = "Pods/Pods.xcodeproj"
+            abort("no Pods.xcodeproj") unless File.exist?(proj_path)
+            p = Xcodeproj::Project.open(proj_path)
+            tgt = p.targets.find { |t| t.name == "BoringSSL-GRPC" }
+            abort("no BoringSSL-GRPC target") unless tgt
+            keys = %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_LDFLAGS WARNING_CFLAGS GCC_PREPROCESSOR_DEFINITIONS]
+            scrub = proc do |val|
+              case val
+              when Array
+                val.map { |s| s.to_s.gsub(/(^|\s)-G(?=\s|$)/, " ").squeeze(" ").strip }.reject(&:empty?)
+              when String
+                v = val.gsub(/(^|\s)-G(?=\s|$)/, " ").squeeze(" ").strip
+                v.empty? ? "$(inherited)" : v
+              else
+                "$(inherited)"
+              end
+            end
+            tgt.build_configurations.each do |cfg|
+              keys.each do |k|
+                v = cfg.build_settings[k]
+                v = scrub.call(v)
+                v = ["$(inherited)"] if v.is_a?(Array) && v.empty?
+                cfg.build_settings[k] = v.nil? || (v.respond_to?(:empty?) && v.empty?) ? "$(inherited)" : v
+              end
+            end
+            p.save
+            puts "✅ BoringSSL-GRPC flags reset to $(inherited)"
+          '
+
       # Verify/patch aps-environment for Release
       - name: Verify/patch aps-environment for Release
         run: |
