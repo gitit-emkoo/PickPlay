@@ -1,62 +1,67 @@
-post_install do |installer|
-  react_native_post_install(installer)
-  Expo::PostInstall.install!(installer) if defined?(Expo::PostInstall)
+require_relative '../node_modules/react-native/scripts/react_native_pods'
+require_relative '../node_modules/react-native/scripts/react_native_post_install'
 
-  installer.pods_project.targets.each do |target|
-    target.build_configurations.each do |config|
-      # 공통 설정 적용
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-      config.build_settings['ENABLE_BITCODE'] = 'NO'
-      config.build_settings['SWIFT_VERSION'] = '5.0'
-      config.build_settings['CODE_SIGN_STYLE'] = 'Automatic'
-      config.build_settings.delete('PROVISIONING_PROFILE_SPECIFIER')
-    end
+platform :ios, '13.4'
 
-    # ✅ BoringSSL-GRPC 완전 제거 로직
-    if target.name == 'BoringSSL-GRPC'
-      puts "🔍 Fixing: #{target.name}"
+target 'PickPlay' do
+  config = use_native_modules!
 
-      flag_keys = %w[
-        OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_LDFLAGS
-        WARNING_CFLAGS GCC_PREPROCESSOR_DEFINITIONS
-      ]
+  use_react_native!(
+    :path => config[:reactNativePath],
+    :hermes_enabled => true
+  )
 
-      target.build_configurations.each do |config|
-        flag_keys.each do |key|
-          val = config.build_settings[key]
-          next unless val
-          cleaned =
+  # Expo / Firebase 등 필요한 Pod 추가되어야 함
+  # 예시:
+  # pod 'Firebase/Core'
+
+  post_install do |installer|
+    # React Native 필수 처리
+    react_native_post_install(installer)
+
+    # ✅ BoringSSL -G 제거 스크립트
+    %w[BoringSSL-GRPC BoringSSL-GRPC-openssl_grpc].each do |target_name|
+      installer.pods_project.targets.each do |target|
+        next unless target.name == target_name
+
+        flag_keys = %w[
+          OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_LDFLAGS WARNING_CFLAGS GCC_PREPROCESSOR_DEFINITIONS
+          OTHER_CFLAGS[arch=arm64] OTHER_CPLUSPLUSFLAGS[arch=arm64] OTHER_LDFLAGS[arch=arm64]
+          OTHER_CFLAGS[sdk=iphoneos*] OTHER_CPLUSPLUSFLAGS[sdk=iphoneos*] OTHER_LDFLAGS[sdk=iphoneos*]
+          OTHER_CFLAGS[sdk=iphonesimulator*] OTHER_CPLUSPLUSFLAGS[sdk=iphonesimulator*] OTHER_LDFLAGS[sdk=iphonesimulator*]
+        ]
+
+        target.build_configurations.each do |config|
+          flag_keys.each do |key|
+            val = config.build_settings[key]
+            next unless val
             if val.is_a?(String)
-              val.gsub(/\s-G(\s|$)/, ' ').squeeze(' ').strip
+              cleaned = val.gsub(/\s-G(\s|$)/, ' ').squeeze(' ').strip
+              config.build_settings[key] = cleaned.empty? ? '$(inherited)' : cleaned
             elsif val.is_a?(Array)
-              val.map { |v| v.gsub(/\s-G(\s|$)/, ' ').strip }.reject(&:empty?)
+              cleaned = val.map { |v| v.to_s.gsub(/\s-G(\s|$)/, ' ').squeeze(' ').strip }.reject(&:empty?)
+              config.build_settings[key] = cleaned.empty? ? ['$(inherited)'] : cleaned
             end
-
-          config.build_settings[key] = cleaned
+          end
         end
-      end
 
-      # ✅ 개별 소스 파일 컴파일러 플래그 제거
-      g_pattern = /(^|\s)-G(?=\s|$)/
-
-      target.build_phases.grep(Xcodeproj::Project::Object::PBXSourcesBuildPhase).each do |phase|
-        phase.files.each do |bf|
-          next unless bf.settings
-          next unless bf.settings['COMPILER_FLAGS']
-
-          flagged = bf.settings['COMPILER_FLAGS']
-          cleaned =
-            if flagged.is_a?(String)
-              flagged.gsub(g_pattern, ' ').squeeze(' ').strip
-            elsif flagged.is_a?(Array)
-              flagged.map { |s| s.gsub(g_pattern, ' ').strip }.reject(&:empty?)
+        g_pattern = /(^|\s)-G(?=\s|$)/
+        target.build_phases.grep(Xcodeproj::Project::Object::PBXSourcesBuildPhase).each do |phase|
+          phase.files.each do |bf|
+            next unless bf.settings
+            flags = bf.settings['COMPILER_FLAGS']
+            next unless flags
+            if flags.is_a?(String)
+              cleaned = flags.gsub(g_pattern, ' ').squeeze(' ').strip
+              bf.settings['COMPILER_FLAGS'] = cleaned.empty? ? nil : cleaned
+            elsif flags.is_a?(Array)
+              cleaned = flags.map { |v| v.to_s.gsub(g_pattern, ' ').squeeze(' ').strip }.reject(&:empty?)
+              bf.settings['COMPILER_FLAGS'] = cleaned.empty? ? nil : cleaned
             end
-
-          bf.settings['COMPILER_FLAGS'] = cleaned.empty? ? nil : cleaned
+          end
         end
+        puts "✅ [-G removed] #{target_name}"
       end
-
-      puts "✅ All -G flags removed for #{target.name}"
     end
   end
 end
