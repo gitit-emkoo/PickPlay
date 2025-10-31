@@ -122,6 +122,15 @@ jobs:
           cd "$PROJ_DIR/ios"
           pod install --repo-update
 
+      - name: Verify post_install cleaned BoringSSL-GRPC
+        run: |
+          cd "$PROJ_DIR/ios"
+          if grep -R --line-number --fixed-strings " -G" Pods/Pods.xcodeproj/project.pbxproj; then
+            echo "::error::Found -G in Pods project after post_install"
+            exit 1
+          fi
+          echo "✅ No -G flags remain in Pods project"
+
       - name: Verify/patch aps-environment for Release
         run: |
           set -e
