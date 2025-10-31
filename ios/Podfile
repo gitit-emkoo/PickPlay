@@ -37,6 +37,12 @@ end
 post_install do |installer|
   react_native_post_install(installer)
 
+  # Pods 프로젝트 루트 빌드 설정에도 C++20 강제 (일부 타겟이 xcconfig로 gnu++14를 참조하는 경우 대비)
+  installer.pods_project.build_configurations.each do |config|
+    config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++20'
+    config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
+  end
+
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
       # iOS 최소 타겟 상향 (Codegen 생성 Pod 요구 대응)
