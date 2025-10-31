@@ -14,7 +14,7 @@ rescue LoadError
   def use_expo_modules!(*); end
 end
 
-platform :ios, '13.0'
+platform :ios, '15.1'
 project 'PickPlay.xcodeproj'
 
 target 'PickPlay' do
@@ -33,6 +33,8 @@ post_install do |installer|
 
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
+      # iOS 최소 타겟 상향 (Codegen 생성 Pod 요구 대응)
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
       # -G 오류 제거 (Array/String 모두 안전 처리)
       flags = config.build_settings['OTHER_CFLAGS']
       if flags.is_a?(Array)
