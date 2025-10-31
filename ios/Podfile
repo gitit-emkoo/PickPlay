@@ -107,5 +107,22 @@ post_install do |installer|
     Pod::UI.puts "⚠️ openssl_grpc target removal skipped: #{e.message}"
   end
 
+  # 4) Hermes 스크립트 단계가 CI에서 실패하는 이슈 방지: 스크립트를 no-op 처리
+  begin
+    hermes = installer.pods_project.targets.find { |t| t.name == 'hermes-engine' }
+    if hermes
+      hermes.build_phases.grep(Xcodeproj::Project::Object::PBXShellScriptBuildPhase).each do |bp|
+        next unless bp.name.to_s.include?('Replace Hermes for the right configuration')
+        bp.shell_script = %q(
+          echo "[CI] Skipping Hermes replacement script (no-op)."
+          exit 0
+        ).strip
+        puts "🛠️  Hermes replacement script converted to no-op"
+      end
+    end
+  rescue => e
+    Pod::UI.puts "⚠️ Hermes script phase tweak skipped: #{e.message}"
+  end
+
   installer.pods_project.save
 end
