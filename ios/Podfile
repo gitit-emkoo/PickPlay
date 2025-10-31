@@ -1,6 +1,18 @@
 require_relative '../node_modules/react-native/scripts/react_native_pods'
-require_relative '../node_modules/react-native/scripts/react_native_post_install'
-require_relative '../node_modules/expo/scripts/autolinking'
+
+begin
+  require_relative '../node_modules/react-native/scripts/react_native_post_install'
+rescue LoadError
+  Pod::UI.puts '⚠️  react_native_post_install not found; continuing without it'
+  def react_native_post_install(*); end
+end
+
+begin
+  require_relative '../node_modules/expo/scripts/autolinking'
+rescue LoadError
+  Pod::UI.puts '⚠️  expo autolinking script not found; continuing without it'
+  def use_expo_modules!(*); end
+end
 
 platform :ios, '13.0'
 project 'PickPlay.xcodeproj'
