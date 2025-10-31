@@ -117,4 +117,9 @@ post_install do |installer|
             elsif flags.is_a?(Array)
               cleaned = flags.map { |s| s.gsub(g_pattern, ' ').squeeze(' ').strip }.reject(&:empty?)
               bf.settings['COMPILER_FLAGS'] = cleaned.empty? ? nil : cleaned
-            end
+          end
+        end
+      end
+    end
+  end
+end
