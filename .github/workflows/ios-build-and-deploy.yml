@@ -104,9 +104,13 @@ jobs:
           echo "== ios contents ==" && ls -la
           echo "== Xcode projects ==" && ls -1 *.xcodeproj || true
 
-      # ✅ Pods 캐시 제거됨!! (가장 중요한 변경사항)
-      # - name: Cache Pods
-      #   ...
+      - name: Cache Pods
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.PROJ_DIR }}/ios/Pods
+            ${{ env.PROJ_DIR }}/ios/Podfile.lock
+          key: pods-clear-${{ hashFiles(format('{0}/ios/Podfile.lock', env.PROJ_DIR)) }}
 
       - name: Install CocoaPods
         run: |
