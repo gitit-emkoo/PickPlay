@@ -41,6 +41,9 @@ post_install do |installer|
     target.build_configurations.each do |config|
       # iOS 최소 타겟 상향 (Codegen 생성 Pod 요구 대응)
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+      # Hermes/React C++ 컴파일 표준 및 라이브러리 강제 지정
+      config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+      config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
       # New Architecture 비활성화
       defs = (config.build_settings["GCC_PREPROCESSOR_DEFINITIONS"] ||= [])
       defs << "RCT_NEW_ARCH_ENABLED=0" unless defs.include?("RCT_NEW_ARCH_ENABLED=0")
