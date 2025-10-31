@@ -78,6 +78,11 @@ jobs:
             npm install --omit=dev --legacy-peer-deps
           fi
 
+      - name: Align RN/Expo package versions (expo install --fix)
+        run: |
+          cd "$PROJ_DIR"
+          npx expo install --fix --no-interactive || true
+
       - name: Install RN autolinking CLI (prod)
         run: |
           cd "$PROJ_DIR"

@@ -1,3 +1,4 @@
+source 'https://cdn.cocoapods.org/'
 require_relative '../node_modules/react-native/scripts/react_native_pods'
 
 begin
@@ -25,6 +26,11 @@ target 'PickPlay' do
     :fabric_enabled => false,
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
+
+  # Fallback: Ensure RNScreens is resolvable for Expo pods (e.g., ExpoHead)
+  if File.exist?(File.join(__dir__, '../node_modules/react-native-screens/RNScreens.podspec'))
+    pod 'RNScreens', :path => '../node_modules/react-native-screens'
+  end
 
 end
 
