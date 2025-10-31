@@ -3,47 +3,51 @@ ENV['RCT_NEW_ARCH_ENABLED'] ||= '0'
 
 install! 'cocoapods', :disable_input_output_paths => true
 
-# ✅ RN iOS autolinking
+# ✅ RN autolinking
 begin
   require_relative '../node_modules/@react-native-community/cli-platform-ios/native_modules'
 rescue LoadError
   begin
     require_relative '../node_modules/@react-native/cli-platform-ios/native_modules'
   rescue LoadError
-    Pod::UI.puts '⚠️  RN iOS autolinking script not found; continuing without it'
+    Pod::UI.puts '⚠️ RN autolinking not found'
     def use_native_modules!(*args); end
   end
 end
 
+# ✅ React Native main pod config
 require_relative '../node_modules/react-native/scripts/react_native_pods'
-prepare_react_native_project!  
+prepare_react_native_project!
 
 # ✅ Expo autolinking
 begin
   require_relative '../node_modules/expo-modules-autolinking/scripts/autolinking'
 rescue LoadError
-  begin
-    require_relative '../node_modules/expo-modules-autolinking/build/scripts/autolinking'
-  rescue LoadError
-    Pod::UI.puts '⚠️  expo-modules-autolinking not found; continuing without it'
-    def use_expo_modules!(*args); end
-    module Expo; module PostInstall; def self.install!(*args); end; end; end
-  end
+  Pod::UI.puts '⚠️ Expo autolinking not found'
+  def use_expo_modules!(*args); end
+  module Expo; module PostInstall
+    def self.install!(*args); end
+  end; end
 end
 
 use_frameworks! :linkage => :static
 $RNReanimated = { :codegen_disabled => true }
 
-# ✅ 자동으로 Xcodeproj 찾기
+# ✅ Dynamic project detection
 xcodeproj_path = Dir.glob(File.join(__dir__, '*.xcodeproj')).first
-raise "Missing Xcode project" if xcodeproj_path.nil?
+if xcodeproj_path.nil?
+  Pod::UI.puts "❌ No .xcodeproj found"
+  raise
+end
 
 xcodeproj_name = File.basename(xcodeproj_path)
 target_name = File.basename(xcodeproj_path, '.xcodeproj')
+
 project xcodeproj_name
 
 target target_name do
   use_expo_modules!
+
   config = use_native_modules!
 
   use_react_native!(
@@ -53,73 +57,51 @@ target target_name do
     :app_path => ".."
   )
 
+  firebase_version = '10.25.0'
+  pod 'FirebaseCore', firebase_version
+  pod 'FirebaseAuth', firebase_version
+  pod 'FirebaseFirestore', firebase_version
+  pod 'FirebaseFunctions', firebase_version
 end
 
 post_install do |installer|
-  puts "🔧 [post_install] Custom Podfile post_install hook executing..."
   react_native_post_install(installer)
-  Expo::PostInstall.install!(installer)
-
-  # ✅ -G 문제 재발 방지
-  begin
-    openssl_t = installer.pods_project.targets.find { |t| t.name == 'BoringSSL-GRPC-openssl_grpc' }
-    if openssl_t
-      openssl_t.remove_from_project
-      puts "🔥 Removed target: BoringSSL-GRPC-openssl_grpc"
-    end
-  rescue => e
-    puts "⚠️ Failed to remove openssl_grpc target: #{e.message}"
-  end
+  Expo::PostInstall.install!(installer) if defined?(Expo::PostInstall)
 
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
-      name = target.name.to_s
-
-      # ✅ 최소 iOS 15.1 유지
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
       config.build_settings['ENABLE_BITCODE'] = 'NO'
-
-      # ✅ 모든 Pods 자동 코드사인 방지
+      config.build_settings['SWIFT_VERSION'] = '5.0'
       config.build_settings['CODE_SIGN_STYLE'] = 'Automatic'
       config.build_settings.delete('PROVISIONING_PROFILE_SPECIFIER')
 
-      # ✅ GRPC 대상 -G 제거
-      if ['BoringSSL-GRPC', 'BoringSSL-GRPC-openssl_grpc'].include?(name)
+      name = target.name.to_s
 
-        flag_keys = %w[
-          OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_LDFLAGS
-          WARNING_CFLAGS GCC_PREPROCESSOR_DEFINITIONS
-          OTHER_CFLAGS[arch=arm64] OTHER_CPLUSPLUSFLAGS[arch=arm64] OTHER_LDFLAGS[arch=arm64]
-          OTHER_CFLAGS[sdk=iphoneos*] OTHER_CPLUSPLUSFLAGS[sdk=iphoneos*] OTHER_LDFLAGS[sdk=iphoneos*]
-          OTHER_CFLAGS[sdk=iphonesimulator*] OTHER_CPLUSPLUSFLAGS[sdk=iphonesimulator*] OTHER_LDFLAGS[sdk=iphonesimulator*]
+      # ✅ Firebase 모듈 안정성 향상
+      if name.include?('Google') || name.include?('Firebase')
+        config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+      end
+
+      # ✅ BoringSSL-GRPC -G 제거 (근본적 해결)
+      if name == 'BoringSSL-GRPC'
+        flag_keys = [
+          'OTHER_CFLAGS', 'OTHER_CPLUSPLUSFLAGS', 'OTHER_LDFLAGS'
         ]
-
+        
         flag_keys.each do |key|
           v = config.build_settings[key]
           next unless v
-          if v.is_a?(String)
-            cleaned = v.gsub(/\s-G(\s|$)/, ' ').squeeze(' ').strip
-            config.build_settings[key] = cleaned.empty? ? '$(inherited)' : cleaned
+          cleaned = if v.is_a?(String)
+            v.gsub(/\s-G(\s|$)/, ' ').strip
           elsif v.is_a?(Array)
-            cleaned = v.map { |s| s.gsub(/\s-G(\s|$)/, ' ').squeeze(' ').strip }.reject(&:empty?)
-            config.build_settings[key] = cleaned.empty? ? ['$(inherited)'] : cleaned
+            v.map { |x| x.gsub(/\s-G(\s|$)/, ' ') }.reject(&:empty?)
           end
+          config.build_settings[key] = cleaned
         end
-
-        g_pattern = /(^|\s)-G(?=\s|$)/
-        target.build_phases.grep(Xcodeproj::Project::Object::PBXSourcesBuildPhase).each do |phase|
-          phase.files.each do |bf|
-            next unless bf.settings && bf.settings['COMPILER_FLAGS']
-            flags = bf.settings['COMPILER_FLAGS']
-            if flags.is_a?(String)
-              cleaned = flags.gsub(g_pattern, ' ').squeeze(' ').strip
-              bf.settings['COMPILER_FLAGS'] = cleaned.empty? ? nil : cleaned
-            elsif flags.is_a?(Array)
-              cleaned = flags.map { |s| s.gsub(g_pattern, ' ').squeeze(' ').strip }.reject(&:empty?)
-              bf.settings['COMPILER_FLAGS'] = cleaned.empty? ? nil : cleaned
-          end
-        end
+        puts "✅ [-G removed] #{name}"
       end
     end
   end
 end
+
