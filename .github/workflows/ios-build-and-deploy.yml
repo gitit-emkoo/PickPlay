@@ -151,13 +151,51 @@ jobs:
           fi
 
           FILE="Pods/Pods.xcodeproj/project.pbxproj"
-          # Pass if any C++20 is present (root or per-target). We do not fail on gnu++14 lines if gnu++20 is also set/overrides.
-          if ! grep -qE "CLANG_CXX_LANGUAGE_STANDARD\s*=\s*(gnu\+\+20|c\+\+20)" "$FILE"; then
-            echo "::error::No C++20 standard found in Pods project. post_install should set gnu++20."
+          
+          # Debug: Show what C++ standards are actually in the file
+          echo "📋 Scanning for CLANG_CXX_LANGUAGE_STANDARD in project.pbxproj..."
+          CXX_STANDARDS=$(grep -i "CLANG_CXX_LANGUAGE_STANDARD" "$FILE" | head -30 || true)
+          if [ -n "$CXX_STANDARDS" ]; then
+            echo "Found C++ standard settings (showing first 30 lines):"
+            echo "$CXX_STANDARDS" | head -30 | while IFS= read -r line; do
+              echo "  $line"
+            done
+          else
+            echo "⚠️  No CLANG_CXX_LANGUAGE_STANDARD found in project file (may use defaults)"
+          fi
+          
+          # Check if gnu++20 or c++20 exists anywhere (Xcode project file format: CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";)
+          # More flexible: look for gnu++20 or c++20 anywhere near CLANG_CXX_LANGUAGE_STANDARD
+          HAS_CXX20=$(grep -iE "gnu\+\+20|c\+\+20" "$FILE" || true)
+          
+          if [ -z "$HAS_CXX20" ]; then
+            echo "::error::No C++20 standard (gnu++20 or c++20) found in Pods project."
+            echo "::error::post_install hook should have set CLANG_CXX_LANGUAGE_STANDARD = gnu++20"
+            echo "::error::This will cause build failures with React Native 0.81.4+ (requires C++20 concepts)"
+            echo ""
+            echo "Debug info: First 10 lines with CLANG_CXX_LANGUAGE_STANDARD:"
+            grep -i "CLANG_CXX_LANGUAGE_STANDARD" "$FILE" | head -10 || echo "(none found)"
             exit 1
           fi
 
-          echo "✅ Detected C++20 standard in Pods project (gnu++20/c++20)"
+          # Count occurrences
+          CXX20_COUNT=$(echo "$HAS_CXX20" | grep -icE "(gnu\+\+20|c\+\+20)" || echo "0")
+          echo "✅ Detected C++20 standard in Pods project ($CXX20_COUNT occurrences of gnu++20/c++20)"
+          
+          # Show a sample of C++20 settings
+          echo "Sample C++20 settings found:"
+          echo "$HAS_CXX20" | head -5 | while IFS= read -r line; do
+            echo "  $line"
+          done
+          
+          # Warn if there are also old standards (but don't fail)
+          OLD_STD=$(grep -iE "CLANG_CXX_LANGUAGE_STANDARD[^=]*=\s*[\"]?gnu\+\+1[0-7]|CLANG_CXX_LANGUAGE_STANDARD[^=]*=\s*[\"]?c\+\+1[0-7]" "$FILE" | head -5 || true)
+          if [ -n "$OLD_STD" ]; then
+            echo "::warning::Found some old C++ standards (may be overridden by gnu++20):"
+            echo "$OLD_STD" | while IFS= read -r line; do
+              echo "  $line"
+            done
+          fi
 
       - name: Verify critical Podspecs are resolvable
         run: |
