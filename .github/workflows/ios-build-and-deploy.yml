@@ -81,7 +81,17 @@ jobs:
       - name: Align RN/Expo package versions (expo install --fix)
         run: |
           cd "$PROJ_DIR"
+          echo "📦 Running expo install --fix..."
+          BEFORE=$(cat package.json 2>/dev/null | grep -E '"(react-native|expo)"' | head -2 || echo "")
           npx expo install --fix --no-interactive || true
+          AFTER=$(cat package.json 2>/dev/null | grep -E '"(react-native|expo)"' | head -2 || echo "")
+          if [ "$BEFORE" != "$AFTER" ]; then
+            echo "::warning::expo install --fix changed package versions:"
+            echo "Before: $BEFORE"
+            echo "After: $AFTER"
+          else
+            echo "✅ No version changes detected"
+          fi
 
       - name: Install RN autolinking CLI (prod)
         run: |
@@ -130,6 +140,53 @@ jobs:
             exit 1
           fi
           echo "✅ No -G flags remain in Pods project"
+
+      - name: Verify C++ standard is gnu++20 for all Pods
+        run: |
+          cd "$PROJ_DIR/ios"
+          echo "🔍 Verifying C++20 standard is set for all Pod targets..."
+          if [ ! -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
+            echo "::warning::Pods project not found; skipping C++ standard check"
+            exit 0
+          fi
+          
+          # Check for explicit C++ standards in project file
+          NON_CXX20=$(grep -E "CLANG_CXX_LANGUAGE_STANDARD\s*=" Pods/Pods.xcodeproj/project.pbxproj | grep -v "gnu++20" | grep -v "c++20" | head -10 || true)
+          if [ -n "$NON_CXX20" ]; then
+            echo "::error::Found Pods with non-C++20 standard:"
+            echo "$NON_CXX20"
+            echo "::error::post_install hook should have set all targets to gnu++20"
+            exit 1
+          fi
+          
+          # Sample check: Verify ReactCommon has C++20 (critical target)
+          if grep -q "ReactCommon" Pods/Pods.xcodeproj/project.pbxproj 2>/dev/null; then
+            REACTCOMMON_STD=$(grep -A5 "ReactCommon" Pods/Pods.xcodeproj/project.pbxproj | grep "CLANG_CXX_LANGUAGE_STANDARD" | grep -oE "(gnu\+\+20|c\+\+20)" | head -1 || echo "")
+            if [ -z "$REACTCOMMON_STD" ]; then
+              echo "::warning::ReactCommon target may not have explicit C++20 standard (will use inherited)"
+            else
+              echo "✅ ReactCommon confirmed with $REACTCOMMON_STD"
+            fi
+          fi
+          
+          echo "✅ C++ standard verification passed (all Pods should inherit/use gnu++20 from post_install)"
+
+      - name: Verify critical Podspecs are resolvable
+        run: |
+          cd "$PROJ_DIR"
+          echo "🔍 Verifying critical podspecs..."
+          MISSING=0
+          for podspec in "react-native-screens/RNScreens.podspec" "react-native/React-Core.podspec"; do
+            if [ ! -f "node_modules/$podspec" ]; then
+              echo "::warning::Podspec not found: node_modules/$podspec"
+              MISSING=$((MISSING + 1))
+            else
+              echo "✅ Found: $podspec"
+            fi
+          done
+          if [ $MISSING -gt 0 ]; then
+            echo "::warning::Some podspecs missing; may cause CocoaPods resolution issues"
+          fi
 
       - name: Verify/patch aps-environment for Release
         run: |

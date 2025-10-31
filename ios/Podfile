@@ -41,13 +41,51 @@ post_install do |installer|
     target.build_configurations.each do |config|
       # iOS 최소 타겟 상향 (Codegen 생성 Pod 요구 대응)
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-      # Hermes/React C++ 컴파일 표준 및 라이브러리 강제 지정
-      config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+      
+      # Hermes/React C++ 컴파일 표준 및 라이브러리 강제 지정 (requires = C++20 concepts)
+      # React Native 0.81.4+ requires C++20 for concepts (requires keyword)
+      config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++20'
       config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
+      
+      # 일부 타겟에서 표준 미반영 시 플래그로 보강 (모든 C++ 파일에 적용)
+      cppflags = config.build_settings['OTHER_CPLUSPLUSFLAGS']
+      if cppflags.nil?
+        config.build_settings['OTHER_CPLUSPLUSFLAGS'] = ['-std=gnu++20']
+      elsif cppflags.is_a?(String)
+        unless cppflags.include?('-std=gnu++20') || cppflags.include?('-std=c++20')
+          config.build_settings['OTHER_CPLUSPLUSFLAGS'] = cppflags + ' -std=gnu++20'
+        end
+      elsif cppflags.is_a?(Array)
+        unless cppflags.any? { |f| f.to_s.include?('-std=gnu++20') || f.to_s.include?('-std=c++20') }
+          config.build_settings['OTHER_CPLUSPLUSFLAGS'] = cppflags + ['-std=gnu++20']
+        end
+      end
+      
       # New Architecture 비활성화
       defs = (config.build_settings["GCC_PREPROCESSOR_DEFINITIONS"] ||= [])
       defs << "RCT_NEW_ARCH_ENABLED=0" unless defs.include?("RCT_NEW_ARCH_ENABLED=0")
     end
+  end
+  
+  # 검증: 모든 타겟이 C++20 표준을 사용하는지 확인
+  begin
+    cxx_standard_issues = []
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        std = config.build_settings['CLANG_CXX_LANGUAGE_STANDARD']
+        if std && std != 'gnu++20' && std != 'c++20'
+          cxx_standard_issues << "#{target.name} (#{config.name}): #{std}"
+        end
+      end
+    end
+    if cxx_standard_issues.any?
+      Pod::UI.puts "⚠️  Warning: Some targets don't have gnu++20:"
+      cxx_standard_issues.each { |issue| Pod::UI.puts "   #{issue}" }
+    else
+      Pod::UI.puts "✅ All Pod targets configured with C++20 standard"
+    end
+  rescue => e
+    Pod::UI.puts "⚠️  C++ standard verification skipped: #{e.message}"
   end
 
   require 'xcodeproj'
