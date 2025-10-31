@@ -1,67 +1,38 @@
 require_relative '../node_modules/react-native/scripts/react_native_pods'
-require_relative '../node_modules/react-native/scripts/react_native_post_install'
 
-platform :ios, '13.4'
+platform :ios, '13.0'
+project 'PickPlay.xcodeproj'
 
 target 'PickPlay' do
   config = use_native_modules!
 
   use_react_native!(
     :path => config[:reactNativePath],
-    :hermes_enabled => true
+    :hermes_enabled => true,
+    :fabric_enabled => false
   )
 
-  # Expo / Firebase 등 필요한 Pod 추가되어야 함
-  # 예시:
-  # pod 'Firebase/Core'
+  target 'PickPlayTests' do
+    inherit! :search_paths
+  end
 
-  post_install do |installer|
-    # React Native 필수 처리
-    react_native_post_install(installer)
+end
 
-    # ✅ BoringSSL -G 제거 스크립트
-    %w[BoringSSL-GRPC BoringSSL-GRPC-openssl_grpc].each do |target_name|
-      installer.pods_project.targets.each do |target|
-        next unless target.name == target_name
+post_install do |installer|
+  react_native_post_install(installer)
 
-        flag_keys = %w[
-          OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_LDFLAGS WARNING_CFLAGS GCC_PREPROCESSOR_DEFINITIONS
-          OTHER_CFLAGS[arch=arm64] OTHER_CPLUSPLUSFLAGS[arch=arm64] OTHER_LDFLAGS[arch=arm64]
-          OTHER_CFLAGS[sdk=iphoneos*] OTHER_CPLUSPLUSFLAGS[sdk=iphoneos*] OTHER_LDFLAGS[sdk=iphoneos*]
-          OTHER_CFLAGS[sdk=iphonesimulator*] OTHER_CPLUSPLUSFLAGS[sdk=iphonesimulator*] OTHER_LDFLAGS[sdk=iphonesimulator*]
-        ]
-
-        target.build_configurations.each do |config|
-          flag_keys.each do |key|
-            val = config.build_settings[key]
-            next unless val
-            if val.is_a?(String)
-              cleaned = val.gsub(/\s-G(\s|$)/, ' ').squeeze(' ').strip
-              config.build_settings[key] = cleaned.empty? ? '$(inherited)' : cleaned
-            elsif val.is_a?(Array)
-              cleaned = val.map { |v| v.to_s.gsub(/\s-G(\s|$)/, ' ').squeeze(' ').strip }.reject(&:empty?)
-              config.build_settings[key] = cleaned.empty? ? ['$(inherited)'] : cleaned
-            end
-          end
-        end
-
-        g_pattern = /(^|\s)-G(?=\s|$)/
-        target.build_phases.grep(Xcodeproj::Project::Object::PBXSourcesBuildPhase).each do |phase|
-          phase.files.each do |bf|
-            next unless bf.settings
-            flags = bf.settings['COMPILER_FLAGS']
-            next unless flags
-            if flags.is_a?(String)
-              cleaned = flags.gsub(g_pattern, ' ').squeeze(' ').strip
-              bf.settings['COMPILER_FLAGS'] = cleaned.empty? ? nil : cleaned
-            elsif flags.is_a?(Array)
-              cleaned = flags.map { |v| v.to_s.gsub(g_pattern, ' ').squeeze(' ').strip }.reject(&:empty?)
-              bf.settings['COMPILER_FLAGS'] = cleaned.empty? ? nil : cleaned
-            end
-          end
-        end
-        puts "✅ [-G removed] #{target_name}"
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      # BoringSSL -G 오류 해결
+      if config.build_settings['OTHER_CFLAGS']
+        flags = config.build_settings['OTHER_CFLAGS']
+        flags = flags.reject { |flag| flag == '-G' }
+        config.build_settings['OTHER_CFLAGS'] = flags
       end
+
+      # New architecture 비활성화
+      config.build_settings["GCC_PREPROCESSOR_DEFINITIONS"] ||= []
+      config.build_settings["GCC_PREPROCESSOR_DEFINITIONS"] << "RCT_NEW_ARCH_ENABLED=0"
     end
   end
 end
