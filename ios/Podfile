@@ -37,6 +37,14 @@ end
 post_install do |installer|
   react_native_post_install(installer)
 
+  # React Native Codegen 디렉토리 확인 및 생성 (Codegen이 제대로 실행되지 않을 경우 대비)
+  codegen_dir = File.join(installer.sandbox.root.parent, 'build', 'generated', 'ios')
+  unless File.exist?(codegen_dir)
+    puts "📁 Creating Codegen directory: #{codegen_dir}"
+    FileUtils.mkdir_p(codegen_dir)
+    FileUtils.mkdir_p(File.join(codegen_dir, 'react', 'renderer', 'components'))
+  end
+
   # Pods 프로젝트 루트 빌드 설정에도 C++20 강제 (일부 타겟이 xcconfig로 gnu++14를 참조하는 경우 대비)
   installer.pods_project.build_configurations.each do |config|
     config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++20'

@@ -132,6 +132,25 @@ jobs:
           cd "$PROJ_DIR/ios"
           pod install --repo-update
 
+      - name: Verify React Native Codegen files
+        run: |
+          cd "$PROJ_DIR"
+          echo "🔍 Checking if React Native Codegen files were generated..."
+          CODEGEN_DIR="$PROJ_DIR/ios/build/generated/ios"
+          if [ ! -d "$CODEGEN_DIR" ]; then
+            echo "::warning::Codegen directory not found: $CODEGEN_DIR"
+            echo "Attempting to create Codegen directory structure..."
+            mkdir -p "$CODEGEN_DIR/react/renderer/components"
+            echo "⚠️ Codegen files may be generated during build"
+          else
+            echo "✅ Codegen directory found: $CODEGEN_DIR"
+            FILE_COUNT=$(find "$CODEGEN_DIR" -type f | wc -l)
+            echo "Found $FILE_COUNT Codegen files"
+            if [ "$FILE_COUNT" -eq 0 ]; then
+              echo "::warning::Codegen directory exists but contains no files"
+            fi
+          fi
+
       - name: Verify post_install cleaned BoringSSL-GRPC
         run: |
           cd "$PROJ_DIR/ios"
