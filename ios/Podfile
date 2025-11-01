@@ -233,7 +233,7 @@ post_install do |installer|
     Pod::UI.puts "⚠️ [RN]Check rncore script tweak skipped: #{e.message}"
   end
 
-  # 6) ExpoModulesCore 타겟에서 New Architecture 전용 Swift 파일 빌드 제외
+  # 6) ExpoModulesCore 타겟에서 New Architecture 전용 Swift 파일 빌드 제외 및 패치
   # New Architecture가 비활성화된 상태(newArchEnabled=false)에서 Fabric 관련 파일들이 컴파일되면 오류 발생
   # EXCLUDED_SOURCE_FILE_NAMES 빌드 설정을 사용하여 해당 파일들을 빌드에서 제외
   # 참고: Xcode 빌드 설정 공식 방법, Expo 커뮤니티 권장 패턴
@@ -242,7 +242,10 @@ post_install do |installer|
     expo_modules_core = installer.pods_project.targets.find { |t| t.name == 'ExpoModulesCore' }
     if expo_modules_core
       # Fabric/SwiftUI 관련 파일 및 이를 참조하는 의존성 파일들 제외
-      # 주의: CommonExceptions.swift는 제외하면 안 됨 (Exceptions struct 정의)
+      # 주의: 
+      # - CommonExceptions.swift는 제외하면 안 됨 (Exceptions struct 정의)
+      # - ViewDefinition.swift는 제외하면 안 됨 (AnyViewDefinitionElement 정의)
+      # - ViewDefinition.swift의 Fabric 코드는 #if RCT_NEW_ARCH_ENABLED로 보호됨
       excluded_files = [
         # Fabric 핵심 파일
         'ExpoFabricView.swift',
@@ -252,14 +255,17 @@ post_install do |installer|
         'SwiftUIViewDefinitionBuilder.swift',
         # ExpoFabricView를 참조하는 파일
         'ExpoView.swift',  # typealias ExpoView = ExpoFabricView
-        'ViewDefinition.swift',  # ExpoFabricView 참조 (조건부 체크)
         # ExpoSwiftUIView를 참조하는 파일
         'DynamicSwiftUIViewType.swift',  # ExpoSwiftUIView, AnyExpoSwiftUIHostingView 참조
-        'ViewFactories.swift',  # ExpoSwiftUI.View, ExpoSwiftUI.ViewDefinition 참조
         # 조건부 참조 파일 (부분적으로 Fabric/SwiftUI 의존)
         'ComponentData.swift'  # ExpoSwiftUI.AnyHostingView 참조
         # CommonExceptions.swift는 제외하지 않음 (Exceptions struct가 필요)
-        # SwiftUIViewNotFound는 사용되지 않으면 컴파일 에러가 나지 않을 수 있음
+        #   SwiftUIViewNotFound 클래스는 파일 패치로 주석 처리
+        # ViewDefinition.swift는 제외하지 않음 (AnyViewDefinitionElement 정의)
+        #   Fabric 관련 코드는 #if RCT_NEW_ARCH_ENABLED로 보호되어 있음
+        # ViewDefinitionBuilder.swift는 제외하지 않음 (AnyViewDefinitionElement 사용)
+        # AnyViewProp.swift는 제외하지 않음 (AnyViewDefinitionElement 사용)
+        # ViewFactories.swift는 제외하지 않음 (일반 View 함수 포함, ExpoSwiftUI 함수는 조건부 컴파일됨)
       ]
       
       # 빌드 설정에 EXCLUDED_SOURCE_FILE_NAMES 추가 (모든 빌드 구성에 적용)
@@ -280,6 +286,60 @@ post_install do |installer|
         
         config.build_settings['EXCLUDED_SOURCE_FILE_NAMES'] = existing_list.join(' ')
         puts "✅ Excluded Fabric/SwiftUI files from ExpoModulesCore (#{config.name}): #{excluded_files.length} files"
+      end
+      
+      # CommonExceptions.swift의 SwiftUIViewNotFound 클래스를 주석 처리
+      # ExpoSwiftUIView가 정의되지 않아 타입 체크 에러 발생 방지
+      begin
+        require 'fileutils'
+        repo_root = File.expand_path('..', __dir__)
+        common_exceptions_file = File.join(repo_root, 'node_modules', 'expo-modules-core', 'ios', 'Core', 'Exceptions', 'CommonExceptions.swift')
+        
+        if File.exist?(common_exceptions_file)
+          content = File.read(common_exceptions_file)
+          
+          # SwiftUIViewNotFound 클래스 정의 전체를 주석 처리
+          if content.include?('SwiftUIViewNotFound')
+            # 각 줄을 주석 처리
+            lines = content.lines
+            patched_lines = []
+            skip_next = false
+            
+            lines.each_with_index do |line, idx|
+              if line.include?('SwiftUIViewNotFound')
+                # SwiftUIViewNotFound 클래스 시작 줄 주석 처리
+                patched_lines << line.gsub(/^(  )/, '\1// ') # 주석 처리
+                skip_next = true
+              elsif skip_next && line.strip.start_with?('override')
+                # override 줄 주석 처리
+                patched_lines << line.gsub(/^(    )/, '\1// ')
+              elsif skip_next && line.strip.start_with?('}')
+                # 클래스 닫는 중괄호 주석 처리
+                patched_lines << line.gsub(/^(  )/, '\1// ')
+                skip_next = false
+              elsif skip_next
+                # 클래스 내부 줄들 주석 처리 (빈 줄 제외)
+                if line.strip.empty?
+                  patched_lines << line
+                else
+                  patched_lines << line.gsub(/^(    )/, '\1// ')
+                end
+              else
+                patched_lines << line
+    end
+  end
+    
+            File.write(common_exceptions_file, patched_lines.join)
+            puts "✅ Patched CommonExceptions.swift: SwiftUIViewNotFound commented out"
+          else
+            puts "⚠️ SwiftUIViewNotFound not found in CommonExceptions.swift (may already be patched)"
+          end
+        else
+          puts "⚠️ CommonExceptions.swift not found at expected path"
+        end
+      rescue => e
+        Pod::UI.puts "⚠️ CommonExceptions.swift patch skipped: #{e.message}"
+        Pod::UI.puts "   Stack trace: #{e.backtrace.first(3).join("\n   ")}"
       end
     end
   rescue => e
