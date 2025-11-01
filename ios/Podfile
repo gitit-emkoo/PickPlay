@@ -237,16 +237,26 @@ post_install do |installer|
   # New Architecture가 비활성화된 상태(newArchEnabled=false)에서 Fabric 관련 파일들이 컴파일되면 오류 발생
   # EXCLUDED_SOURCE_FILE_NAMES 빌드 설정을 사용하여 해당 파일들을 빌드에서 제외
   # 참고: Xcode 빌드 설정 공식 방법, Expo 커뮤니티 권장 패턴
+  # 의존성 파일들도 함께 제외해야 함 (ExpoFabricView, ExpoSwiftUIView 등을 참조하는 파일들)
   begin
     expo_modules_core = installer.pods_project.targets.find { |t| t.name == 'ExpoModulesCore' }
     if expo_modules_core
-      # EXCLUDED_SOURCE_FILE_NAMES는 파일명만 매칭 (와일드카드 * 지원)
-      # 에러 로그 기반으로 필요한 파일들만 정확하게 제외
+      # Fabric/SwiftUI 관련 파일 및 이를 참조하는 의존성 파일들 제외
       excluded_files = [
-        'ExpoFabricView.swift',  # Fabric 뷰 (Fabric 디렉토리)
-        'SwiftUIHostingView.swift',  # SwiftUI New Architecture 호스팅 뷰
-        'SwiftUIViewDefinition.swift',  # SwiftUI ViewDefinition
-        'SwiftUIViewDefinitionBuilder.swift'  # SwiftUI ViewDefinition 빌더
+        # Fabric 핵심 파일
+        'ExpoFabricView.swift',
+        # SwiftUI New Architecture 핵심 파일
+        'SwiftUIHostingView.swift',
+        'SwiftUIViewDefinition.swift',
+        'SwiftUIViewDefinitionBuilder.swift',
+        # ExpoFabricView를 참조하는 파일
+        'ExpoView.swift',  # typealias ExpoView = ExpoFabricView
+        # ExpoSwiftUIView를 참조하는 파일
+        'DynamicSwiftUIViewType.swift',  # ExpoSwiftUIView, AnyExpoSwiftUIHostingView 참조
+        'ViewFactories.swift',  # ExpoSwiftUI.View, ExpoSwiftUI.ViewDefinition 참조
+        # 조건부 참조 파일 (부분적으로 Fabric/SwiftUI 의존)
+        'ComponentData.swift',  # ExpoSwiftUI.AnyHostingView 참조
+        'CommonExceptions.swift'  # ExpoSwiftUIView 제네릭 참조
       ]
       
       # 빌드 설정에 EXCLUDED_SOURCE_FILE_NAMES 추가 (모든 빌드 구성에 적용)
@@ -266,7 +276,7 @@ post_install do |installer|
         end
         
         config.build_settings['EXCLUDED_SOURCE_FILE_NAMES'] = existing_list.join(' ')
-        puts "✅ Excluded Fabric/SwiftUI files from ExpoModulesCore (#{config.name}): #{excluded_files.join(', ')}"
+        puts "✅ Excluded Fabric/SwiftUI files from ExpoModulesCore (#{config.name}): #{excluded_files.length} files"
       end
     end
   rescue => e
