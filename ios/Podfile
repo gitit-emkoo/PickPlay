@@ -8,9 +8,9 @@ rescue LoadError
   def react_native_post_install(*); end
 end
 
-begin
+  begin
   require_relative '../node_modules/expo/scripts/autolinking'
-rescue LoadError
+  rescue LoadError
   Pod::UI.puts '⚠️  expo autolinking script not found; continuing without it'
   def use_expo_modules!(*); end
 end
@@ -36,7 +36,7 @@ end
 
 post_install do |installer|
   react_native_post_install(installer)
-
+  
   # React Native Codegen 디렉토리 생성 (New Architecture 비활성화 상태에서도 빌드 스크립트 체크 대응)
   begin
     require 'fileutils'
@@ -182,8 +182,8 @@ post_install do |installer|
       end
 
       puts "✅ [#{target_name}] -G scrubbed"
-    end
-  end
+          end
+        end
 
   # 3) openssl_grpc 타겟 자체 제거로 재유입 차단
   begin
@@ -231,6 +231,47 @@ post_install do |installer|
     end
   rescue => e
     Pod::UI.puts "⚠️ [RN]Check rncore script tweak skipped: #{e.message}"
+  end
+
+  # 6) ExpoModulesCore 타겟에서 New Architecture 전용 Swift 파일 빌드 제외
+  # New Architecture가 비활성화된 상태(newArchEnabled=false)에서 Fabric 관련 파일들이 컴파일되면 오류 발생
+  # EXCLUDED_SOURCE_FILE_NAMES 빌드 설정을 사용하여 해당 파일들을 빌드에서 제외
+  # 참고: Xcode 빌드 설정 공식 방법, Expo 커뮤니티 권장 패턴
+  begin
+    expo_modules_core = installer.pods_project.targets.find { |t| t.name == 'ExpoModulesCore' }
+    if expo_modules_core
+      # EXCLUDED_SOURCE_FILE_NAMES는 파일명만 매칭 (와일드카드 * 지원)
+      # 에러 로그 기반으로 필요한 파일들만 정확하게 제외
+      excluded_files = [
+        'ExpoFabricView.swift',  # Fabric 뷰 (Fabric 디렉토리)
+        'SwiftUIHostingView.swift',  # SwiftUI New Architecture 호스팅 뷰
+        'SwiftUIViewDefinition.swift',  # SwiftUI ViewDefinition
+        'SwiftUIViewDefinitionBuilder.swift'  # SwiftUI ViewDefinition 빌더
+      ]
+      
+      # 빌드 설정에 EXCLUDED_SOURCE_FILE_NAMES 추가 (모든 빌드 구성에 적용)
+      expo_modules_core.build_configurations.each do |config|
+        existing_excluded = config.build_settings['EXCLUDED_SOURCE_FILE_NAMES'] || ''
+        
+        # 기존 제외 항목과 새 파일을 합침 (중복 방지)
+        if existing_excluded.is_a?(String)
+          existing_list = existing_excluded.empty? ? [] : existing_excluded.split(' ')
+        else
+          existing_list = existing_excluded.is_a?(Array) ? existing_excluded : []
+        end
+        
+        # 새 파일 추가 (중복되지 않는 경우만)
+        excluded_files.each do |file|
+          existing_list << file unless existing_list.include?(file)
+        end
+        
+        config.build_settings['EXCLUDED_SOURCE_FILE_NAMES'] = existing_list.join(' ')
+        puts "✅ Excluded Fabric/SwiftUI files from ExpoModulesCore (#{config.name}): #{excluded_files.join(', ')}"
+      end
+    end
+  rescue => e
+    Pod::UI.puts "⚠️ ExpoModulesCore Fabric files exclusion skipped: #{e.message}"
+    Pod::UI.puts "   Stack trace: #{e.backtrace.first(3).join("\n   ")}"
   end
 
   installer.pods_project.save
