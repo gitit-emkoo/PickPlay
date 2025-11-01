@@ -48,8 +48,8 @@ post_install do |installer|
       # iOS 최소 타겟 상향 (Codegen 생성 Pod 요구 대응)
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
       
-      # Hermes/React C++ 컴파일 표준 및 라이브러리 강제 지정 (requires = C++20 concepts)
-      # React Native 0.81.4+ requires C++20 for concepts (requires keyword)
+      # Hermes/React C++ 컴파일 표준 및 라이브러리 강제 지정 (C++20 표준 사용)
+      # React Native 0.76.9+ supports C++20 for better compatibility (concepts, std::thread 등)
       config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++20'
       config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
       

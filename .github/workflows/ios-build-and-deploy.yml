@@ -171,7 +171,7 @@ jobs:
           if [ -z "$HAS_CXX20" ]; then
             echo "::error::No C++20 standard (gnu++20 or c++20) found in Pods project."
             echo "::error::post_install hook should have set CLANG_CXX_LANGUAGE_STANDARD = gnu++20"
-            echo "::error::This will cause build failures with React Native 0.81.4+ (requires C++20 concepts)"
+            echo "::error::This will cause build failures with React Native 0.76.9+ and Hermes (requires C++20)"
             echo ""
             echo "Debug info: First 10 lines with CLANG_CXX_LANGUAGE_STANDARD:"
             grep -i "CLANG_CXX_LANGUAGE_STANDARD" "$FILE" | head -10 || echo "(none found)"
