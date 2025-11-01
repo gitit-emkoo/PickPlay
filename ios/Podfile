@@ -242,6 +242,7 @@ post_install do |installer|
     expo_modules_core = installer.pods_project.targets.find { |t| t.name == 'ExpoModulesCore' }
     if expo_modules_core
       # Fabric/SwiftUI 관련 파일 및 이를 참조하는 의존성 파일들 제외
+      # 주의: CommonExceptions.swift는 제외하면 안 됨 (Exceptions struct 정의)
       excluded_files = [
         # Fabric 핵심 파일
         'ExpoFabricView.swift',
@@ -251,12 +252,14 @@ post_install do |installer|
         'SwiftUIViewDefinitionBuilder.swift',
         # ExpoFabricView를 참조하는 파일
         'ExpoView.swift',  # typealias ExpoView = ExpoFabricView
+        'ViewDefinition.swift',  # ExpoFabricView 참조 (조건부 체크)
         # ExpoSwiftUIView를 참조하는 파일
         'DynamicSwiftUIViewType.swift',  # ExpoSwiftUIView, AnyExpoSwiftUIHostingView 참조
         'ViewFactories.swift',  # ExpoSwiftUI.View, ExpoSwiftUI.ViewDefinition 참조
         # 조건부 참조 파일 (부분적으로 Fabric/SwiftUI 의존)
-        'ComponentData.swift',  # ExpoSwiftUI.AnyHostingView 참조
-        'CommonExceptions.swift'  # ExpoSwiftUIView 제네릭 참조
+        'ComponentData.swift'  # ExpoSwiftUI.AnyHostingView 참조
+        # CommonExceptions.swift는 제외하지 않음 (Exceptions struct가 필요)
+        # SwiftUIViewNotFound는 사용되지 않으면 컴파일 에러가 나지 않을 수 있음
       ]
       
       # 빌드 설정에 EXCLUDED_SOURCE_FILE_NAMES 추가 (모든 빌드 구성에 적용)
