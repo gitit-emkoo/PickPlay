@@ -37,12 +37,34 @@ end
 post_install do |installer|
   react_native_post_install(installer)
 
-  # React Native Codegen 디렉토리 확인 및 생성 (Codegen이 제대로 실행되지 않을 경우 대비)
-  codegen_dir = File.join(installer.sandbox.root.parent, 'build', 'generated', 'ios')
-  unless File.exist?(codegen_dir)
-    puts "📁 Creating Codegen directory: #{codegen_dir}"
+  # React Native Codegen 명시적 실행 시도 (react_native_post_install가 실행하지 않을 경우 대비)
+  begin
+    require 'fileutils'
+    repo_root = File.expand_path('..', __dir__)
+    codegen_dir = File.join(repo_root, 'ios', 'build', 'generated', 'ios')
+    
+    # Codegen 디렉토리 생성
     FileUtils.mkdir_p(codegen_dir)
     FileUtils.mkdir_p(File.join(codegen_dir, 'react', 'renderer', 'components'))
+    
+    # React Native Codegen 스크립트 찾기 및 실행
+    codegen_scripts = [
+      File.join(repo_root, 'node_modules', '@react-native', 'codegen', 'lib', 'cli', 'combine', 'combine-js-to-schema-cli.js'),
+      File.join(repo_root, 'node_modules', 'react-native', 'scripts', 'codegen', 'generate-specs-cli.js'),
+      File.join(repo_root, 'node_modules', 'react-native', 'scripts', 'generate-codegen-artifacts.js')
+    ]
+    
+    codegen_script = codegen_scripts.find { |path| File.exist?(path) }
+    
+    if codegen_script
+      puts "🔧 Running React Native Codegen from Podfile post_install..."
+      system("cd #{repo_root} && node #{codegen_script} --outputPath #{codegen_dir}") || puts("⚠️ Codegen 실행 실패 (빌드 시 자동 생성될 수 있음)")
+    else
+      puts "⚠️ Codegen 스크립트를 찾을 수 없습니다 (경로 확인: #{codegen_scripts.first})"
+      puts "📁 Codegen 디렉토리만 생성: #{codegen_dir}"
+    end
+  rescue => e
+    puts "⚠️ Codegen 설정 중 오류 (무시 가능): #{e.message}"
   end
 
   # Pods 프로젝트 루트 빌드 설정에도 C++20 강제 (일부 타겟이 xcconfig로 gnu++14를 참조하는 경우 대비)
