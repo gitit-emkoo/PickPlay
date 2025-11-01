@@ -19,7 +19,8 @@
         "UIBackgroundModes": [
           "remote-notification"
         ],
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "GADApplicationIdentifier": "ca-app-pub-2555567440328829~5483134579"
       },
       "entitlements": {
         "aps-environment": "production"
@@ -67,14 +68,6 @@
           "ios": {
             "useFrameworks": "static"
           }
-        }
-      ],
-      [
-        "react-native-google-mobile-ads",
-        {
-          "androidAppId": "ca-app-pub-2555567440328829~4208779024",
-          "iosAppId": "ca-app-pub-2555567440328829~5483134579",
-          "delayAppMeasurementInit": true
         }
       ],
       [
