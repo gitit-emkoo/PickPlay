@@ -98,9 +98,31 @@ post_install do |installer|
         end
       end
       
-      # New Architecture 비활성화
+      # New Architecture 비활성화 (C/C++/Objective-C용)
       defs = (config.build_settings["GCC_PREPROCESSOR_DEFINITIONS"] ||= [])
       defs << "RCT_NEW_ARCH_ENABLED=0" unless defs.include?("RCT_NEW_ARCH_ENABLED=0")
+      
+      # New Architecture 비활성화 (Swift용)
+      # Swift에서 #if RCT_NEW_ARCH_ENABLED는 매크로가 정의되어 있지 않으면 false
+      # 따라서 RCT_NEW_ARCH_ENABLED를 제거해야 함
+      # 기존에 설정된 RCT_NEW_ARCH_ENABLED 제거
+      swift_flags = config.build_settings["OTHER_SWIFT_FLAGS"] || []
+      if swift_flags.is_a?(String)
+        swift_flags = swift_flags.empty? ? [] : swift_flags.split(' ')
+      end
+      swift_flags = swift_flags.is_a?(Array) ? swift_flags : []
+      # RCT_NEW_ARCH_ENABLED 관련 플래그 제거
+      swift_flags = swift_flags.reject { |f| f.to_s.include?('RCT_NEW_ARCH_ENABLED') }
+      config.build_settings["OTHER_SWIFT_FLAGS"] = swift_flags
+      
+      # SWIFT_ACTIVE_COMPILATION_CONDITIONS에서도 RCT_NEW_ARCH_ENABLED 제거
+      swift_conditions = config.build_settings["SWIFT_ACTIVE_COMPILATION_CONDITIONS"] || []
+      if swift_conditions.is_a?(String)
+        swift_conditions = swift_conditions.empty? ? [] : swift_conditions.split(' ')
+      end
+      swift_conditions = swift_conditions.is_a?(Array) ? swift_conditions : []
+      swift_conditions = swift_conditions.reject { |c| c == 'RCT_NEW_ARCH_ENABLED' }
+      config.build_settings["SWIFT_ACTIVE_COMPILATION_CONDITIONS"] = swift_conditions.join(' ')
     end
   end
   
@@ -246,26 +268,27 @@ post_install do |installer|
       # - CommonExceptions.swift는 제외하면 안 됨 (Exceptions struct 정의)
       # - ViewDefinition.swift는 제외하면 안 됨 (AnyViewDefinitionElement 정의)
       # - ViewDefinition.swift의 Fabric 코드는 #if RCT_NEW_ARCH_ENABLED로 보호됨
+      # ExpoFabricView.swift와 대부분의 Fabric 파일들은 #if RCT_NEW_ARCH_ENABLED로 보호되어 있음
+      # 따라서 파일을 제외할 필요 없이 RCT_NEW_ARCH_ENABLED가 false면 자동으로 제외됨
+      # 하지만 ExpoSwiftUI 관련 파일들은 조건부 컴파일이 없으므로 제외 필요
       excluded_files = [
-        # Fabric 핵심 파일
-        'ExpoFabricView.swift',
-        # SwiftUI New Architecture 핵심 파일
+        # SwiftUI New Architecture 핵심 파일 (조건부 컴파일 없음)
         'SwiftUIHostingView.swift',
         'SwiftUIViewDefinition.swift',
         'SwiftUIViewDefinitionBuilder.swift',
-        # ExpoFabricView를 참조하는 파일
-        'ExpoView.swift',  # typealias ExpoView = ExpoFabricView
-        # ExpoSwiftUIView를 참조하는 파일
+        # ExpoSwiftUIView를 참조하는 파일 (조건부 컴파일 없음)
         'DynamicSwiftUIViewType.swift',  # ExpoSwiftUIView, AnyExpoSwiftUIHostingView 참조
-        # 조건부 참조 파일 (부분적으로 Fabric/SwiftUI 의존)
+        # 조건부 참조 파일 (부분적으로 Fabric/SwiftUI 의존, 조건부 컴파일 없음)
         'ComponentData.swift'  # ExpoSwiftUI.AnyHostingView 참조
+        # ExpoFabricView.swift는 제외하지 않음 (#if RCT_NEW_ARCH_ENABLED로 보호됨)
+        # ExpoView.swift는 제외하지 않음 (typealias는 조건부 컴파일로 보호될 수 있음)
         # CommonExceptions.swift는 제외하지 않음 (Exceptions struct가 필요)
         #   SwiftUIViewNotFound 클래스는 파일 패치로 주석 처리
         # ViewDefinition.swift는 제외하지 않음 (AnyViewDefinitionElement 정의)
         #   Fabric 관련 코드는 #if RCT_NEW_ARCH_ENABLED로 보호되어 있음
         # ViewDefinitionBuilder.swift는 제외하지 않음 (AnyViewDefinitionElement 사용)
         # AnyViewProp.swift는 제외하지 않음 (AnyViewDefinitionElement 사용)
-        # ViewFactories.swift는 제외하지 않음 (일반 View 함수 포함, ExpoSwiftUI 함수는 조건부 컴파일됨)
+        # ViewFactories.swift는 제외하지 않음 (일반 View 함수 포함, ExpoSwiftUI 함수는 패치 필요)
       ]
       
       # 빌드 설정에 EXCLUDED_SOURCE_FILE_NAMES 추가 (모든 빌드 구성에 적용)
@@ -299,14 +322,13 @@ post_install do |installer|
           content = File.read(common_exceptions_file)
           
           # SwiftUIViewNotFound 클래스 정의 전체를 주석 처리
-          if content.include?('SwiftUIViewNotFound')
-            # 각 줄을 주석 처리
+          if content.include?('SwiftUIViewNotFound') && !content.include?('// public final class SwiftUIViewNotFound')
             lines = content.lines
             patched_lines = []
             skip_next = false
             
             lines.each_with_index do |line, idx|
-              if line.include?('SwiftUIViewNotFound')
+              if line.include?('SwiftUIViewNotFound') && !line.strip.start_with?('//')
                 # SwiftUIViewNotFound 클래스 시작 줄 주석 처리
                 patched_lines << line.gsub(/^(  )/, '\1// ') # 주석 처리
                 skip_next = true
@@ -332,13 +354,66 @@ post_install do |installer|
             File.write(common_exceptions_file, patched_lines.join)
             puts "✅ Patched CommonExceptions.swift: SwiftUIViewNotFound commented out"
           else
-            puts "⚠️ SwiftUIViewNotFound not found in CommonExceptions.swift (may already be patched)"
+            puts "⚠️ SwiftUIViewNotFound not found or already patched in CommonExceptions.swift"
           end
         else
           puts "⚠️ CommonExceptions.swift not found at expected path"
         end
       rescue => e
         Pod::UI.puts "⚠️ CommonExceptions.swift patch skipped: #{e.message}"
+        Pod::UI.puts "   Stack trace: #{e.backtrace.first(3).join("\n   ")}"
+      end
+      
+      # ViewFactories.swift의 ExpoSwiftUI 관련 함수들을 조건부 컴파일로 감싸기
+      # ExpoSwiftUI 타입이 정의되지 않아 타입 체크 에러 발생 방지
+      begin
+        require 'fileutils'
+        repo_root = File.expand_path('..', __dir__)
+        view_factories_file = File.join(repo_root, 'node_modules', 'expo-modules-core', 'ios', 'Api', 'Factories', 'ViewFactories.swift')
+        
+        if File.exist?(view_factories_file)
+          content = File.read(view_factories_file)
+          
+          # ExpoSwiftUI 관련 함수들을 #if RCT_NEW_ARCH_ENABLED로 감싸기
+          if content.include?('ExpoSwiftUI.View') && !content.include?('#if RCT_NEW_ARCH_ENABLED')
+            lines = content.lines.to_a
+            patched_lines = []
+            in_swiftui_section = false
+            swiftui_start_idx = nil
+            
+            lines.each_with_index do |line, idx|
+              # 첫 번째 ExpoSwiftUI 함수 시작 지점 찾기 (주석 포함)
+              if !in_swiftui_section && line.include?('Creates a view definition describing the native SwiftUI view')
+                in_swiftui_section = true
+                patched_lines << "#if RCT_NEW_ARCH_ENABLED\n"
+                patched_lines << line
+              # 마지막 ExpoSwiftUI 함수 종료 지점 찾기 (다음 MARK 또는 일반 함수)
+              elsif in_swiftui_section && (line.strip.start_with?('// MARK:') || (line.include?('public func View') && !line.include?('ExpoSwiftUI')))
+                patched_lines << "\n#endif\n"
+                patched_lines << line
+                in_swiftui_section = false
+              elsif in_swiftui_section && idx == lines.length - 1
+                # 파일 끝일 때
+                patched_lines << line
+                patched_lines << "\n#endif\n"
+                in_swiftui_section = false
+              else
+                patched_lines << line
+              end
+            end
+            
+            File.write(view_factories_file, patched_lines.join)
+            puts "✅ Patched ViewFactories.swift: ExpoSwiftUI functions wrapped in #if RCT_NEW_ARCH_ENABLED"
+          elsif content.include?('#if RCT_NEW_ARCH_ENABLED')
+            puts "⚠️ ViewFactories.swift already patched"
+          else
+            puts "⚠️ ExpoSwiftUI functions not found in ViewFactories.swift"
+          end
+        else
+          puts "⚠️ ViewFactories.swift not found at expected path"
+        end
+      rescue => e
+        Pod::UI.puts "⚠️ ViewFactories.swift patch skipped: #{e.message}"
         Pod::UI.puts "   Stack trace: #{e.backtrace.first(3).join("\n   ")}"
       end
     end
