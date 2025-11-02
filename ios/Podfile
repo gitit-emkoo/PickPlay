@@ -425,9 +425,9 @@ post_install do |installer|
                 end
               else
                 patched_lines << line
-    end
-  end
-    
+          end
+        end
+
             File.write(common_exceptions_file, patched_lines.join)
             puts "✅ Patched CommonExceptions.swift: SwiftUIViewNotFound commented out"
           else
@@ -476,9 +476,9 @@ post_install do |installer|
                 in_swiftui_section = false
               else
                 patched_lines << line
-          end
-        end
-
+    end
+  end
+    
             File.write(view_factories_file, patched_lines.join)
             puts "✅ Patched ViewFactories.swift: ExpoSwiftUI functions wrapped in #if RCT_NEW_ARCH_ENABLED"
           elsif content.include?('#if RCT_NEW_ARCH_ENABLED')
@@ -523,8 +523,10 @@ post_install do |installer|
         Pod::UI.puts "⚠️ React-Core linking skipped: #{e.message}"
       end
       
-      # react-native-screens의 New Architecture 헤더 import 문제 해결
-      # RNSScreenStackHeaderSubview.mm에서 New Architecture 헤더를 조건부 컴파일 없이 import
+      # react-native-screens의 New Architecture 코드 문제 해결
+      # RNSScreenStackHeaderSubview.mm에서 #ifdef RCT_NEW_ARCH_ENABLED를 #if RCT_NEW_ARCH_ENABLED로 변경
+      # 문제: #ifdef는 매크로가 정의되어 있으면 true이지만, #if는 매크로 값이 0이 아닐 때만 true
+      # RCT_NEW_ARCH_ENABLED=0으로 설정했을 때 #ifdef는 여전히 true가 되어 블록이 실행됨
       begin
         require 'fileutils'
         repo_root = File.expand_path('..', __dir__)
@@ -533,45 +535,22 @@ post_install do |installer|
         if File.exist?(rns_file)
           content = File.read(rns_file)
           
-          # RNSScreenStackHeaderSubviewComponentDescriptor.h import를 조건부 컴파일로 감싸기
-          if content.include?('RNSScreenStackHeaderSubviewComponentDescriptor.h') && !content.include?('#if RCT_NEW_ARCH_ENABLED')
-            lines = content.lines.to_a
-            patched_lines = []
-            in_new_arch_import = false
+          # #ifdef RCT_NEW_ARCH_ENABLED를 #if RCT_NEW_ARCH_ENABLED로 변경
+          # 단, #endif 앞에 오는 주석은 유지 (#endif // RCT_NEW_ARCH_ENABLED)
+          if content.include?('#ifdef RCT_NEW_ARCH_ENABLED')
+            patched_content = content.gsub(/#ifdef\s+RCT_NEW_ARCH_ENABLED/, '#if RCT_NEW_ARCH_ENABLED')
             
-            lines.each_with_index do |line, idx|
-              # New Architecture 헤더 import 찾기
-              if line.include?('RNSScreenStackHeaderSubviewComponentDescriptor.h')
-                in_new_arch_import = true
-                patched_lines << "#if RCT_NEW_ARCH_ENABLED\n"
-                patched_lines << line
-              # 해당 import 블록이 끝나는 지점 찾기 (다음 #import 또는 다른 문장)
-              elsif in_new_arch_import && (line.start_with?('#import') || line.start_with?('#include') || (!line.strip.start_with?('#') && !line.strip.empty? && !line.strip.start_with?('//')))
-                if line.start_with?('#import') || line.start_with?('#include')
-                  patched_lines << "#endif\n"
-                  patched_lines << line
-                  in_new_arch_import = false
-                else
-                  patched_lines << line
-                  patched_lines << "#endif\n"
-                  in_new_arch_import = false
-                end
-              else
-                patched_lines << line
-    end
-  end
-    
-            # 파일 끝에서 아직 닫히지 않은 경우
-            if in_new_arch_import
-              patched_lines << "#endif\n"
+            if patched_content != content
+              File.write(rns_file, patched_content)
+              puts "✅ Patched RNSScreenStackHeaderSubview.mm: Changed #ifdef to #if for RCT_NEW_ARCH_ENABLED"
+              puts "   - This ensures New Architecture code is only compiled when RCT_NEW_ARCH_ENABLED != 0"
+            else
+              puts "⚠️ No changes needed in RNSScreenStackHeaderSubview.mm"
             end
-            
-            File.write(rns_file, patched_lines.join)
-            puts "✅ Patched RNSScreenStackHeaderSubview.mm: New Architecture header import wrapped in #if RCT_NEW_ARCH_ENABLED"
-          elsif content.include?('#if RCT_NEW_ARCH_ENABLED')
-            puts "⚠️ RNSScreenStackHeaderSubview.mm already patched"
+          elsif content.include?('#if RCT_NEW_ARCH_ENABLED') && content.include?('RNSScreenStackHeaderSubviewComponentDescriptor')
+            puts "⚠️ RNSScreenStackHeaderSubview.mm already uses #if (correct)"
           else
-            puts "⚠️ RNSScreenStackHeaderSubviewComponentDescriptor.h import not found in RNSScreenStackHeaderSubview.mm"
+            puts "⚠️ No #ifdef RCT_NEW_ARCH_ENABLED found in RNSScreenStackHeaderSubview.mm"
           end
         else
           puts "⚠️ RNSScreenStackHeaderSubview.mm not found at expected path"
