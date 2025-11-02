@@ -524,36 +524,43 @@ post_install do |installer|
       end
       
       # react-native-screens의 New Architecture 코드 문제 해결
-      # RNSScreenStackHeaderSubview.mm에서 #ifdef RCT_NEW_ARCH_ENABLED를 #if RCT_NEW_ARCH_ENABLED로 변경
+      # 모든 .mm 파일에서 #ifdef RCT_NEW_ARCH_ENABLED를 #if RCT_NEW_ARCH_ENABLED로 변경
       # 문제: #ifdef는 매크로가 정의되어 있으면 true이지만, #if는 매크로 값이 0이 아닐 때만 true
       # RCT_NEW_ARCH_ENABLED=0으로 설정했을 때 #ifdef는 여전히 true가 되어 블록이 실행됨
       begin
         require 'fileutils'
         repo_root = File.expand_path('..', __dir__)
-        rns_file = File.join(repo_root, 'node_modules', 'react-native-screens', 'ios', 'RNSScreenStackHeaderSubview.mm')
+        rns_ios_dir = File.join(repo_root, 'node_modules', 'react-native-screens', 'ios')
         
-        if File.exist?(rns_file)
-          content = File.read(rns_file)
-          
-          # #ifdef RCT_NEW_ARCH_ENABLED를 #if RCT_NEW_ARCH_ENABLED로 변경
-          # 단, #endif 앞에 오는 주석은 유지 (#endif // RCT_NEW_ARCH_ENABLED)
-          if content.include?('#ifdef RCT_NEW_ARCH_ENABLED')
-            patched_content = content.gsub(/#ifdef\s+RCT_NEW_ARCH_ENABLED/, '#if RCT_NEW_ARCH_ENABLED')
-            
-            if patched_content != content
-              File.write(rns_file, patched_content)
-              puts "✅ Patched RNSScreenStackHeaderSubview.mm: Changed #ifdef to #if for RCT_NEW_ARCH_ENABLED"
-              puts "   - This ensures New Architecture code is only compiled when RCT_NEW_ARCH_ENABLED != 0"
-            else
-              puts "⚠️ No changes needed in RNSScreenStackHeaderSubview.mm"
+        if Dir.exist?(rns_ios_dir)
+          patched_files = []
+          Dir.glob(File.join(rns_ios_dir, '*.mm')).each do |mm_file|
+            begin
+              content = File.read(mm_file)
+              
+              # #ifdef RCT_NEW_ARCH_ENABLED를 #if RCT_NEW_ARCH_ENABLED로 변경
+              if content.include?('#ifdef RCT_NEW_ARCH_ENABLED')
+                patched_content = content.gsub(/#ifdef\s+RCT_NEW_ARCH_ENABLED/, '#if RCT_NEW_ARCH_ENABLED')
+                
+                if patched_content != content
+                  File.write(mm_file, patched_content)
+                  patched_files << File.basename(mm_file)
+                end
+              end
+            rescue => e
+              Pod::UI.puts "⚠️ Failed to patch #{File.basename(mm_file)}: #{e.message}"
             end
-          elsif content.include?('#if RCT_NEW_ARCH_ENABLED') && content.include?('RNSScreenStackHeaderSubviewComponentDescriptor')
-            puts "⚠️ RNSScreenStackHeaderSubview.mm already uses #if (correct)"
+          end
+          
+          if patched_files.any?
+            puts "✅ Patched #{patched_files.length} react-native-screens file(s): Changed #ifdef to #if for RCT_NEW_ARCH_ENABLED"
+            puts "   Files: #{patched_files.join(', ')}"
+            puts "   - This ensures New Architecture code is only compiled when RCT_NEW_ARCH_ENABLED != 0"
           else
-            puts "⚠️ No #ifdef RCT_NEW_ARCH_ENABLED found in RNSScreenStackHeaderSubview.mm"
+            puts "⚠️ No react-native-screens files needed patching (already using #if)"
           end
         else
-          puts "⚠️ RNSScreenStackHeaderSubview.mm not found at expected path"
+          puts "⚠️ react-native-screens ios directory not found at expected path"
         end
       rescue => e
         Pod::UI.puts "⚠️ react-native-screens patch skipped: #{e.message}"
