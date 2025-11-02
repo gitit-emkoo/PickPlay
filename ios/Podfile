@@ -566,6 +566,19 @@ post_install do |installer|
                 end
               end
               
+              # RNSScreenStack.mm의 cancelTouchesInParent 메서드 수정
+              # rnscreens_cancelTouches는 New Architecture에서만 사용 가능하므로 조건부로 감싸야 함
+              if File.basename(source_file) == 'RNSScreenStack.mm' && patched_content.include?('rnscreens_cancelTouches')
+                # cancelTouchesInParent 메서드 내의 rnscreens_cancelTouches 호출을 조건부로 감싸기
+                if patched_content.match(/\[\[self rnscreens_findTouchHandlerInAncestorChain\] rnscreens_cancelTouches\];/)
+                  patched_content = patched_content.gsub(
+                    /(\s+)(\[\[self rnscreens_findTouchHandlerInAncestorChain\] rnscreens_cancelTouches\];)/,
+                    "\\1#if RCT_NEW_ARCH_ENABLED\n\\1  \\2\n\\1#endif"
+                  )
+                  changed = true
+                end
+              end
+              
               if changed && patched_content != content
                 File.write(source_file, patched_content)
                 patched_files << File.basename(source_file)
