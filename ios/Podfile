@@ -546,15 +546,24 @@ post_install do |installer|
               changed = false
               
               # #ifdef RCT_NEW_ARCH_ENABLED를 #if RCT_NEW_ARCH_ENABLED로 변경
-              if content.include?('#ifdef RCT_NEW_ARCH_ENABLED')
+              if patched_content.include?('#ifdef RCT_NEW_ARCH_ENABLED')
+                old_ifdef_count = patched_content.scan(/#ifdef\s+RCT_NEW_ARCH_ENABLED/).length
                 patched_content = patched_content.gsub(/#ifdef\s+RCT_NEW_ARCH_ENABLED/, '#if RCT_NEW_ARCH_ENABLED')
-                changed = true
+                new_if_count = patched_content.scan(/#if\s+RCT_NEW_ARCH_ENABLED/).length
+                if old_ifdef_count > 0 && new_if_count >= old_ifdef_count
+                  changed = true
+                end
               end
               
               # #ifndef RCT_NEW_ARCH_ENABLED를 #if !RCT_NEW_ARCH_ENABLED로 변경
-              if content.include?('#ifndef RCT_NEW_ARCH_ENABLED') && !content.match(/#ifndef\s+NDEBUG/)
+              # NDEBUG는 건너뛰고 RCT_NEW_ARCH_ENABLED만 변경
+              if patched_content.include?('#ifndef RCT_NEW_ARCH_ENABLED')
+                old_ifndef_count = patched_content.scan(/#ifndef\s+RCT_NEW_ARCH_ENABLED/).length
                 patched_content = patched_content.gsub(/#ifndef\s+RCT_NEW_ARCH_ENABLED/, '#if !RCT_NEW_ARCH_ENABLED')
-                changed = true
+                new_if_not_count = patched_content.scan(/#if\s+!RCT_NEW_ARCH_ENABLED/).length
+                if old_ifndef_count > 0 && new_if_not_count >= old_ifndef_count
+                  changed = true
+                end
               end
               
               if changed && patched_content != content
