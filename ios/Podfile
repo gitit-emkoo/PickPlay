@@ -524,9 +524,10 @@ post_install do |installer|
       end
       
       # react-native-screens의 New Architecture 코드 문제 해결
-      # 모든 .mm 파일에서 #ifdef RCT_NEW_ARCH_ENABLED를 #if RCT_NEW_ARCH_ENABLED로 변경
+      # 모든 .mm과 .h 파일에서 #ifdef RCT_NEW_ARCH_ENABLED를 #if RCT_NEW_ARCH_ENABLED로 변경
       # 문제: #ifdef는 매크로가 정의되어 있으면 true이지만, #if는 매크로 값이 0이 아닐 때만 true
       # RCT_NEW_ARCH_ENABLED=0으로 설정했을 때 #ifdef는 여전히 true가 되어 블록이 실행됨
+      # .h 파일도 포함해야 하는 이유: 속성 정의가 .h 파일에 있고, 이것도 #ifdef로 감싸져 있음
       begin
         require 'fileutils'
         repo_root = File.expand_path('..', __dir__)
@@ -534,21 +535,22 @@ post_install do |installer|
         
         if Dir.exist?(rns_ios_dir)
           patched_files = []
-          Dir.glob(File.join(rns_ios_dir, '*.mm')).each do |mm_file|
+          # .mm 파일과 .h 파일 모두 처리
+          Dir.glob(File.join(rns_ios_dir, '*.{mm,h}')).each do |source_file|
             begin
-              content = File.read(mm_file)
+              content = File.read(source_file)
               
               # #ifdef RCT_NEW_ARCH_ENABLED를 #if RCT_NEW_ARCH_ENABLED로 변경
               if content.include?('#ifdef RCT_NEW_ARCH_ENABLED')
                 patched_content = content.gsub(/#ifdef\s+RCT_NEW_ARCH_ENABLED/, '#if RCT_NEW_ARCH_ENABLED')
                 
                 if patched_content != content
-                  File.write(mm_file, patched_content)
-                  patched_files << File.basename(mm_file)
+                  File.write(source_file, patched_content)
+                  patched_files << File.basename(source_file)
                 end
               end
             rescue => e
-              Pod::UI.puts "⚠️ Failed to patch #{File.basename(mm_file)}: #{e.message}"
+              Pod::UI.puts "⚠️ Failed to patch #{File.basename(source_file)}: #{e.message}"
             end
           end
           
