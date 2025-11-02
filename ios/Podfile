@@ -263,6 +263,59 @@ post_install do |installer|
   begin
     expo_modules_core = installer.pods_project.targets.find { |t| t.name == 'ExpoModulesCore' }
     if expo_modules_core
+      # React Native 0.76에서 import React 모듈 문제 해결
+      # ExpoModulesCore 타겟이 React-Core에 제대로 링크되도록 설정
+      expo_modules_core.build_configurations.each do |config|
+        # Header Search Paths에 React-Core 헤더 추가
+        header_search_paths = config.build_settings["HEADER_SEARCH_PATHS"] || []
+        if header_search_paths.is_a?(String)
+          header_search_paths = header_search_paths.empty? ? [] : header_search_paths.split(' ')
+        end
+        header_search_paths = header_search_paths.is_a?(Array) ? header_search_paths : []
+        
+        # React-Core 헤더 경로 추가
+        react_header_paths = [
+          '$(PODS_ROOT)/Headers/Private/React-Core',
+          '$(PODS_CONFIGURATION_BUILD_DIR)/React-Core'
+        ]
+        react_header_paths.each do |path|
+          unless header_search_paths.any? { |p| p.to_s.include?(path) }
+            header_search_paths << path
+          end
+        end
+        
+        if header_search_paths.any?
+          config.build_settings["HEADER_SEARCH_PATHS"] = (header_search_paths + ['$(inherited)']).uniq.join(' ')
+        end
+        
+        # Swift 컴파일러가 React 모듈을 찾을 수 있도록 설정
+        # React Native 0.76에서는 모듈 맵이 자동으로 생성되므로
+        # Import Paths가 올바르게 설정되어 있는지 확인
+        import_paths = config.build_settings["SWIFT_INCLUDE_PATHS"] || []
+        import_paths = import_paths.is_a?(Array) ? import_paths : []
+        
+        # 모듈 맵을 포함하는 경로 추가
+        module_map_paths = [
+          '$(PODS_CONFIGURATION_BUILD_DIR)/React-Core',
+          '$(PODS_ROOT)/Headers/Private/React-Core'
+        ]
+        module_map_paths.each do |path|
+          unless import_paths.any? { |p| p.to_s.include?(path) }
+            import_paths << path
+          end
+        end
+        
+        if import_paths.any?
+          config.build_settings["SWIFT_INCLUDE_PATHS"] = (import_paths + ['$(inherited)']).uniq.join(' ')
+        end
+      end
+      
+      # ExpoModulesCore 타겟이 React-Core에 의존하도록 확인
+      # use_react_native!에서 이미 설정되었을 수 있지만, 명시적으로 확인
+      unless expo_modules_core.dependencies.any? { |d| d.name == 'React-Core' }
+        # 의존성이 없으면 추가 (하지만 보통 use_react_native!에서 자동으로 설정됨)
+        puts "⚠️ ExpoModulesCore may need React-Core dependency (usually set by use_react_native!)"
+      end
       # Fabric/SwiftUI 관련 파일 및 이를 참조하는 의존성 파일들 제외
       # 주의: 
       # - CommonExceptions.swift는 제외하면 안 됨 (Exceptions struct 정의)
