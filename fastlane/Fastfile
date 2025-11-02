@@ -18,20 +18,20 @@ MATCH_BRANCH = ENV.fetch("MATCH_GIT_BRANCH", "master")  # certs repo 기본 브�
 # --- 공통 CI 준비 ---
 def prepare_ci!
   opt_out_usage
-    setup_ci
+  setup_ci
 
   # Runner에서 Xcode는 워크플로우에서 선택되므로 여기선 버전 로깅만 수행
   sh("xcodebuild -version | tee /dev/stderr")
   xcode_select("/Applications/Xcode_16.2.app")
 
-    create_keychain(
-      name: "build",
+  create_keychain(
+    name: "build",
     password: KEYCHAIN_PW,
-      default_keychain: true,
-      unlock: true,
-      timeout: 3600,
-      add_to_search_list: true
-    )
+    default_keychain: true,
+    unlock: true,
+    timeout: 3600,
+    add_to_search_list: true
+  )
 end
 
 def decode_profile_name(profile_path)
@@ -299,38 +299,14 @@ platform :ios do
     assert_push_in_profile!(pp_path)
 
     # Pods 재설치 (post_install 설정 적용)
-    # Clean 빌드 강제로 깨끗한 상태에서 시작
-    UI.message("🧹 Clean build: removing Pods and build artifacts...")
-    sh("cd #{IOS_DIR} && rm -rf Pods && rm -rf build && rm -rf ~/Library/Developer/Xcode/DerivedData/*")
     sh("cd #{IOS_DIR} && pod install")
     
-    # React Native Codegen 명시적 실행 (Codegen이 제대로 실행되지 않을 경우 대비)
-    UI.message("🔧 Running React Native Codegen...")
-    begin
-      codegen_dir = File.join(IOS_DIR, "build", "generated", "ios")
-      
-      # Codegen 디렉토리 생성
-      FileUtils.mkdir_p(codegen_dir)
-      FileUtils.mkdir_p(File.join(codegen_dir, "react", "renderer", "components"))
-      
-      # generate-codegen-artifacts.js 실행 (공식 권장 방법)
-      codegen_script = File.join(REPO_ROOT, "node_modules", "react-native", "scripts", "generate-codegen-artifacts.js")
-      
-      if File.exist?(codegen_script)
-        UI.message("📍 Found Codegen script: #{codegen_script}")
-        # New Architecture가 비활성화되어 있어도 스크립트 실행 (에러는 무시)
-        result = sh("cd #{REPO_ROOT} && node #{codegen_script} 2>&1", log: false)
-        UI.success("✅ Codegen script executed")
-      else
-        UI.important("⚠️ Codegen script not found at expected path")
-        UI.message("📁 Codegen directory created: #{codegen_dir}")
-        # 빌드 스크립트 체크를 통과하기 위해 더미 마커 파일 생성
-        marker_file = File.join(codegen_dir, ".codegen_success")
-        FileUtils.touch(marker_file) if File.exist?(codegen_dir)
-      end
-    rescue => e
-      UI.important("⚠️ Codegen setup warning (may be OK if newArchEnabled=false): #{e.message}")
-    end
+    # post_install 후에도 -G 플래그가 남을 수 있으므로 추가 스크럽
+    UI.message("🧽 Additional -G flag scrubbing after pod install...")
+    sh("cd #{IOS_DIR} && " +
+       "find 'Pods/Target Support Files' -name '*.xcconfig' -type f -exec perl -i -pe 's/\\s-G(?=\\s|$)/ /g' {} \\; 2>/dev/null || true && " +
+       "[ -f 'Pods/Pods.xcodeproj/project.pbxproj' ] && " +
+       "perl -i -pe 's/\\s-G(?=\\s|$)/ /g' 'Pods/Pods.xcodeproj/project.pbxproj' 2>/dev/null || true")
 
     # (선택) 빌드 번호 자동 증가
     increment_build_number(xcodeproj: XCODEPROJ)
@@ -443,11 +419,43 @@ platform :ios do
       UI.important("⚠️ 프로젝트 파일 수정 실패 (xcargs로 대체): #{e.message}")
     end
     
-    # export_options는 이름(Name)만 사용, 없으면 생략 (이미 xcodeproj/xcargs/임베드로 지정됨)
+    # 🔒 빌드 직전 최종 -G 검증 (xcodeproj로 확인)
+    begin
+      require 'xcodeproj'
+      pods_proj = Xcodeproj::Project.open(File.join(IOS_DIR, "Pods", "Pods.xcodeproj"))
+      tgt = pods_proj.targets.find { |t| t.name == "BoringSSL-GRPC" }
+      if tgt
+        g_pattern = /(^|\s)-G(?=\s|$)/
+        found_g = []
+        tgt.build_phases.grep(Xcodeproj::Project::Object::PBXSourcesBuildPhase).each do |phase|
+          phase.files.each do |bf|
+            next unless bf.settings
+            flags = bf.settings["COMPILER_FLAGS"]
+            next unless flags
+            if (flags.is_a?(String) && flags.match?(g_pattern)) || 
+               (flags.is_a?(Array) && flags.any? { |s| s.to_s.match?(g_pattern) })
+              found_g << bf.file_ref&.path || "unknown"
+            end
+          end
+        end
+        if !found_g.empty?
+          UI.user_error!("❌ 빌드 직전 검증 실패: BoringSSL-GRPC의 #{found_g.size}개 파일에서 -G 플래그 발견: #{found_g.join(', ')}")
+        else
+          UI.success("✅ 빌드 직전 검증 완료: BoringSSL-GRPC에서 -G 플래그 없음")
+        end
+      end
+    rescue LoadError
+      UI.important("⚠️ xcodeproj gem 없음 - 최종 검증 건너뜀")
+    rescue => e
+      UI.important("⚠️ 최종 검증 중 오류: #{e.message}")
+    end
+    
+    # 2) export_options는 이름(Name)만 사용, 없으면 생략 (이미 xcodeproj/xcargs/임베드로 지정됨)
     export_profiles = {}
     export_profiles[BUNDLE_ID] = pp_name unless pp_name.empty?
     
     # 메인 앱 타겟에만 프로비저닝 프로파일 적용 (Pods 제외)
+    # 🔒 xcargs에 BoringSSL-GRPC의 플래그를 명시적으로 $(inherited)로 강제 설정하여 -G 제거
     build_app(
       workspace:     WORKSPACE,
       scheme:        SCHEME,
@@ -461,7 +469,12 @@ platform :ios do
         "CODE_SIGN_IDENTITY=\"Apple Distribution\"",
         "PRODUCT_BUNDLE_IDENTIFIER=#{BUNDLE_ID}",
         "#{SCHEME}.PROVISIONING_PROFILE_SPECIFIER=#{specifier}",  # 메인 앱 타겟만 지정
-        "SWIFT_OPTIMIZATION_LEVEL=-O"
+        "SWIFT_OPTIMIZATION_LEVEL=-O",
+        # BoringSSL-GRPC 타겟의 플래그를 $(inherited)로 강제 설정하여 -G 제거
+        "BoringSSL-GRPC.OTHER_CFLAGS=$(inherited)",
+        "BoringSSL-GRPC.OTHER_CPLUSPLUSFLAGS=$(inherited)",
+        "BoringSSL-GRPC.OTHER_LDFLAGS=$(inherited)",
+        "BoringSSL-GRPC.WARNING_CFLAGS=$(inherited)"
       ].compact.join(" "),
       export_options: export_profiles.empty? ? nil : {
         provisioningProfiles: export_profiles
