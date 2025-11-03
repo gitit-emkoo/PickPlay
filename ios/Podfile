@@ -673,23 +673,26 @@ post_install do |installer|
           # 해결: 메서드 선언부(.h)와 구현부(.mm) 모두 조건부 컴파일로 감싸기
           
           # =======================================================
-          # RNSScreen.h & RNSScreen.mm Robust Patch
+          # RNSScreen.h & RNSScreen.mm Robust Patch (v3)
           # =======================================================
           begin
             require 'fileutils'
             repo_root = File.expand_path('..', __dir__)
             rns_ios_dir = File.join(repo_root, 'node_modules', 'react-native-screens', 'ios')
             
-            rnsscreen_h_file = File.join(rns_ios_dir, 'RNSScreen.h')
-            rnsscreen_mm_file = File.join(rns_ios_dir, 'RNSScreen.mm')
-
+            # ---------------------------------
             # 1. Patch RNSScreen.h (Declaration)
+            # ---------------------------------
+            rnsscreen_h_file = File.join(rns_ios_dir, 'RNSScreen.h')
             if File.exist?(rnsscreen_h_file)
               puts "🔍 Patching RNSScreen.h method declaration..."
               content_h = File.read(rnsscreen_h_file)
+              original_content_h = content_h.dup
               
+              # Check if already patched
               unless content_h.match(/#if\s+RCT_NEW_ARCH_ENABLED[\s\S]*?rnscreens_findTouchHandlerInAncestorChain/)
-                new_content_h = content_h.gsub(
+                # Find declaration and wrap it
+                content_h.gsub!(
                   /(\s*)(\-\s*\(\s*RCTSurfaceTouchHandler\s*\*\s*\)\s*rnscreens_findTouchHandlerInAncestorChain;)/
                 ) do
                   indent = $1
@@ -703,8 +706,8 @@ post_install do |installer|
                   "#{indent}#endif"
                 end
 
-                if new_content_h != content_h
-                  File.write(rnsscreen_h_file, new_content_h)
+                if content_h != original_content_h
+                  File.write(rnsscreen_h_file, content_h)
                   puts "  ✅ Patched method declaration in RNSScreen.h"
                 else
                   puts "  ℹ️  No declaration changes needed for RNSScreen.h."
@@ -716,81 +719,52 @@ post_install do |installer|
               puts "⚠️ RNSScreen.h not found."
             end
 
+            # ------------------------------------
             # 2. Patch RNSScreen.mm (Implementation)
+            # ------------------------------------
+            rnsscreen_mm_file = File.join(rns_ios_dir, 'RNSScreen.mm')
             if File.exist?(rnsscreen_mm_file)
               puts "🔍 Patching RNSScreen.mm implementation..."
-              lines = File.readlines(rnsscreen_mm_file)
-              new_lines = []
-              changed = false
-              
-              in_target_method_declaration = false
-              in_target_method_body = false
-              brace_level = 0
-              
-              # 한 줄씩 처리하여 gsub!의 중첩 문제를 원천적으로 방지
-              lines.each_with_index do |line, idx|
-                
-                # 메서드 구현부 선언 시작 찾기
-                if !changed && line.match(/-\s*\(\s*RCTSurfaceTouchHandler\s*\*\s*\)\s*rnscreens_findTouchHandlerInAncestorChain/)
-                  # 이미 패치되었는지 확인
-                  context_range = [0, idx - 5].max..([lines.length - 1, idx + 5].min)
-                  context = lines[context_range].join
-                  unless context.match(/#if\s+RCT_NEW_ARCH_ENABLED/)
-                    puts "  🔧 Patching method implementation declaration in RNSScreen.mm"
-                    indent = line.match(/^(\s*)/)[1]
-                    legacy_line = line.gsub('RCTSurfaceTouchHandler', 'RCTTouchHandler')
-                    
-                    new_lines << "#{indent}#if RCT_NEW_ARCH_ENABLED\n"
-                    new_lines << line
-                    new_lines << "#{indent}#else\n"
-                    new_lines << legacy_line
-                    new_lines << "#{indent}#endif\n"
-                    changed = true
-                    next # 현재 줄 처리가 끝났으므로 다음 줄로
-                  else
-                     puts "  ℹ️  RNSScreen.mm method implementation declaration already patched."
-                  end
-                end
+              content_mm = File.read(rnsscreen_mm_file)
+              original_content_mm = content_mm.dup
 
-                # 메서드 본문 내 return 문 찾기
-                if !changed && line.match(/rnscreens_findTouchHandlerInAncestorChain/)
-                  in_target_method_body = true
-                  brace_level = 0
+              # Patch 1: Method implementation declaration (if not already patched)
+              unless content_mm.match(/#if\s+RCT_NEW_ARCH_ENABLED[\s\S]*?rnscreens_findTouchHandlerInAncestorChain\s*\{/)
+                content_mm.gsub!(
+                  /(\s*)(\-\s*\(\s*RCTSurfaceTouchHandler\s*\*\s*\)\s*rnscreens_findTouchHandlerInAncestorChain)\s*\{/
+                ) do
+                  indent = $1
+                  original_declaration = $2
+                  legacy_declaration = original_declaration.gsub('RCTSurfaceTouchHandler', 'RCTTouchHandler')
+
+                  "\n#{indent}#if RCT_NEW_ARCH_ENABLED\n" +
+                  "#{indent}#{original_declaration}\n" +
+                  "#{indent}#else\n" +
+                  "#{indent}#{legacy_declaration}\n" +
+                  "#{indent}#endif\n" +
+                  "#{indent}{"
                 end
-                
-                if in_target_method_body
-                  brace_level += line.count('{') - line.count('}')
-                  
-                  # return 문 찾기
-                  if line.match(/return\s+.*_touchHandler;/)
-                    context_range = [0, idx - 5].max..([lines.length - 1, idx + 5].min)
-                    context = lines[context_range].join
-                    unless context.match(/#if\s+RCT_NEW_ARCH_ENABLED/)
-                        puts "  🔧 Patching return statement in RNSScreen.mm"
-                        indent = line.match(/^(\s*)/)[1]
-                        
-                        new_lines << "#{indent}#if RCT_NEW_ARCH_ENABLED\n"
-                        new_lines << "#{indent}  return (RCTSurfaceTouchHandler *)_touchHandler;\n"
-                        new_lines << "#{indent}#else\n"
-                        new_lines << "#{indent}  return (RCTTouchHandler *)_touchHandler;\n"
-                        new_lines << "#{indent}#endif\n"
-                        changed = true
-                        next
-                    else
-                        puts "  ℹ️  Return statement in RNSScreen.mm already patched."
-                    end
-                  end
-                  
-                  if brace_level <= 0
-                    in_target_method_body = false
-                  end
-                end
-                
-                new_lines << line unless changed
               end
 
-              if changed
-                File.write(rnsscreen_mm_file, new_lines.join)
+              # Patch 2: The return statement (if not already patched)
+              # This specifically targets `return _touchHandler;` inside the method.
+              # A more robust regex looks for the method and the return inside it.
+              unless content_mm.match(/rnscreens_findTouchHandlerInAncestorChain[\s\S]*?#if\s+RCT_NEW_ARCH_ENABLED[\s\S]*?return\s+\(RCTSurfaceTouchHandler/)
+                 content_mm.gsub!(
+                   /(rnscreens_findTouchHandlerInAncestorChain\s*\{(?:\s*#if\s!RCT_NEW_ARCH_ENABLED)?\s*)(return\s+_touchHandler;)/m
+                 ) do
+                   method_start = $1
+                   "#{method_start}" +
+                   "#if RCT_NEW_ARCH_ENABLED\n" +
+                   "    return (RCTSurfaceTouchHandler *)_touchHandler;\n" +
+                   "  #else\n" +
+                   "    return (RCTTouchHandler *)_touchHandler;\n" +
+                   "  #endif"
+                 end
+              end
+              
+              if content_mm != original_content_mm
+                File.write(rnsscreen_mm_file, content_mm)
                 puts "  ✅ Patched RNSScreen.mm implementation logic."
               else
                  puts "  ℹ️  No implementation changes needed for RNSScreen.mm."
@@ -800,6 +774,7 @@ post_install do |installer|
             Pod::UI.puts "⚠️ RNSScreen final patch failed: #{e.message}\n#{e.backtrace.first(3).join("\n")}"
           end
           
+          # =======================================================
         else
           puts "⚠️ react-native-screens ios directory not found at expected path"
         end
