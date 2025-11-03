@@ -19,7 +19,8 @@
     "submit:ios": "echo 'iOS 제출은 GitHub Actions에서 자동으로 실행됩니다'",
     "submit:android": "eas submit --platform android",
     "deploy:tag": "git tag v$(node -p \"require('./package.json').version\") && git push origin v$(node -p \"require('./package.json').version\")",
-    "push:send-daily": "node ./scripts/send-daily-push.js"
+    "push:send-daily": "node ./scripts/send-daily-push.js",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@expo/metro-runtime": "~4.0.1",
@@ -81,7 +82,8 @@
     "jest": "~29.7.0",
     "react-test-renderer": "18.3.1",
     "ts-jest": "^29.4.4",
-    "typescript": "~5.8.3"
+    "typescript": "~5.8.3",
+    "patch-package": "^8.0.0"
   },
   "overrides": {},
   "private": true
