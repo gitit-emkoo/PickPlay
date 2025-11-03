@@ -579,6 +579,22 @@ post_install do |installer|
                 end
               end
               
+              # RNSScreen.mm의 rnscreens_findTouchHandlerInAncestorChain 메서드 반환 타입 수정
+              # Legacy Architecture에서는 RCTTouchHandler를 반환하지만 반환 타입이 RCTSurfaceTouchHandler로 되어 있음
+              if File.basename(source_file) == 'RNSScreen.mm' && patched_content.include?('rnscreens_findTouchHandlerInAncestorChain')
+                # 반환 타입이 RCTSurfaceTouchHandler인 경우를 찾아서 조건부로 처리
+                # 패턴: return _touchHandler; 또는 return [something _touchHandler];
+                # 반환 문을 조건부 컴파일로 감싸거나 타입 캐스팅 추가
+                if patched_content.match(/return\s+_touchHandler;/)
+                  # 반환 문을 조건부 컴파일로 감싸기
+                  patched_content = patched_content.gsub(
+                    /(\s+)(return\s+_touchHandler;)/,
+                    "\\1#if RCT_NEW_ARCH_ENABLED\n\\1  return (RCTSurfaceTouchHandler *)_touchHandler;\n\\1#else\n\\1  return (RCTTouchHandler *)_touchHandler;\n\\1#endif"
+                  )
+                  changed = true
+                end
+              end
+              
               if changed && patched_content != content
                 File.write(source_file, patched_content)
                 patched_files << File.basename(source_file)
