@@ -1,27 +1,44 @@
+diff --git a/node_modules/react-native-screens/ios/RNSScreen.h b/node_modules/react-native-screens/ios/RNSScreen.h
+index 9b83b3a..3275a5b 100644
+--- a/node_modules/react-native-screens/ios/RNSScreen.h
++++ b/node_modules/react-native-screens/ios/RNSScreen.h
+@@ -139,11 +139,15 @@
+ - (void)rns_updateProps:(NSArray<NSString *> *)props;
+ 
+ #ifdef RCT_NEW_ARCH_ENABLED
+-- (RCTSurfaceTouchHandler *)rnscreens_findTouchHandlerInAncestorChain;
++#if RCT_NEW_ARCH_ENABLED
++- (RCTSurfaceTouchHandler *)rnscreens_findTouchHandlerInAncestorChain;
+ #else
+-
++- (RCTTouchHandler *)rnscreens_findTouchHandlerInAncestorChain;
+ #endif
+ 
+ @end
+ 
+ @interface RNSScreenManager : RCTViewManager <RCTInvalidating>
 diff --git a/node_modules/react-native-screens/ios/RNSScreen.mm b/node_modules/react-native-screens/ios/RNSScreen.mm
-index 6d05957..3a3820c 100644
+index 451c23f..f7d6a7d 100644
 --- a/node_modules/react-native-screens/ios/RNSScreen.mm
 +++ b/node_modules/react-native-screens/ios/RNSScreen.mm
-@@ -2076,3 +2076,22 @@ RCT_ENUM_CONVERTER(
- // So that the define-macro is not leaked out of this file.
- // This one is defined in very top of the file depending on RN architecture.
- #undef ReactScrollViewBase
-+
-+#ifdef RCT_NEW_ARCH_ENABLED
+@@ -627,11 +627,15 @@
+ }
+ 
+ #ifdef RCT_NEW_ARCH_ENABLED
+-- (RCTSurfaceTouchHandler *)rnscreens_findTouchHandlerInAncestorChain
 +#if RCT_NEW_ARCH_ENABLED
 +- (RCTSurfaceTouchHandler *)rnscreens_findTouchHandlerInAncestorChain
 +#else
 +- (RCTTouchHandler *)rnscreens_findTouchHandlerInAncestorChain
-+#endif
-+{
+ #endif
+ {
+-  return _touchHandler;
 +#if RCT_NEW_ARCH_ENABLED
 +  return (RCTSurfaceTouchHandler *)_touchHandler;
 +#else
 +  return (RCTTouchHandler *)_touchHandler;
 +#endif
-+}
-+
-+- (void)didUpdateReactSubviews
-+{
-+  // ... existing code ...
-+}
+ }
+ 
+ - (void)didUpdateReactSubviews
+ {

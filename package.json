@@ -19,8 +19,7 @@
     "submit:ios": "echo 'iOS 제출은 GitHub Actions에서 자동으로 실행됩니다'",
     "submit:android": "eas submit --platform android",
     "deploy:tag": "git tag v$(node -p \"require('./package.json').version\") && git push origin v$(node -p \"require('./package.json').version\")",
-    "push:send-daily": "node ./scripts/send-daily-push.js",
-    "postinstall": "patch-package"
+    "push:send-daily": "node ./scripts/send-daily-push.js"
   },
   "dependencies": {
     "@expo/metro-runtime": "~4.0.1",
@@ -67,8 +66,7 @@
     "react-native-screens": "~4.4.0",
     "react-native-web": "~0.19.13",
     "react-native-webview": "13.12.5",
-    "react-native-worklets": "^0.5.1",
-    "patch-package": "^8.0.0"
+    "react-native-worklets": "^0.5.1"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

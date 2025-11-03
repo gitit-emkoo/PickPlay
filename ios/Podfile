@@ -37,7 +37,7 @@ target 'PickPlay' do
 
 end
 
-post_install do |installer|
+pre_install do |installer|
   react_native_post_install(installer)
   
   # React Native Codegen 디렉토리 생성 (New Architecture 비활성화 상태에서도 빌드 스크립트 체크 대응)
@@ -901,6 +901,33 @@ post_install do |installer|
     rescue => e
       Pod::UI.puts "⚠️ #{lib_name} preventive patch skipped: #{e.message}"
     end
+  end
+
+  # =================================================================
+  # FINAL PATCH for react-native-screens (New Arch / Legacy Arch)
+  # =================================================================
+  # patch-package 방식의 불안정성으로 인해 Podfile에서 직접 수정하는 방식으로 회귀.
+  # 가장 단순하고 확실한 방식으로 필요한 파일만 찾아 수정.
+  begin
+    rns_path = Pathname.new(File.join(installer.pods_project.project_dir, '..', 'node_modules', 'react-native-screens'))
+    rns_h_path = rns_path.join('ios', 'RNSScreen.h')
+    rns_mm_path = rns_path.join('ios', 'RNSScreen.mm')
+
+    if File.exist?(rns_h_path)
+      Pod::UI.puts "✅ Patching RNSScreen.h"
+      content = File.read(rns_h_path)
+      content.gsub!('RCTSurfaceTouchHandler *', 'RCTTouchHandler *')
+      File.write(rns_h_path, content)
+    end
+
+    if File.exist?(rns_mm_path)
+      Pod::UI.puts "✅ Patching RNSScreen.mm"
+      content = File.read(rns_mm_path)
+      content.gsub!('RCTSurfaceTouchHandler *', 'RCTTouchHandler *')
+      File.write(rns_mm_path, content)
+    end
+  rescue => e
+    Pod::UI.warn "⚠️ Could not apply react-native-screens patch: #{e}"
   end
 
   installer.pods_project.save
