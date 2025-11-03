@@ -110,8 +110,16 @@ post_install do |installer|
       end
       
       # New Architecture 비활성화 (C/C++/Objective-C용)
-      defs = (config.build_settings["GCC_PREPROCESSOR_DEFINITIONS"] ||= [])
-      defs << "RCT_NEW_ARCH_ENABLED=0" unless defs.include?("RCT_NEW_ARCH_ENABLED=0")
+      # 주의: #ifdef RCT_NEW_ARCH_ENABLED는 값이 0이어도 '정의됨'이면 true가 됩니다.
+      # 따라서 매크로를 '정의하지 않도록' 완전히 제거해야 합니다.
+      defs = config.build_settings["GCC_PREPROCESSOR_DEFINITIONS"]
+      if defs.is_a?(String)
+        defs = defs.split(' ')
+      elsif defs.nil?
+        defs = []
+      end
+      defs = defs.reject { |d| d.to_s.start_with?("RCT_NEW_ARCH_ENABLED") }
+      config.build_settings["GCC_PREPROCESSOR_DEFINITIONS"] = defs
       
       # New Architecture 비활성화 (Swift용)
       # Swift에서 #if RCT_NEW_ARCH_ENABLED는 매크로가 정의되어 있지 않으면 false
