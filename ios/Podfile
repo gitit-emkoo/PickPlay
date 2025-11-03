@@ -270,36 +270,15 @@ post_install do |installer|
       # React Native 0.76에서는 React 모듈이 React-Core로 변경되었지만,
       # ExpoModulesCore는 여전히 import React를 사용합니다.
       # 따라서 Swift에서 React 모듈을 찾을 수 있도록 모듈 맵 경로를 설정해야 합니다.
+      # React 모듈 설정은 아래의 강화된 버전에서 처리됩니다 (497줄 부근)
+      # 여기서는 기본 설정만 유지
       expo_modules_core.build_configurations.each do |config|
-        # IMPORTANT: React Native 0.76에서는 React 모듈이 없고 React-Core만 있습니다.
-        # 하지만 ExpoModulesCore는 import React를 사용하므로, React-Core의 모듈 맵을 React로 alias해야 합니다.
-        # 또는 더 나은 방법: Swift 컴파일러가 React-Core를 React로 인식하도록 설정
-        
-        # Swift 컴파일러가 React 모듈을 찾을 수 있도록 Import Paths 설정
-        # React Native 0.76에서는 React-Core 모듈이 생성되지만, Swift에서는 React로 import해야 합니다.
-        swift_flags = config.build_settings["OTHER_SWIFT_FLAGS"] || []
-        if swift_flags.is_a?(String)
-          swift_flags = swift_flags.empty? ? [] : swift_flags.split(' ')
-        end
-        swift_flags = swift_flags.is_a?(Array) ? swift_flags : []
-        
-        # React Native 0.76에서는 React 모듈이 React-Core에서 제공됩니다.
-        # 모듈 맵 경로를 추가하여 Swift 컴파일러가 React 모듈을 찾을 수 있도록 합니다.
-        # React-Core의 모듈 맵 경로 설정
-        module_map_path = '$(PODS_CONFIGURATION_BUILD_DIR)/React-Core'
-        unless swift_flags.any? { |f| f.to_s.include?(module_map_path) }
-          swift_flags << "-Xcc"
-          swift_flags << "-I#{module_map_path}"
-        end
-        
-        config.build_settings["OTHER_SWIFT_FLAGS"] = swift_flags
-        
-        # Header Search Paths에 React-Core 헤더 추가
+        # Header Search Paths 기본 설정 (상세 설정은 아래에서 처리)
         header_search_paths = config.build_settings["HEADER_SEARCH_PATHS"] || []
         if header_search_paths.is_a?(String)
-          header_search_paths = header_search_paths.empty? ? [] : header_search_paths.split(' ')
+          header_search_paths = header_search_paths.empty? ? [] : header_search_paths.split(' ').uniq
         end
-        header_search_paths = header_search_paths.is_a?(Array) ? header_search_paths : []
+        header_search_paths = header_search_paths.is_a?(Array) ? header_search_paths.dup : []
         
         react_header_paths = [
           '$(PODS_ROOT)/Headers/Private/React-Core',
@@ -307,16 +286,17 @@ post_install do |installer|
           '$(PODS_ROOT)/Headers/Public/React-Core'
         ]
         react_header_paths.each do |path|
-          unless header_search_paths.any? { |p| p.to_s.include?(path.split('/').last) }
-            header_search_paths << path
-          end
+          header_search_paths << path unless header_search_paths.include?(path)
         end
         
         config.build_settings["HEADER_SEARCH_PATHS"] = (header_search_paths + ['$(inherited)']).uniq.join(' ')
         
-        # Swift Import Paths
+        # Swift Import Paths 기본 설정 (상세 설정은 아래에서 처리)
         import_paths = config.build_settings["SWIFT_INCLUDE_PATHS"] || []
-        import_paths = import_paths.is_a?(Array) ? import_paths : []
+        if import_paths.is_a?(String)
+          import_paths = import_paths.empty? ? [] : import_paths.split(' ').uniq
+        end
+        import_paths = import_paths.is_a?(Array) ? import_paths.dup : []
         
         react_import_paths = [
           '$(PODS_CONFIGURATION_BUILD_DIR)/React-Core',
@@ -324,9 +304,7 @@ post_install do |installer|
           '$(PODS_ROOT)/Headers/Public/React-Core'
         ]
         react_import_paths.each do |path|
-          unless import_paths.any? { |p| p.to_s.include?(path.split('/').last) }
-            import_paths << path
-          end
+          import_paths << path unless import_paths.include?(path)
         end
 
         config.build_settings["SWIFT_INCLUDE_PATHS"] = (import_paths + ['$(inherited)']).uniq.join(' ')
@@ -494,33 +472,106 @@ post_install do |installer|
         Pod::UI.puts "   Stack trace: #{e.backtrace.first(3).join("\n   ")}"
       end
       
-      # React Native 0.76에서 import React 모듈 문제 해결
-      # React Native 0.76에서는 모듈 구조가 변경되었지만 import React는 여전히 작동해야 합니다.
-      # 문제는 모듈 맵 경로가 제대로 설정되지 않아서 발생합니다.
-      # ExpoModulesCore 타겟에 React-Core 모듈을 명시적으로 링크합니다.
+      # React Native 0.76에서 import React 모듈 문제 해결 (강화 버전)
+      # React Native 0.76에서는 React 모듈이 React-Core로 통합되었지만,
+      # ExpoModulesCore는 여전히 `import React`를 사용합니다.
+      # 모든 빌드 설정에 모듈 경로와 프레임워크 링크를 명시적으로 추가합니다.
       begin
-        # ExpoModulesCore가 React-Core에 의존하도록 명시적으로 설정
-        # use_react_native!에서 자동으로 설정되지만, 확실하게 하기 위해 확인
         react_core_target = installer.pods_project.targets.find { |t| t.name == 'React-Core' }
-        if react_core_target
-          # ExpoModulesCore가 React-Core에 의존하는지 확인
-          expo_modules_core.build_phases.each do |phase|
-            if phase.is_a?(Xcodeproj::Project::Object::PBXFrameworksBuildPhase)
-              # React-Core 프레임워크 링크 확인
-              react_core_file = phase.files.find { |f| f.file_ref && f.file_ref.path == 'React-Core' }
-              unless react_core_file
-                # React-Core 프레임워크 링크 추가
-                react_core_ref = expo_modules_core.project.frameworks_group.files.find { |f| f.path == 'React-Core.framework' }
-                if react_core_ref
-                  phase.add_file_reference(react_core_ref)
-                  puts "✅ Added React-Core framework link to ExpoModulesCore"
+        if react_core_target && expo_modules_core
+          expo_modules_core.build_configurations.each do |config|
+            # 1. Header Search Paths 추가
+            header_search_paths = config.build_settings['HEADER_SEARCH_PATHS'] || []
+            if header_search_paths.is_a?(String)
+              header_search_paths = header_search_paths.empty? ? [] : header_search_paths.split(' ').uniq
+            end
+            header_search_paths = header_search_paths.is_a?(Array) ? header_search_paths.dup : []
+            
+            react_paths = [
+              '$(PODS_ROOT)/Headers/Private/React-Core',
+              '$(PODS_CONFIGURATION_BUILD_DIR)/React-Core/React-Core.framework/Headers',
+              '$(PODS_ROOT)/Headers/Public/React-Core',
+              '$(PODS_ROOT)/Headers/Public/React'
+            ]
+            
+            react_paths.each do |path|
+              header_search_paths << path unless header_search_paths.include?(path)
+            end
+            
+            config.build_settings['HEADER_SEARCH_PATHS'] = header_search_paths.join(' ')
+            
+            # 2. Swift Include Paths 추가 (Swift 컴파일러가 모듈을 찾을 수 있도록)
+            swift_include_paths = config.build_settings['SWIFT_INCLUDE_PATHS'] || []
+            if swift_include_paths.is_a?(String)
+              swift_include_paths = swift_include_paths.empty? ? [] : swift_include_paths.split(' ').uniq
+            end
+            swift_include_paths = swift_include_paths.is_a?(Array) ? swift_include_paths.dup : []
+            
+            swift_react_paths = [
+              '$(PODS_CONFIGURATION_BUILD_DIR)/React-Core',
+              '$(PODS_ROOT)/Headers/Private/React-Core',
+              '$(PODS_ROOT)/Headers/Public/React-Core'
+            ]
+            
+            swift_react_paths.each do |path|
+              swift_include_paths << path unless swift_include_paths.include?(path)
+            end
+            
+            config.build_settings['SWIFT_INCLUDE_PATHS'] = swift_include_paths.join(' ')
+            
+            # 3. OTHER_SWIFT_FLAGS에 모듈 맵 설정 추가
+            swift_flags = config.build_settings['OTHER_SWIFT_FLAGS'] || []
+            if swift_flags.is_a?(String)
+              swift_flags = swift_flags.empty? ? [] : swift_flags.split(' ').uniq
+            end
+            swift_flags = swift_flags.is_a?(Array) ? swift_flags.dup : []
+            
+            # 모듈 맵 경로를 Swift 컴파일러에 알려줌
+            module_map_flags = [
+              '-Xcc',
+              '-I$(PODS_CONFIGURATION_BUILD_DIR)/React-Core',
+              '-Xcc',
+              '-fmodule-map-file=$(PODS_CONFIGURATION_BUILD_DIR)/React-Core/React-Core.modulemap'
+            ]
+            
+            module_map_flags.each do |flag|
+              swift_flags << flag unless swift_flags.include?(flag)
+            end
+            
+            config.build_settings['OTHER_SWIFT_FLAGS'] = swift_flags.join(' ')
+            
+            # 4. 프레임워크 링크 확인 및 추가
+            frameworks_phase = expo_modules_core.build_phases.find { |phase| phase.is_a?(Xcodeproj::Project::Object::PBXFrameworksBuildPhase) }
+            if frameworks_phase
+              react_core_linked = frameworks_phase.files.any? { |f| 
+                f.file_ref && (f.file_ref.path == 'React-Core' || f.file_ref.path == 'React-Core.framework')
+              }
+              
+              unless react_core_linked
+                # React-Core 프레임워크 참조 찾기
+                react_core_ref = expo_modules_core.project.frameworks_group.files.find { |f| 
+                  f.path == 'React-Core' || f.path == 'React-Core.framework'
+                }
+                
+                if react_core_ref.nil?
+                  # 직접 프레임워크 참조 생성
+                  react_core_path = '$(PODS_CONFIGURATION_BUILD_DIR)/React-Core/React-Core.framework'
+                  file_ref = expo_modules_core.project.new_file(react_core_path)
+                  frameworks_phase.add_file_reference(file_ref)
+                  puts "✅ Added React-Core framework reference to ExpoModulesCore (dynamic)"
+                else
+                  frameworks_phase.add_file_reference(react_core_ref)
+                  puts "✅ Added React-Core framework reference to ExpoModulesCore"
                 end
               end
             end
           end
+          
+          puts "✅ React module configuration applied to ExpoModulesCore"
         end
       rescue => e
-        Pod::UI.puts "⚠️ React-Core linking skipped: #{e.message}"
+        Pod::UI.puts "⚠️ React-Core configuration skipped: #{e.message}"
+        Pod::UI.puts "   Stack trace: #{e.backtrace.first(5).join("\n   ")}"
       end
       
       # react-native-screens의 New Architecture 코드 문제 해결
