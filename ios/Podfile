@@ -37,7 +37,7 @@ target 'PickPlay' do
 
 end
 
-pre_install do |installer|
+post_install do |installer|
   react_native_post_install(installer)
   
   # React Native Codegen 디렉토리 생성 (New Architecture 비활성화 상태에서도 빌드 스크립트 체크 대응)
@@ -75,6 +75,14 @@ pre_install do |installer|
   installer.pods_project.build_configurations.each do |config|
     config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++20'
     config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
+  end
+
+  # RCT-Folly 전용: C++20 표준을 안전하게 강제 적용 (타겟 존재 시에만)
+  folly_target = installer.pods_project.targets.find { |t| t.name == 'RCT-Folly' }
+  if folly_target
+    folly_target.build_configurations.each do |config|
+      config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++20'
+    end
   end
 
   installer.pods_project.targets.each do |target|
