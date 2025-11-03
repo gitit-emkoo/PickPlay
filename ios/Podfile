@@ -808,5 +808,119 @@ post_install do |installer|
     Pod::UI.puts "   Stack trace: #{e.backtrace.first(3).join("\n   ")}"
   end
 
+  # ============================================
+  # 추가 예방 패치: react-native-reanimated
+  # ============================================
+  # react-native-reanimated도 New Architecture 조건부 컴파일에서
+  # #ifdef를 사용할 수 있으므로 react-native-screens와 동일한 패치 적용
+  begin
+    reanimated_ios_dir = File.join(node_modules_dir, 'react-native-reanimated', 'ios')
+    if Dir.exist?(reanimated_ios_dir)
+      puts "🔍 Applying preventive patches to react-native-reanimated..."
+      
+      # 모든 .mm, .m, .h 파일에서 #ifdef -> #if, #ifndef -> #if ! 변환
+      Dir.glob(File.join(reanimated_ios_dir, '**', '*.{mm,m,h}')).each do |file_path|
+        begin
+          content = File.read(file_path)
+          original_content = content.dup
+          
+          # #ifdef RCT_NEW_ARCH_ENABLED -> #if RCT_NEW_ARCH_ENABLED
+          content.gsub!(/#ifdef\s+RCT_NEW_ARCH_ENABLED/, '#if RCT_NEW_ARCH_ENABLED')
+          # #ifndef RCT_NEW_ARCH_ENABLED -> #if !RCT_NEW_ARCH_ENABLED
+          content.gsub!(/#ifndef\s+RCT_NEW_ARCH_ENABLED/, '#if !RCT_NEW_ARCH_ENABLED')
+          
+          if content != original_content
+            File.write(file_path, content)
+            puts "  ✅ Patched: #{File.basename(file_path)}"
+          end
+        rescue => e
+          # 개별 파일 패치 실패는 무시하고 계속 진행
+          end
+        end
+
+      puts "✅ react-native-reanimated preventive patches applied"
+    end
+  rescue => e
+    Pod::UI.puts "⚠️ react-native-reanimated preventive patch skipped: #{e.message}"
+  end
+
+  # ============================================
+  # 추가 예방 패치: react-native-safe-area-context
+  # ============================================
+  begin
+    safearea_ios_dir = File.join(node_modules_dir, 'react-native-safe-area-context', 'ios')
+    if Dir.exist?(safearea_ios_dir)
+      puts "🔍 Applying preventive patches to react-native-safe-area-context..."
+      
+      # 모든 .mm, .m, .h 파일에서 #ifdef -> #if, #ifndef -> #if ! 변환
+      Dir.glob(File.join(safearea_ios_dir, '**', '*.{mm,m,h}')).each do |file_path|
+        begin
+          content = File.read(file_path)
+          original_content = content.dup
+          
+          # #ifdef RCT_NEW_ARCH_ENABLED -> #if RCT_NEW_ARCH_ENABLED
+          content.gsub!(/#ifdef\s+RCT_NEW_ARCH_ENABLED/, '#if RCT_NEW_ARCH_ENABLED')
+          # #ifndef RCT_NEW_ARCH_ENABLED -> #if !RCT_NEW_ARCH_ENABLED
+          content.gsub!(/#ifndef\s+RCT_NEW_ARCH_ENABLED/, '#if !RCT_NEW_ARCH_ENABLED')
+          
+          if content != original_content
+            File.write(file_path, content)
+            puts "  ✅ Patched: #{File.basename(file_path)}"
+          end
+        rescue => e
+          # 개별 파일 패치 실패는 무시하고 계속 진행
+    end
+  end
+    
+      puts "✅ react-native-safe-area-context preventive patches applied"
+    end
+  rescue => e
+    Pod::UI.puts "⚠️ react-native-safe-area-context preventive patch skipped: #{e.message}"
+  end
+
+  # ============================================
+  # 추가 예방 패치: 기타 주요 라이브러리들
+  # ============================================
+  # react-native-gesture-handler, react-native-webview 등도 동일한 패턴 적용
+  [
+    'react-native-gesture-handler',
+    'react-native-webview'
+  ].each do |lib_name|
+    begin
+      lib_ios_dir = File.join(node_modules_dir, lib_name, 'ios')
+      if Dir.exist?(lib_ios_dir)
+        puts "🔍 Applying preventive patches to #{lib_name}..."
+        
+        changed_files = 0
+        Dir.glob(File.join(lib_ios_dir, '**', '*.{mm,m,h}')).each do |file_path|
+          begin
+            content = File.read(file_path)
+            original_content = content.dup
+            
+            # #ifdef RCT_NEW_ARCH_ENABLED -> #if RCT_NEW_ARCH_ENABLED
+            content.gsub!(/#ifdef\s+RCT_NEW_ARCH_ENABLED/, '#if RCT_NEW_ARCH_ENABLED')
+            # #ifndef RCT_NEW_ARCH_ENABLED -> #if !RCT_NEW_ARCH_ENABLED
+            content.gsub!(/#ifndef\s+RCT_NEW_ARCH_ENABLED/, '#if !RCT_NEW_ARCH_ENABLED')
+            
+            if content != original_content
+              File.write(file_path, content)
+              changed_files += 1
+            end
+          rescue => e
+            # 개별 파일 패치 실패는 무시하고 계속 진행
+          end
+        end
+        
+        if changed_files > 0
+          puts "  ✅ Patched #{changed_files} file(s) in #{lib_name}"
+        else
+          puts "  ℹ️  No changes needed in #{lib_name}"
+        end
+      end
+    rescue => e
+      Pod::UI.puts "⚠️ #{lib_name} preventive patch skipped: #{e.message}"
+    end
+  end
+
   installer.pods_project.save
 end
