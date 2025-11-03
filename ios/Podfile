@@ -662,6 +662,59 @@ post_install do |installer|
           else
             puts "⚠️ No react-native-screens files needed patching (already using #if/#if !)"
           end
+          
+          # RNSScreenStack.mm의 rnscreens_cancelTouches 호출을 조건부 컴파일로 감싸기
+          rnsscreenstack_file = File.join(rns_ios_dir, 'RNSScreenStack.mm')
+          if File.exist?(rnsscreenstack_file)
+            content = File.read(rnsscreenstack_file)
+            if content.include?('rnscreens_cancelTouches') && !content.include?('#if RCT_NEW_ARCH_ENABLED')
+              # [[self rnscreens_findTouchHandlerInAncestorChain] rnscreens_cancelTouches]; 패턴 찾기
+              patched_content = content.gsub(
+                /(\s+)(\[\[self rnscreens_findTouchHandlerInAncestorChain\] rnscreens_cancelTouches\];)/,
+                "\\1#if RCT_NEW_ARCH_ENABLED\n\\1  \\2\n\\1#endif"
+              )
+              if patched_content != content
+                File.write(rnsscreenstack_file, patched_content)
+                puts "✅ Patched RNSScreenStack.mm: wrapped rnscreens_cancelTouches in #if RCT_NEW_ARCH_ENABLED"
+              end
+            end
+          end
+          
+          # RNSScreen.mm의 rnscreens_findTouchHandlerInAncestorChain 반환 타입 문제 해결
+          rnsscreen_file = File.join(rns_ios_dir, 'RNSScreen.mm')
+          if File.exist?(rnsscreen_file)
+            content = File.read(rnsscreen_file)
+            patched_content = content.dup
+            changed = false
+            
+            # return _touchHandler; 또는 return (RCTTouchHandler *)_touchHandler; 패턴 찾기
+            # 메서드 시그니처가 RCTSurfaceTouchHandler * _Nullable을 반환하는데
+            # Legacy Architecture에서는 RCTTouchHandler를 반환해야 함
+            if patched_content.include?('rnscreens_findTouchHandlerInAncestorChain')
+              # return 문을 조건부 컴파일로 감싸기
+              # 패턴: return _touchHandler; 또는 return (RCTTouchHandler *)_touchHandler;
+              if patched_content.match(/return\s+\(?RCTTouchHandler\s*\*\)?\s*_touchHandler;/)
+                # 이미 캐스팅이 있는 경우
+                patched_content = patched_content.gsub(
+                  /(\s+)(return\s+\(?RCTTouchHandler\s*\*\)?\s*_touchHandler;)/,
+                  "\\1#if RCT_NEW_ARCH_ENABLED\n\\1  return (RCTSurfaceTouchHandler *)_touchHandler;\n\\1#else\n\\1  return (RCTTouchHandler *)_touchHandler;\n\\1#endif"
+                )
+                changed = true
+              elsif patched_content.match(/return\s+_touchHandler;/)
+                # 캐스팅이 없는 경우
+                patched_content = patched_content.gsub(
+                  /(\s+)(return\s+_touchHandler;)/,
+                  "\\1#if RCT_NEW_ARCH_ENABLED\n\\1  return (RCTSurfaceTouchHandler *)_touchHandler;\n\\1#else\n\\1  return (RCTTouchHandler *)_touchHandler;\n\\1#endif"
+                )
+                changed = true
+              end
+            end
+            
+            if changed
+              File.write(rnsscreen_file, patched_content)
+              puts "✅ Patched RNSScreen.mm: fixed return type for rnscreens_findTouchHandlerInAncestorChain"
+            end
+          end
         else
           puts "⚠️ react-native-screens ios directory not found at expected path"
         end
