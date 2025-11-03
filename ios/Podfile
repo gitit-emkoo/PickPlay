@@ -630,21 +630,8 @@ post_install do |installer|
                 end
               end
               
-              # RNSScreen.mm의 rnscreens_findTouchHandlerInAncestorChain 메서드 반환 타입 수정
-              # Legacy Architecture에서는 RCTTouchHandler를 반환하지만 반환 타입이 RCTSurfaceTouchHandler로 되어 있음
-              if File.basename(source_file) == 'RNSScreen.mm' && patched_content.include?('rnscreens_findTouchHandlerInAncestorChain')
-                # 반환 타입이 RCTSurfaceTouchHandler인 경우를 찾아서 조건부로 처리
-                # 패턴: return _touchHandler; 또는 return [something _touchHandler];
-                # 반환 문을 조건부 컴파일로 감싸거나 타입 캐스팅 추가
-                if patched_content.match(/return\s+_touchHandler;/)
-                  # 반환 문을 조건부 컴파일로 감싸기
-                  patched_content = patched_content.gsub(
-                    /(\s+)(return\s+_touchHandler;)/,
-                    "\\1#if RCT_NEW_ARCH_ENABLED\n\\1  return (RCTSurfaceTouchHandler *)_touchHandler;\n\\1#else\n\\1  return (RCTTouchHandler *)_touchHandler;\n\\1#endif"
-                  )
-                  changed = true
-                end
-              end
+              # RNSScreen.mm의 rnscreens_findTouchHandlerInAncestorChain 메서드 반환 타입 수정 (여기서는 건너뛰고 아래에서 통합 처리)
+              # 이 부분은 아래의 강화된 패치에서 처리됩니다
               
               if changed && patched_content != content
                 File.write(source_file, patched_content)
@@ -680,58 +667,80 @@ post_install do |installer|
             end
           end
           
-          # RNSScreen.mm의 rnscreens_findTouchHandlerInAncestorChain 반환 타입 문제 해결 (강화 버전)
+          # RNSScreen.mm의 rnscreens_findTouchHandlerInAncestorChain 반환 타입 문제 해결 (최종 강화 버전)
+          # 에러: line=636: return (RCTTouchHandler *)_touchHandler; 가 조건부 컴파일 없이 있음
           # 메서드가 RCTSurfaceTouchHandler * _Nullable을 반환하는데 Legacy Architecture에서는 RCTTouchHandler를 반환해야 함
           rnsscreen_file = File.join(rns_ios_dir, 'RNSScreen.mm')
           if File.exist?(rnsscreen_file)
+            puts "🔍 Checking RNSScreen.mm for patches..."
             content = File.read(rnsscreen_file)
             original_content = content.dup
             changed = false
             
-            # rnscreens_findTouchHandlerInAncestorChain 메서드 내부만 패치
+            # 디버그: 현재 상태 확인
             if content.include?('rnscreens_findTouchHandlerInAncestorChain')
-              # 패턴 1: return (RCTTouchHandler *)_touchHandler; - 조건부 컴파일로 감싸기
-              # 이미 조건부 컴파일 블록 안에 있지 않은 경우만 패치
-              if content.match(/return\s+\(RCTTouchHandler\s*\*\)_touchHandler;/)
-                # #if RCT_NEW_ARCH_ENABLED 블록 안에 있는지 확인
-                unless content.match(/#if\s+RCT_NEW_ARCH_ENABLED[\s\S]*?return\s+\(RCTTouchHandler\s*\*\)_touchHandler;/)
-                  # 모든 return (RCTTouchHandler *)_touchHandler; 패턴을 찾아서 교체
-                  content.gsub!(/(\s+)(return\s+\(RCTTouchHandler\s*\*\)_touchHandler;)/) do |match|
-                    indent = $1
-                    "#{indent}#if RCT_NEW_ARCH_ENABLED\n#{indent}  return (RCTSurfaceTouchHandler *)_touchHandler;\n#{indent}#else\n#{indent}  return (RCTTouchHandler *)_touchHandler;\n#{indent}#endif"
-                  end
+              puts "  ✓ Found rnscreens_findTouchHandlerInAncestorChain method"
+            else
+              puts "  ✗ rnscreens_findTouchHandlerInAncestorChain method not found"
+            end
+            
+            # 이미 패치되어 있는지 확인
+            if content.match(/return\s+\(RCTTouchHandler\s*\*\)_touchHandler;\s*\n\s*#endif/)
+              puts "  ⚠ Already patched (return in #else block)"
+            elsif content.match(/return\s+\(RCTTouchHandler\s*\*\)_touchHandler;\s*(?!#if)/)
+              puts "  ⚠ Found unpatched return (RCTTouchHandler *)_touchHandler; pattern"
+            end
+            
+            # 패치 1: return (RCTTouchHandler *)_touchHandler; 패턴을 조건부 컴파일로 감싸기
+            # 가장 확실한 방법: 정규식으로 직접 교체
+            if content.match(/return\s+\(RCTTouchHandler\s*\*\)_touchHandler;/)
+              puts "  🔧 Found return (RCTTouchHandler *)_touchHandler; pattern - applying patch..."
+              
+              # 이미 조건부 컴파일로 감싸져 있는지 확인
+              if content.match(/#if\s+RCT_NEW_ARCH_ENABLED[\s\S]{0,500}?return\s+\(RCTTouchHandler\s*\*\)_touchHandler;/)
+                puts "  ⚠ Already in conditional block, skipping"
+              else
+                # 모든 매치를 찾아서 교체 (더 정확한 패턴)
+                original_pattern_count = content.scan(/return\s+\(RCTTouchHandler\s*\*\)_touchHandler;/).length
+                puts "  📍 Found #{original_pattern_count} occurrence(s) of return (RCTTouchHandler *)_touchHandler;"
+                
+                content.gsub!(/(\s+)(return\s+\(RCTTouchHandler\s*\*\)_touchHandler;)/) do
+                  indent = $1
+                  "#{indent}#if RCT_NEW_ARCH_ENABLED\n#{indent}  return (RCTSurfaceTouchHandler *)_touchHandler;\n#{indent}#else\n#{indent}#{$2}\n#{indent}#endif"
+                end
+                
+                new_pattern_count = content.scan(/return\s+\(RCTTouchHandler\s*\*\)_touchHandler;.*#endif/m).length
+                if new_pattern_count > 0 || !content.match(/return\s+\(RCTTouchHandler\s*\*\)_touchHandler;(?![\s\S]*?#endif)/)
                   changed = true
+                  puts "  ✅ Successfully replaced return (RCTTouchHandler *)_touchHandler; with conditional compilation"
                 end
               end
-              
-              # 패턴 2: return _touchHandler; (캐스팅 없음) - 조건부 컴파일로 감싸기
-              if content.match(/return\s+_touchHandler;/) && !content.match(/#if\s+RCT_NEW_ARCH_ENABLED[\s\S]*?return\s+_touchHandler;/)
-                # rnscreens_findTouchHandlerInAncestorChain 메서드 내부의 return _touchHandler만 찾기
-                # 메서드 시그니처 이후의 return _touchHandler만 패치
-                lines = content.lines
+            end
+
+            # 패치 2: return _touchHandler; (캐스팅 없음) - 간단하게 처리
+            if content.include?('return _touchHandler;') && !content.include?('return (RCTSurfaceTouchHandler *)_touchHandler;')
+              # rnscreens_findTouchHandlerInAncestorChain 메서드 내부에서만 패치
+              if content.include?('rnscreens_findTouchHandlerInAncestorChain')
+                lines = content.lines.to_a
                 new_lines = []
-                in_method = false
-                brace_count = 0
+                in_target_method = false
+                brace_level = 0
                 
                 lines.each_with_index do |line, idx|
-                  # 메서드 시작 찾기
-                  if line.include?('rnscreens_findTouchHandlerInAncestorChain') && line.include?('{')
-                    in_method = true
-                    brace_count = line.count('{') - line.count('}')
-                  elsif in_method
-                    brace_count += line.count('{') - line.count('}')
+                  # 메서드 시작 확인
+                  if line.include?('rnscreens_findTouchHandlerInAncestorChain') && (line.include?('{') || (idx + 1 < lines.length && lines[idx + 1].include?('{')))
+                    in_target_method = true
+                    brace_level = 0
+                    if line.include?('{')
+                      brace_level = 1
+                    end
+                  elsif in_target_method
+                    brace_level += line.count('{') - line.count('}')
                     
-                    # return _touchHandler; 패턴 찾기 (메서드 내부에서만)
-                    if line =~ /(\s+)return\s+_touchHandler;/ && brace_count > 0
+                    if line =~ /(\s+)return\s+_touchHandler;/ && brace_level > 0
                       indent = $1
-                      # 이미 조건부 컴파일 블록 안에 있는지 확인 (이전 10줄 확인)
-                      already_patched = false
-                      (idx - 10..idx - 1).each do |j|
-                        if j >= 0 && lines[j] =~ /#if\s+RCT_NEW_ARCH_ENABLED/
-                          already_patched = true
-                          break
-                        end
-                      end
+                      # 이미 조건부 블록 안에 있는지 확인
+                      already_patched = (idx > 0 && (idx - 10..idx - 1).any? { |j| j >= 0 && lines[j] =~ /#if\s+RCT_NEW_ARCH_ENABLED/ })
                       
                       unless already_patched
                         new_lines << "#{indent}#if RCT_NEW_ARCH_ENABLED\n"
@@ -740,6 +749,7 @@ post_install do |installer|
                         new_lines << "#{indent}  return (RCTTouchHandler *)_touchHandler;\n"
                         new_lines << "#{indent}#endif\n"
                         changed = true
+                        puts "  ✓ Patched line #{idx + 1}: return _touchHandler;"
                       else
                         new_lines << line
                       end
@@ -747,9 +757,8 @@ post_install do |installer|
                       new_lines << line
                     end
                     
-                    # 메서드 끝
-                    if brace_count <= 0 && in_method
-                      in_method = false
+                    if brace_level <= 0 && in_target_method
+                      in_target_method = false
                     end
                   else
                     new_lines << line
@@ -760,28 +769,31 @@ post_install do |installer|
                   content = new_lines.join
                 end
               end
+            end
+    
+            if changed
+              File.write(rnsscreen_file, content)
+              puts "✅ Successfully patched RNSScreen.mm"
               
-              if changed
-                File.write(rnsscreen_file, content)
-                puts "✅ Patched RNSScreen.mm: fixed return type for rnscreens_findTouchHandlerInAncestorChain"
-                
-                # 검증: 패치가 제대로 적용되었는지 확인
-                verify_content = File.read(rnsscreen_file)
-                if verify_content.include?('#if RCT_NEW_ARCH_ENABLED') && verify_content.include?('return (RCTSurfaceTouchHandler *)_touchHandler;')
-                  puts "✅ Verification: Patch confirmed in RNSScreen.mm"
-                else
-                  puts "⚠️ Verification: Patch may not have been applied correctly"
-                end
-              elsif content.include?('#if RCT_NEW_ARCH_ENABLED') && content.include?('return (RCTSurfaceTouchHandler *)_touchHandler;')
-                puts "✅ RNSScreen.mm already patched (contains conditional return)"
+              # 검증
+              verify = File.read(rnsscreen_file)
+              if verify.include?('#if RCT_NEW_ARCH_ENABLED') && verify.include?('return (RCTSurfaceTouchHandler *)_touchHandler;')
+                puts "✅ Verification PASSED: Conditional compilation found"
               else
-                puts "⚠️ RNSScreen.mm: return _touchHandler pattern not found or already in conditional block"
+                puts "⚠️ Verification FAILED: Patch may not be correct"
               end
+              
+              # 추가 검증: 여전히 문제가 있는 패턴이 있는지 확인
+              if verify.include?('return (RCTTouchHandler *)_touchHandler;') && !verify.match(/return\s+\(RCTTouchHandler\s*\*\)_touchHandler;\s*\n\s*#endif/)
+                puts "⚠️ WARNING: Still found unpatched return (RCTTouchHandler *)_touchHandler;"
+              end
+            elsif content.include?('#if RCT_NEW_ARCH_ENABLED') && content.include?('return (RCTSurfaceTouchHandler *)_touchHandler;')
+              puts "✅ RNSScreen.mm already patched"
             else
-              puts "⚠️ RNSScreen.mm: rnscreens_findTouchHandlerInAncestorChain method not found"
+              puts "⚠️ RNSScreen.mm: No changes made (pattern may not match)"
             end
           else
-            puts "⚠️ RNSScreen.mm file not found"
+            puts "⚠️ RNSScreen.mm file not found at: #{rnsscreen_file}"
           end
         else
           puts "⚠️ react-native-screens ios directory not found at expected path"
