@@ -30,11 +30,22 @@ target 'PickPlay' do
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
   
-  # Folly-Config 헤더 경로 문제 해결
+  # Folly-Config 헤더 경로 문제 해결 (더욱 안정적인 방식으로 수정)
   # 메인 앱 타겟에 Folly 헤더 검색 경로 추가
   if config
-    config.build_settings['HEADER_SEARCH_PATHS'] ||= ['"$(inherited)"']
-    config.build_settings['HEADER_SEARCH_PATHS'] << '"$(PODS_CONFIGURATION_BUILD_DIR)/RCT-Folly"'
+    header_paths = config.build_settings['HEADER_SEARCH_PATHS']
+    # Ensure header_paths is an array. It could be a string.
+    if header_paths.is_a?(String)
+      header_paths = header_paths.split(' ')
+    elsif header_paths.nil?
+      header_paths = ['$(inherited)']
+    end
+    
+    folly_path = '"$(PODS_CONFIGURATION_BUILD_DIR)/RCT-Folly"'
+    header_paths << folly_path unless header_paths.include?(folly_path)
+    
+    # The build setting expects a string of space-separated paths.
+    config.build_settings['HEADER_SEARCH_PATHS'] = header_paths.join(' ')
   end
 
   # Fallback: Ensure RNScreens is resolvable for Expo pods (e.g., ExpoHead)
