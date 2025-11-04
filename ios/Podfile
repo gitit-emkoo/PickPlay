@@ -384,6 +384,8 @@ post_install do |installer|
       
       # CommonExceptions.swift의 SwiftUIViewNotFound 클래스를 주석 처리
       # ExpoSwiftUIView가 정의되지 않아 타입 체크 에러 발생 방지
+      # (비활성화) 빌드 중괄호 불일치 등 부작용 방지
+      if false
       begin
         require 'fileutils'
         repo_root = File.expand_path('..', __dir__)
@@ -433,6 +435,7 @@ post_install do |installer|
       rescue => e
         Pod::UI.puts "⚠️ CommonExceptions.swift patch skipped: #{e.message}"
         Pod::UI.puts "   Stack trace: #{e.backtrace.first(3).join("\n   ")}"
+      end
       end
       
       # ExpoModulesCore Swift 파일들의 import React를 환경별로 안전하게 처리
@@ -548,6 +551,15 @@ post_install do |installer|
             react_paths.each do |path|
               header_search_paths << path unless header_search_paths.include?(path)
             end
+            # React-RCTAppDelegate 헤더 경로 추가
+            rctapp_header_paths = [
+              '$(PODS_ROOT)/Headers/Private/React-RCTAppDelegate',
+              '$(PODS_CONFIGURATION_BUILD_DIR)/React-RCTAppDelegate',
+              '$(PODS_ROOT)/Headers/Public/React-RCTAppDelegate'
+            ]
+            rctapp_header_paths.each do |path|
+              header_search_paths << path unless header_search_paths.include?(path)
+            end
             
             config.build_settings['HEADER_SEARCH_PATHS'] = header_search_paths.join(' ')
             
@@ -567,6 +579,15 @@ post_install do |installer|
             swift_react_paths.each do |path|
               swift_include_paths << path unless swift_include_paths.include?(path)
             end
+            # React-RCTAppDelegate Swift 경로 추가
+            rctapp_swift_paths = [
+              '$(PODS_CONFIGURATION_BUILD_DIR)/React-RCTAppDelegate',
+              '$(PODS_ROOT)/Headers/Private/React-RCTAppDelegate',
+              '$(PODS_ROOT)/Headers/Public/React-RCTAppDelegate'
+            ]
+            rctapp_swift_paths.each do |path|
+              swift_include_paths << path unless swift_include_paths.include?(path)
+            end
             
             config.build_settings['SWIFT_INCLUDE_PATHS'] = swift_include_paths.join(' ')
             
@@ -578,7 +599,7 @@ post_install do |installer|
             swift_flags = swift_flags.is_a?(Array) ? swift_flags.dup : []
 
             # 필요시 C 헤더 포함 경로만 유지 (-I)
-            include_flags = ['-Xcc', '-I$(PODS_CONFIGURATION_BUILD_DIR)/React-Core']
+            include_flags = ['-Xcc', '-I$(PODS_CONFIGURATION_BUILD_DIR)/React-Core', '-Xcc', '-I$(PODS_CONFIGURATION_BUILD_DIR)/React-RCTAppDelegate']
             include_flags.each do |flag|
               swift_flags << flag unless swift_flags.include?(flag)
             end
