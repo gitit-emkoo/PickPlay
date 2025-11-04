@@ -29,7 +29,18 @@ target 'PickPlay' do
     :fabric_enabled => false,
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
-  
+
+  # Folly-Config.h 누락 문제 해결 (메인 앱 타겟)
+  # use_react_native!가 반환하는 config 객체를 통해 안전하게 플래그 주입
+  if config
+    defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+    if defs.is_a?(String)
+      defs = defs.split(' ')
+    end
+    defs << 'FOLLY_NO_CONFIG=1' unless defs.include?('FOLLY_NO_CONFIG=1')
+    config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = defs
+  end
+
   # Fallback: Ensure RNScreens is resolvable for Expo pods (e.g., ExpoHead)
   if File.exist?(File.join(__dir__, '../node_modules/react-native-screens/RNScreens.podspec'))
     pod 'RNScreens', :path => '../node_modules/react-native-screens'
@@ -110,9 +121,9 @@ post_install do |installer|
       swift_conditions = swift_conditions.is_a?(Array) ? swift_conditions : []
       swift_conditions = swift_conditions.reject { |c| c == 'RCT_NEW_ARCH_ENABLED' }
       config.build_settings["SWIFT_ACTIVE_COMPILATION_CONDITIONS"] = swift_conditions.join(' ')
-    end
-  end
-  
+          end
+        end
+
   # ExpoModulesCore Swift 파일들의 import React를 환경별로 안전하게 처리
   # - RN 0.76/Xcode 16 조합에서 상위 모듈명이 React-Core로 노출되는 환경이 있어
   #   Swift에서 'import React'가 실패할 수 있음 → canImport로 React / React_Core를 분기 임포트
@@ -180,12 +191,10 @@ post_install do |installer|
     Pod::UI.puts "⚠️ [RN]Check rncore script tweak skipped: #{e.message}"
   end
 
-  # Folly-Config.h 누락 문제 근본 해결
-  # Folly를 사용하는 모든 타겟(메인 앱, 모든 Pods)에 FOLLY_NO_CONFIG=1 플래그를 주입합니다.
-  # 이는 Folly가 모바일용 기본 설정을 사용하도록 강제하여, 헤더 파일을 찾지 않도록 합니다.
+  # Folly-Config.h 누락 문제 근본 해결 (모든 Pods 타겟)
+  # Folly를 사용하는 모든 타겟에 FOLLY_NO_CONFIG=1 플래그를 주입합니다.
   folly_compiler_flag = 'FOLLY_NO_CONFIG=1'
 
-  # 1. 모든 Pods 타겟에 플래그 적용
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
       defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
@@ -197,19 +206,6 @@ post_install do |installer|
     end
   end
   puts "✅ Applied FOLLY_NO_CONFIG flag to all Pod targets."
-
-  # 2. 메인 프로젝트 타겟에도 플래그 적용
-  installer.project.targets.each do |target|
-    target.build_configurations.each do |config|
-      defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
-      if defs.is_a?(String)
-        defs = defs.split(' ')
-      end
-      defs << folly_compiler_flag unless defs.include?(folly_compiler_flag)
-      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = defs
-    end
-  end
-  puts "✅ Applied FOLLY_NO_CONFIG flag to the main project target."
-  
+    
   react_native_post_install(installer)
 end
