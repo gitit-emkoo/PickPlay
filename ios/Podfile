@@ -435,6 +435,41 @@ post_install do |installer|
         Pod::UI.puts "   Stack trace: #{e.backtrace.first(3).join("\n   ")}"
       end
       
+      # ExpoModulesCore Swift 파일들의 import React를 환경별로 안전하게 처리
+      # - RN 0.76/Xcode 16 조합에서 상위 모듈명이 React-Core로 노출되는 환경이 있어
+      #   Swift에서 'import React'가 실패할 수 있음 → canImport로 React / React_Core를 분기 임포트
+      begin
+        expo_ios_dir = File.join(repo_root, 'node_modules', 'expo-modules-core', 'ios')
+        if Dir.exist?(expo_ios_dir)
+          Dir.glob(File.join(expo_ios_dir, '**', '*.swift')).each do |swift_file|
+            begin
+              content = File.read(swift_file)
+              next unless content.include?('import React')
+              next if content.include?('#if canImport(React)')
+
+              patched = content.gsub(/^\s*import\s+React\s*$/) do |m|
+                <<~SWIFT.chomp
+                #if canImport(React)
+                import React
+                #elseif canImport(React_Core)
+                import React_Core
+                #endif
+                SWIFT
+              end
+
+              if patched != content
+                File.write(swift_file, patched)
+                puts "✅ Patched React import in #{swift_file.sub(repo_root + '/', '')}"
+              end
+            rescue => e
+              Pod::UI.puts "⚠️ Failed to patch React import in #{swift_file}: #{e.message}"
+            end
+          end
+        end
+      rescue => e
+        Pod::UI.puts "⚠️ ExpoModulesCore React import patch skipped: #{e.message}"
+      end
+
       # ViewFactories.swift의 ExpoSwiftUI 관련 함수들을 조건부 컴파일로 감싸기
       # ExpoSwiftUI 타입이 정의되지 않아 타입 체크 에러 발생 방지
       begin
