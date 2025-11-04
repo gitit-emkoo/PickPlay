@@ -447,30 +447,41 @@ post_install do |installer|
           Dir.glob(File.join(expo_ios_dir, '**', '*.swift')).each do |swift_file|
             begin
               content = File.read(swift_file)
-              next unless content.include?('import React')
-              next if content.include?('#if canImport(React)')
-
-              patched = content.gsub(/^\s*import\s+React\s*$/) do |m|
-                <<~SWIFT.chomp
-                #if canImport(React)
-                import React
-                #elseif canImport(React_Core)
-                import React_Core
-                #endif
+              original_content = content.dup
+              
+              # 1. 'import React' 패치
+              if content.include?('import React') && !content.include?('#if canImport(React)')
+                content.gsub!(/^\s*import\s+React\s*$/, <<~SWIFT.chomp
+                  #if canImport(React)
+                  import React
+                  #elseif canImport(React_Core)
+                  import React_Core
+                  #endif
                 SWIFT
+                )
               end
 
-              if patched != content
-                File.write(swift_file, patched)
-                puts "✅ Patched React import in #{swift_file.sub(repo_root + '/', '')}"
+              # 2. 'import React_RCTAppDelegate' 패치
+              if content.include?('import React_RCTAppDelegate') && !content.include?('#if canImport(React_RCTAppDelegate)')
+                content.gsub!(/^\s*import\s+React_RCTAppDelegate\s*$/, <<~SWIFT.chomp
+                  #if canImport(React_RCTAppDelegate)
+                  import React_RCTAppDelegate
+                  #endif
+                SWIFT
+                )
+              end
+
+              if content != original_content
+                File.write(swift_file, content)
+                puts "✅ Patched module imports in #{swift_file.sub(repo_root + '/', '')}"
               end
             rescue => e
-              Pod::UI.puts "⚠️ Failed to patch React import in #{swift_file}: #{e.message}"
+              Pod::UI.puts "⚠️ Failed to patch module import in #{swift_file}: #{e.message}"
             end
           end
         end
       rescue => e
-        Pod::UI.puts "⚠️ ExpoModulesCore React import patch skipped: #{e.message}"
+        Pod::UI.puts "⚠️ ExpoModulesCore module import patch skipped: #{e.message}"
       end
 
       # ViewFactories.swift의 ExpoSwiftUI 관련 함수들을 조건부 컴파일로 감싸기
