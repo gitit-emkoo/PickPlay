@@ -210,5 +210,24 @@ post_install do |installer|
   #   end
   # end
   
+  # Folly 관련 컴파일 플래그 설정 (folly-config.h 누락 문제 해결)
+  # Folly가 모바일 기본 설정을 사용하도록 FOLLY_NO_CONFIG=1 플래그를 주입하여,
+  # 복잡한 헤더 검색 경로 대신 문제의 근원을 해결합니다.
+  begin
+    folly_target = installer.pods_project.targets.find { |t| t.name == 'RCT-Folly' }
+    if folly_target
+      folly_flags = '-DFOLLY_NO_CONFIG=1 -DFOLLY_MOBILE=1 -DFOLLY_USE_LIBCPP=1 -Wno-comma -Wno-shorten-64-to-32'
+      
+      folly_target.build_configurations.each do |config|
+        # 기존 플래그에 추가 (덮어쓰지 않도록)
+        current_flags = config.build_settings['OTHER_CFLAGS'] || '$(inherited)'
+        config.build_settings['OTHER_CFLAGS'] = "#{current_flags} #{folly_flags}"
+      end
+      puts "✅ Applied FOLLY_NO_CONFIG flag to RCT-Folly target."
+    end
+  rescue => e
+    Pod::UI.puts "⚠️  RCT-Folly tweak skipped: #{e.message}"
+  end
+  
   react_native_post_install(installer)
 end
