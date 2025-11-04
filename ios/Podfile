@@ -181,10 +181,11 @@ post_install do |installer|
   end
 
   # Folly-Config.h 누락 문제 근본 해결
-  # Folly를 사용하는 모든 타겟(메인 앱 포함)에 FOLLY_NO_CONFIG=1 플래그를 주입합니다.
+  # Folly를 사용하는 모든 타겟(메인 앱, 모든 Pods)에 FOLLY_NO_CONFIG=1 플래그를 주입합니다.
   # 이는 Folly가 모바일용 기본 설정을 사용하도록 강제하여, 헤더 파일을 찾지 않도록 합니다.
   folly_compiler_flag = 'FOLLY_NO_CONFIG=1'
 
+  # 1. 모든 Pods 타겟에 플래그 적용
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
       defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
@@ -196,6 +197,19 @@ post_install do |installer|
     end
   end
   puts "✅ Applied FOLLY_NO_CONFIG flag to all Pod targets."
+
+  # 2. 메인 프로젝트 타겟에도 플래그 적용
+  installer.project.targets.each do |target|
+    target.build_configurations.each do |config|
+      defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+      if defs.is_a?(String)
+        defs = defs.split(' ')
+      end
+      defs << folly_compiler_flag unless defs.include?(folly_compiler_flag)
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = defs
+    end
+  end
+  puts "✅ Applied FOLLY_NO_CONFIG flag to the main project target."
   
   react_native_post_install(installer)
 end
