@@ -535,25 +535,22 @@ post_install do |installer|
             
             config.build_settings['SWIFT_INCLUDE_PATHS'] = swift_include_paths.join(' ')
             
-            # 3. OTHER_SWIFT_FLAGS에 모듈 맵 설정 추가
+            # 3. OTHER_SWIFT_FLAGS 보수 설정(모듈맵 직접 주입 제거)
             swift_flags = config.build_settings['OTHER_SWIFT_FLAGS'] || []
             if swift_flags.is_a?(String)
               swift_flags = swift_flags.empty? ? [] : swift_flags.split(' ').uniq
             end
             swift_flags = swift_flags.is_a?(Array) ? swift_flags.dup : []
-            
-            # 모듈 맵 경로를 Swift 컴파일러에 알려줌
-            module_map_flags = [
-              '-Xcc',
-              '-I$(PODS_CONFIGURATION_BUILD_DIR)/React-Core',
-              '-Xcc',
-              '-fmodule-map-file=$(PODS_CONFIGURATION_BUILD_DIR)/React-Core/React-Core.modulemap'
-            ]
-            
-            module_map_flags.each do |flag|
+
+            # 필요시 C 헤더 포함 경로만 유지 (-I)
+            include_flags = ['-Xcc', '-I$(PODS_CONFIGURATION_BUILD_DIR)/React-Core']
+            include_flags.each do |flag|
               swift_flags << flag unless swift_flags.include?(flag)
             end
-            
+
+            # Swift 드라이버가 인식하지 못하는 modulemap 강제 지정은 제거
+            swift_flags = swift_flags.reject { |f| f.to_s.start_with?('-fmodule-map-file=') }
+
             config.build_settings['OTHER_SWIFT_FLAGS'] = swift_flags.join(' ')
             
             # 4. 프레임워크 링크 확인 및 추가
