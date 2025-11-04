@@ -30,17 +30,6 @@ target 'PickPlay' do
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
 
-  # Folly-Config.h 누락 문제 해결 (메인 앱 타겟)
-  # use_react_native!가 반환하는 config 객체를 통해 안전하게 플래그 주입
-  if config
-    defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
-    if defs.is_a?(String)
-      defs = defs.split(' ')
-    end
-    defs << 'FOLLY_NO_CONFIG=1' unless defs.include?('FOLLY_NO_CONFIG=1')
-    config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = defs
-  end
-
   # Fallback: Ensure RNScreens is resolvable for Expo pods (e.g., ExpoHead)
   if File.exist?(File.join(__dir__, '../node_modules/react-native-screens/RNScreens.podspec'))
     pod 'RNScreens', :path => '../node_modules/react-native-screens'
@@ -53,9 +42,10 @@ post_install do |installer|
   # 모든 타겟이 컴파일 시 공통적으로 참조하는 전역 헤더 파일을 생성하고,
   # 여기에 FOLLY_NO_CONFIG=1 매크로를 정의하여 문제의 근원을 해결합니다.
   # 이 방식은 개별 타겟의 설정을 수정하는 것보다 훨씬 더 확실하고 전역적입니다.
-  pch_path = File.join(installer.sandbox.root, 'Headers', 'Private', 'PickPlay', 'PickPlay-precompiled.h')
-  FileUtils.mkdir_p(File.dirname(pch_path))
-  File.open(pch_path, 'w') do |file|
+  pch_name = 'PickPlay-precompiled.h'
+  pch_path_in_sandbox = File.join(installer.sandbox.root, pch_name)
+  
+  File.open(pch_path_in_sandbox, 'w') do |file|
     file.puts '#ifndef PICKPLAY_PRECOMPILED_H'
     file.puts '#define PICKPLAY_PRECOMPILED_H'
     file.puts ''
@@ -64,16 +54,22 @@ post_install do |installer|
     file.puts '#endif /* PICKPLAY_PRECOMPILED_H */'
   end
 
-  # 모든 프로젝트(메인, Pods)의 모든 타겟에 .pch 파일을 사용하도록 설정
-  projects = [installer.pods_project]
-  projects << installer.project if installer.project
-  
-  projects.each do |project|
-    project.targets.each do |target|
+  # GCC_PREFIX_HEADER에 사용할 경로는 $(PODS_ROOT)를 기준으로 해야 안정적입니다.
+  pch_xcode_path = "$(PODS_ROOT)/#{pch_name}"
+
+  # 1. 모든 Pods 타겟에 .pch 파일을 사용하도록 설정
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings['GCC_PREFIX_HEADER'] = pch_xcode_path
+      config.build_settings['PRECOMPILE_PREFIX_HEADER'] = 'YES'
+    end
+  end
+
+  # 2. 메인 프로젝트 타겟에도 .pch 파일을 사용하도록 설정
+  if installer.project
+    installer.project.targets.each do |target|
       target.build_configurations.each do |config|
-        # GCC_PREFIX_HEADER 설정에 .pch 파일 경로 추가
-        config.build_settings['GCC_PREFIX_HEADER'] = pch_path
-        # PRECOMPILE_PREFIX_HEADER 설정을 YES로 하여 .pch 사용 강제
+        config.build_settings['GCC_PREFIX_HEADER'] = pch_xcode_path
         config.build_settings['PRECOMPILE_PREFIX_HEADER'] = 'YES'
       end
     end
