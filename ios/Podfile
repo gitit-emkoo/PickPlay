@@ -24,11 +24,18 @@ target 'PickPlay' do
   # New Architecture 명시적으로 비활성화
   ENV['RCT_NEW_ARCH_ENABLED'] = '0'
 
-  use_react_native!(
+  config = use_react_native!(
     :hermes_enabled => true,
     :fabric_enabled => false,
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
+  
+  # Folly-Config 헤더 경로 문제 해결
+  # 메인 앱 타겟에 Folly 헤더 검색 경로 추가
+  if config
+    config.build_settings['HEADER_SEARCH_PATHS'] ||= ['"$(inherited)"']
+    config.build_settings['HEADER_SEARCH_PATHS'] << '"$(PODS_CONFIGURATION_BUILD_DIR)/RCT-Folly"'
+  end
 
   # Fallback: Ensure RNScreens is resolvable for Expo pods (e.g., ExpoHead)
   if File.exist?(File.join(__dir__, '../node_modules/react-native-screens/RNScreens.podspec'))
@@ -38,8 +45,6 @@ target 'PickPlay' do
 end
 
 post_install do |installer|
-  react_native_post_install(installer)
-  
   # React Native Codegen 디렉토리 생성 (New Architecture 비활성화 상태에서도 빌드 스크립트 체크 대응)
   begin
     require 'fileutils'
@@ -182,18 +187,17 @@ post_install do |installer|
     Pod::UI.puts "⚠️ [RN]Check rncore script tweak skipped: #{e.message}"
   end
 
-  # Folly-Config 헤더 경로 문제 해결
-  # 메인 프로젝트 타겟이 'folly/folly-config.h' 헤더를 찾지 못하는 문제 해결
-  installer.project.targets.each do |target|
-    if target.name == 'PickPlay'
-      target.build_configurations.each do |config|
-        header_paths = config.build_settings['HEADER_SEARCH_PATHS'] || ['"$(inherited)"']
-        header_paths << '"$(PODS_CONFIGURATION_BUILD_DIR)/RCT-Folly"'
-        config.build_settings['HEADER_SEARCH_PATHS'] = header_paths.uniq
-      end
-      puts "✅ Added RCT-Folly header search path to PickPlay target."
-    end
-  end
+  # Folly-Config 헤더 경로 문제 해결 (use_react_native! 블록으로 이동하여 이 코드 블록은 제거)
+  # installer.project.targets.each do |target|
+  #   if target.name == 'PickPlay'
+  #     target.build_configurations.each do |config|
+  #       header_paths = config.build_settings['HEADER_SEARCH_PATHS'] || ['"$(inherited)"']
+  #       header_paths << '"$(PODS_CONFIGURATION_BUILD_DIR)/RCT-Folly"'
+  #       config.build_settings['HEADER_SEARCH_PATHS'] = header_paths.uniq
+  #     end
+  #     puts "✅ Added RCT-Folly header search path to PickPlay target."
+  #   end
+  # end
   
   react_native_post_install(installer)
 end
