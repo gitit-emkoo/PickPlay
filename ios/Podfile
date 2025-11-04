@@ -23,6 +23,9 @@ target 'PickPlay' do
 
   # New Architecture 명시적으로 비활성화
   ENV['RCT_NEW_ARCH_ENABLED'] = '0'
+  
+  # React-RCTAppDelegate 모듈을 ExpoModulesCore가 찾을 수 있도록 명시적 의존성으로 추가
+  pod 'React-RCTAppDelegate', :path => '../node_modules/react-native/Libraries/AppDelegate'
 
   use_react_native!(
     :hermes_enabled => true,
