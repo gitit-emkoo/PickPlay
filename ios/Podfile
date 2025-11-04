@@ -165,6 +165,22 @@ post_install do |installer|
   rescue => e
     Pod::UI.puts "⚠️ Hermes script phase tweak skipped: #{e.message}"
   end
+
+  # [RN]Check rncore 스크립트 비활성화 (New Architecture 비활성화 상태에서 Codegen 체크 불필요)
+  begin
+    ['React-Fabric', 'React-FabricComponents'].each do |target_name|
+      target = installer.pods_project.targets.find { |t| t.name == target_name }
+      next unless target
+
+      target.build_phases.grep(Xcodeproj::Project::Object::PBXShellScriptBuildPhase).each do |bp|
+        next unless bp.name.to_s.include?('[RN]Check rncore')
+        bp.shell_script = "echo \"[CI] Skipping [RN]Check rncore script (newArchEnabled=false).\""
+        puts "🛠️  [RN]Check rncore script in #{target_name} converted to no-op."
+      end
+    end
+  rescue => e
+    Pod::UI.puts "⚠️ [RN]Check rncore script tweak skipped: #{e.message}"
+  end
   
   react_native_post_install(installer)
 end
