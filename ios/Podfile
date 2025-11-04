@@ -30,24 +30,6 @@ target 'PickPlay' do
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
   
-  # Folly-Config 헤더 경로 문제 해결 (더욱 안정적인 방식으로 수정)
-  # 메인 앱 타겟에 Folly 헤더 검색 경로 추가
-  if config
-    header_paths = config.build_settings['HEADER_SEARCH_PATHS']
-    # Ensure header_paths is an array. It could be a string.
-    if header_paths.is_a?(String)
-      header_paths = header_paths.split(' ')
-    elsif header_paths.nil?
-      header_paths = ['$(inherited)']
-    end
-    
-    folly_path = '"$(PODS_CONFIGURATION_BUILD_DIR)/RCT-Folly"'
-    header_paths << folly_path unless header_paths.include?(folly_path)
-    
-    # The build setting expects a string of space-separated paths.
-    config.build_settings['HEADER_SEARCH_PATHS'] = header_paths.join(' ')
-  end
-
   # Fallback: Ensure RNScreens is resolvable for Expo pods (e.g., ExpoHead)
   if File.exist?(File.join(__dir__, '../node_modules/react-native-screens/RNScreens.podspec'))
     pod 'RNScreens', :path => '../node_modules/react-native-screens'
@@ -198,36 +180,22 @@ post_install do |installer|
     Pod::UI.puts "⚠️ [RN]Check rncore script tweak skipped: #{e.message}"
   end
 
-  # Folly-Config 헤더 경로 문제 해결 (use_react_native! 블록으로 이동하여 이 코드 블록은 제거)
-  # installer.project.targets.each do |target|
-  #   if target.name == 'PickPlay'
-  #     target.build_configurations.each do |config|
-  #       header_paths = config.build_settings['HEADER_SEARCH_PATHS'] || ['"$(inherited)"']
-  #       header_paths << '"$(PODS_CONFIGURATION_BUILD_DIR)/RCT-Folly"'
-  #       config.build_settings['HEADER_SEARCH_PATHS'] = header_paths.uniq
-  #     end
-  #     puts "✅ Added RCT-Folly header search path to PickPlay target."
-  #   end
-  # end
-  
-  # Folly 관련 컴파일 플래그 설정 (folly-config.h 누락 문제 해결)
-  # Folly가 모바일 기본 설정을 사용하도록 FOLLY_NO_CONFIG=1 플래그를 주입하여,
-  # 복잡한 헤더 검색 경로 대신 문제의 근원을 해결합니다.
-  begin
-    folly_target = installer.pods_project.targets.find { |t| t.name == 'RCT-Folly' }
-    if folly_target
-      folly_flags = '-DFOLLY_NO_CONFIG=1 -DFOLLY_MOBILE=1 -DFOLLY_USE_LIBCPP=1 -Wno-comma -Wno-shorten-64-to-32'
-      
-      folly_target.build_configurations.each do |config|
-        # 기존 플래그에 추가 (덮어쓰지 않도록)
-        current_flags = config.build_settings['OTHER_CFLAGS'] || '$(inherited)'
-        config.build_settings['OTHER_CFLAGS'] = "#{current_flags} #{folly_flags}"
+  # Folly-Config.h 누락 문제 근본 해결
+  # Folly를 사용하는 모든 타겟(메인 앱 포함)에 FOLLY_NO_CONFIG=1 플래그를 주입합니다.
+  # 이는 Folly가 모바일용 기본 설정을 사용하도록 강제하여, 헤더 파일을 찾지 않도록 합니다.
+  folly_compiler_flag = 'FOLLY_NO_CONFIG=1'
+
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+      if defs.is_a?(String)
+        defs = defs.split(' ')
       end
-      puts "✅ Applied FOLLY_NO_CONFIG flag to RCT-Folly target."
+      defs << folly_compiler_flag unless defs.include?(folly_compiler_flag)
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = defs
     end
-  rescue => e
-    Pod::UI.puts "⚠️  RCT-Folly tweak skipped: #{e.message}"
   end
+  puts "✅ Applied FOLLY_NO_CONFIG flag to all Pod targets."
   
   react_native_post_install(installer)
 end
