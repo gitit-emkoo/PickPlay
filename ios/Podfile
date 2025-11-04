@@ -191,21 +191,19 @@ post_install do |installer|
     Pod::UI.puts "⚠️ [RN]Check rncore script tweak skipped: #{e.message}"
   end
 
-  # Folly-Config.h 누락 문제 근본 해결 (모든 Pods 타겟)
-  # Folly를 사용하는 모든 타겟에 FOLLY_NO_CONFIG=1 플래그를 주입합니다.
-  folly_compiler_flag = 'FOLLY_NO_CONFIG=1'
-
-  installer.pods_project.targets.each do |target|
-    target.build_configurations.each do |config|
-      defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
-      if defs.is_a?(String)
-        defs = defs.split(' ')
+  # Folly-Config.h 누락 문제 근본 해결: .xcconfig 파일 직접 패치
+  # 모든 이전 시도가 실패했으므로, 가장 확실한 방법으로 빌드 설정 파일을 직접 수정합니다.
+  # Pods 설치 후 생성되는 xcconfig 파일에 'FOLLY_NO_CONFIG=1' 플래그를 추가합니다.
+  installer.aggregate_targets.each do |aggregate_target|
+    aggregate_target.xcconfigs.each do |config_name, config_file|
+      config_file.attributes['GCC_PREPROCESSOR_DEFINITIONS'] ||= '$(inherited)'
+      unless config_file.attributes['GCC_PREPROCESSOR_DEFINITIONS'].include?('FOLLY_NO_CONFIG=1')
+        config_file.attributes['GCC_PREPROCESSOR_DEFINITIONS'] << ' FOLLY_NO_CONFIG=1'
       end
-      defs << folly_compiler_flag unless defs.include?(folly_compiler_flag)
-      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = defs
     end
+    aggregate_target.user_project.save
   end
-  puts "✅ Applied FOLLY_NO_CONFIG flag to all Pod targets."
-    
+  puts "✅ Patched .xcconfig files with FOLLY_NO_CONFIG=1"
+  
   react_native_post_install(installer)
 end
