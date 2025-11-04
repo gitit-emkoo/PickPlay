@@ -49,6 +49,37 @@ target 'PickPlay' do
 end
 
 post_install do |installer|
+  # Folly-Config.h 누락 문제 최종 해결: Precompiled Header (.pch) 사용
+  # 모든 타겟이 컴파일 시 공통적으로 참조하는 전역 헤더 파일을 생성하고,
+  # 여기에 FOLLY_NO_CONFIG=1 매크로를 정의하여 문제의 근원을 해결합니다.
+  # 이 방식은 개별 타겟의 설정을 수정하는 것보다 훨씬 더 확실하고 전역적입니다.
+  pch_path = File.join(installer.sandbox.root, 'Headers', 'Private', 'PickPlay', 'PickPlay-precompiled.h')
+  FileUtils.mkdir_p(File.dirname(pch_path))
+  File.open(pch_path, 'w') do |file|
+    file.puts '#ifndef PICKPLAY_PRECOMPILED_H'
+    file.puts '#define PICKPLAY_PRECOMPILED_H'
+    file.puts ''
+    file.puts '#define FOLLY_NO_CONFIG 1'
+    file.puts ''
+    file.puts '#endif /* PICKPLAY_PRECOMPILED_H */'
+  end
+
+  # 모든 프로젝트(메인, Pods)의 모든 타겟에 .pch 파일을 사용하도록 설정
+  projects = [installer.pods_project]
+  projects << installer.project if installer.project
+  
+  projects.each do |project|
+    project.targets.each do |target|
+      target.build_configurations.each do |config|
+        # GCC_PREFIX_HEADER 설정에 .pch 파일 경로 추가
+        config.build_settings['GCC_PREFIX_HEADER'] = pch_path
+        # PRECOMPILE_PREFIX_HEADER 설정을 YES로 하여 .pch 사용 강제
+        config.build_settings['PRECOMPILE_PREFIX_HEADER'] = 'YES'
+      end
+    end
+  end
+  puts "✅ Created and applied global precompiled header with FOLLY_NO_CONFIG=1."
+
   # React Native Codegen 디렉토리 생성 (New Architecture 비활성화 상태에서도 빌드 스크립트 체크 대응)
   begin
     require 'fileutils'
@@ -191,19 +222,5 @@ post_install do |installer|
     Pod::UI.puts "⚠️ [RN]Check rncore script tweak skipped: #{e.message}"
   end
 
-  # Folly-Config.h 누락 문제 근본 해결: .xcconfig 파일 직접 패치
-  # 모든 이전 시도가 실패했으므로, 가장 확실한 방법으로 빌드 설정 파일을 직접 수정합니다.
-  # Pods 설치 후 생성되는 xcconfig 파일에 'FOLLY_NO_CONFIG=1' 플래그를 추가합니다.
-  installer.aggregate_targets.each do |aggregate_target|
-    aggregate_target.xcconfigs.each do |config_name, config_file|
-      config_file.attributes['GCC_PREPROCESSOR_DEFINITIONS'] ||= '$(inherited)'
-      unless config_file.attributes['GCC_PREPROCESSOR_DEFINITIONS'].include?('FOLLY_NO_CONFIG=1')
-        config_file.attributes['GCC_PREPROCESSOR_DEFINITIONS'] << ' FOLLY_NO_CONFIG=1'
-      end
-    end
-    aggregate_target.user_project.save
-  end
-  puts "✅ Patched .xcconfig files with FOLLY_NO_CONFIG=1"
-  
   react_native_post_install(installer)
 end
