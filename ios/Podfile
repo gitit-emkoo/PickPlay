@@ -58,6 +58,14 @@ post_install do |installer|
     file.puts '#ifndef PICKPLAY_PRECOMPILED_H'
     file.puts '#define PICKPLAY_PRECOMPILED_H'
     file.puts ''
+    # Objective-C 소스 파일을 컴파일할 때만 UIKit 및 Foundation 프레임워크를 포함시킵니다.
+    # 이렇게 하면 C/C++ 파일에서 호환성 문제가 발생하는 것을 방지할 수 있습니다.
+    file.puts '#ifdef __OBJC__'
+    file.puts '#import <Foundation/Foundation.h>'
+    file.puts '#import <UIKit/UIKit.h>'
+    file.puts '#endif /* __OBJC__ */'
+    file.puts ''
+    # Folly 라이브러리가 별도의 설정 파일 없이 내장된 모바일 기본값으로 컴파일되도록 강제합니다.
     file.puts '#define FOLLY_NO_CONFIG 1'
     file.puts ''
     file.puts '#endif /* PICKPLAY_PRECOMPILED_H */'
