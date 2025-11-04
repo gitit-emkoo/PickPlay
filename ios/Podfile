@@ -181,6 +181,19 @@ post_install do |installer|
   rescue => e
     Pod::UI.puts "⚠️ [RN]Check rncore script tweak skipped: #{e.message}"
   end
+
+  # Folly-Config 헤더 경로 문제 해결
+  # 메인 프로젝트 타겟이 'folly/folly-config.h' 헤더를 찾지 못하는 문제 해결
+  installer.project.targets.each do |target|
+    if target.name == 'PickPlay'
+      target.build_configurations.each do |config|
+        header_paths = config.build_settings['HEADER_SEARCH_PATHS'] || ['"$(inherited)"']
+        header_paths << '"$(PODS_CONFIGURATION_BUILD_DIR)/RCT-Folly"'
+        config.build_settings['HEADER_SEARCH_PATHS'] = header_paths.uniq
+      end
+      puts "✅ Added RCT-Folly header search path to PickPlay target."
+    end
+  end
   
   react_native_post_install(installer)
 end
