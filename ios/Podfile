@@ -44,58 +44,6 @@ post_install do |installer|
     Pod::UI.puts "⚠️  react_native_post_install failed: #{e.message}"
   end
 
-  # --- Folly 문제 및 C++ 표준을 해결하기 위한 가장 방어적인 최종 패치 ---
-  apply_project_fixes = lambda do |target|
-    target.build_configurations.each do |config|
-      # GCC_PREPROCESSOR_DEFINITIONS가 문자열일 수 있는 경우를 대비하여 안전하게 배열로 변환
-      defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS']
-      if defs.is_a?(String)
-        defs = defs.split(' ')
-      else
-        defs ||= ['$(inherited)']
-      end
-      
-      # 1. 코루틴 기능 비활성화: 'folly/coro/Coroutine.h' 오류 해결
-      defs.delete_if { |s| s == 'FOLLY_HAS_COROUTINES=1' }
-      defs << 'FOLLY_HAS_COROUTINES=0' unless defs.include?('FOLLY_HAS_COROUTINES=0')
-      
-      # 2. Folly 설정 파일 없음 알림: 'folly/folly-config.h' 오류 해결
-      defs.delete_if { |s| s == 'FOLLY_NO_CONFIG=0' }
-      defs << 'FOLLY_NO_CONFIG=1' unless defs.include?('FOLLY_NO_CONFIG=1')
-
-      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = defs.uniq
-      
-      # C++ 언어 표준 유지
-      config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++20'
-      
-      # 이 플래그가 문제를 일으킬 수 있으므로 명시적으로 제거
-      if config.build_settings['OTHER_SWIFT_FLAGS']
-        config.build_settings['OTHER_SWIFT_FLAGS'].delete_if { |flag| flag.include?('fmodule-map-file') }
-      end
-    end
-  end
-
-  # 모든 Pod 라이브러리에 패치 적용
-  Pod::UI.puts "--- Applying Folly/C++ patches to all Pod targets ---"
-  installer.pods_project.targets.each(&apply_project_fixes)
-
-  # --- CI 환경에서도 메인 프로젝트를 안정적으로 찾아 직접 패치 적용 ---
-  begin
-    project = Xcodeproj::Project.open('PickPlay.xcodeproj')
-    main_target = project.targets.find { |t| t.name == 'PickPlay' }
-    
-    if main_target
-      Pod::UI.puts "--- Applying Folly/C++ patches to main target 'PickPlay' ---"
-      apply_project_fixes.call(main_target)
-      project.save
-      Pod::UI.puts "--- ✅ Successfully saved patches for main project ---"
-    else
-      Pod::UI.puts "--- ⚠️  Could not find 'PickPlay' target in main project. ---"
-    end
-  rescue => e
-    Pod::UI.puts "--- ⚠️ An error occurred during main project patching: #{e.message} ---"
-  end
-
   # --- 기존에 유지되어야 했던 중요 패치들 ---
 
   # ExpoModulesCore Swift 파일들의 import React 패치
