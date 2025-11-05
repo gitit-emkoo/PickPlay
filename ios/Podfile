@@ -125,12 +125,18 @@ post_install do |installer|
       defs_array = Array(defs).flat_map { |d| d.to_s.split(' ') }
       defs_array = ['$(inherited)'] if defs_array.empty?
       defs_array.concat(folly_definitions)
+      defs_array << 'FOLLY_USE_COROUTINES=0'
       config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = defs_array.uniq
 
       cppflags = Array(config.build_settings['OTHER_CPLUSPLUSFLAGS'])
       cppflags << '$(inherited)' if cppflags.empty?
       cppflags << '-std=gnu++20'
       config.build_settings['OTHER_CPLUSPLUSFLAGS'] = cppflags.uniq
+
+      header_paths = Array(config.build_settings['HEADER_SEARCH_PATHS'])
+      header_paths << '$(inherited)' if header_paths.empty?
+      header_paths << '$(PROJECT_DIR)/folly'
+      config.build_settings['HEADER_SEARCH_PATHS'] = header_paths.uniq
     end
 
     installer.pods_project.targets.each do |target|
