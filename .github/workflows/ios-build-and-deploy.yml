@@ -127,6 +127,11 @@ jobs:
             ${{ env.PROJ_DIR }}/ios/Podfile.lock
           key: pods-clear-${{ hashFiles(format('{0}/ios/Podfile.lock', env.PROJ_DIR)) }}
 
+      - name: Clean CocoaPods Cache
+        run: |
+          pod cache clean --all
+          echo "✅ CocoaPods cache cleaned."
+
       - name: Install CocoaPods
         run: |
           cd "$PROJ_DIR/ios"

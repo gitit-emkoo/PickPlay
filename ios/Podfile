@@ -37,13 +37,6 @@ target 'PickPlay' do
 
 end
 
-# post_install 스크립트에서 중복 값 없이 배열에 요소를 추가하기 위한 헬퍼 메소드
-class Array
-  def unshift_unless_exist(value)
-    self.unshift(value) unless self.include?(value)
-  end
-end
-
 post_install do |installer|
   begin
     react_native_post_install(installer)
@@ -74,15 +67,27 @@ post_install do |installer|
       
       # C++ 언어 표준 유지
       config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++20'
+      
+      Pod::UI.puts "✅ Patched Folly/C++ settings for target '#{target.name}' (config: #{config.name})"
     end
   end
 
   # 모든 Pod 라이브러리에 패치 적용
+  Pod::UI.puts "--- Applying Folly/C++ patches to all Pod targets ---"
   installer.pods_project.targets.each(&apply_project_fixes)
 
   # 메인 프로젝트가 존재할 경우에만 안전하게 패치 적용
   if installer.project
+    Pod::UI.puts "--- Applying Folly/C++ patches to main project targets ---"
     installer.project.targets.each(&apply_project_fixes)
+  else
+    Pod::UI.puts " "
+    Pod::UI.puts "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+    Pod::UI.puts "!! WARNING: installer.project was nil.                      !!"
+    Pod::UI.puts "!! The main project target was NOT patched.                 !!"
+    Pod::UI.puts "!! This is the likely cause of 'folly-config.h' not found.  !!"
+    Pod::UI.puts "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+    Pod::UI.puts " "
   end
   
   # --- 기존에 유지되어야 했던 중요 패치들 ---
@@ -151,6 +156,5 @@ post_install do |installer|
   rescue => e
     Pod::UI.puts "⚠️ [RN]Check rncore script tweak skipped: #{e.message}"
   end
-
 end
     
