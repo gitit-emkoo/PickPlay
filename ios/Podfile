@@ -27,7 +27,25 @@ target 'PickPlay' do
   use_react_native!(
     :hermes_enabled => true,
     :fabric_enabled => false,
-    :app_path => "#{Pod::Config.instance.installation_root}/.."
+    :app_path => "#{Pod::Config.instance.installation_root}/..",
+    
+    # --- Folly, C++ 표준, 신 아키텍처 비활성화 관련 모든 설정을 이곳에 통합 ---
+    # 이것이 가장 확실하고 우선순위가 높은 유일한 방법입니다.
+    :user_target_xcconfig => {
+      # 1. C++ 컴파일러가 Folly 헤더를 찾도록 USER_HEADER_SEARCH_PATHS 에 경로 추가 (핵심 수정)
+      'USER_HEADER_SEARCH_PATHS' => '"$(PODS_ROOT)/boost" "$(PODS_ROOT)/RCT-Folly"',
+      
+      # 2. FOLLY_NO_CONFIG 매크로 정의
+      'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) FOLLY_NO_CONFIG=1 RCT_NEW_ARCH_ENABLED=0',
+      
+      # 3. C++ 표준 강제
+      'CLANG_CXX_LANGUAGE_STANDARD' => 'gnu++20',
+    },
+    :pod_target_xcconfig => {
+      'USER_HEADER_SEARCH_PATHS' => '"$(PODS_ROOT)/boost" "$(PODS_ROOT)/RCT-Folly"',
+      'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) FOLLY_NO_CONFIG=1 RCT_NEW_ARCH_ENABLED=0',
+      'CLANG_CXX_LANGUAGE_STANDARD' => 'gnu++20',
+    }
   )
 
   # Fallback: Ensure RNScreens is resolvable for Expo pods (e.g., ExpoHead)
@@ -50,113 +68,8 @@ post_install do |installer|
   rescue => e
     Pod::UI.puts "⚠️  react_native_post_install failed: #{e.message}"
   end
-
-  # --- 최종 해결책: 모든 타겟에 직접 빌드 설정 주입 ---
-  # 이 방식은 현재 환경에서 가장 확실하게 설정을 적용하는 방법입니다.
-  all_targets = installer.pods_project.targets + (installer.aggregate_targets.map{ |t| t.user_project.targets }.flatten.uniq)
   
-  all_targets.each do |target|
-    next unless target
-    
-    target.build_configurations.each do |config|
-      # 1. 'FOLLY_NO_CONFIG=1' 매크로 추가
-      defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
-      defs = [defs] if defs.is_a?(String) # 값이 문자열일 경우 배열로 변환
-      defs << 'FOLLY_NO_CONFIG=1' unless defs.include?('FOLLY_NO_CONFIG=1')
-      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = defs.uniq
-
-      # 2. Folly 및 Boost 헤더 검색 경로 추가
-      header_paths = config.build_settings['HEADER_SEARCH_PATHS'] ||= ['$(inherited)']
-      header_paths = [header_paths] if header_paths.is_a?(String)
-      
-      boost_path = '"$(PODS_ROOT)/boost"'
-      folly_path = '"$(PODS_ROOT)/RCT-Folly"'
-
-      header_paths.unshift(folly_path) unless header_paths.include?(folly_path)
-      header_paths.unshift(boost_path) unless header_paths.include?(boost_path)
-      config.build_settings['HEADER_SEARCH_PATHS'] = header_paths.uniq
-    end
-  end
-  Pod::UI.puts "✅ Applied Folly fixes to all targets."
-  
-  # React Native Codegen 디렉토리 생성 (New Architecture 비활성화 상태에서도 빌드 스크립트 체크 대응)
-  begin
-    require 'fileutils'
-    repo_root = File.expand_path('..', __dir__)
-    codegen_dir = File.join(repo_root, 'ios', 'build', 'generated', 'ios')
-    
-    # Codegen 디렉토리 생성
-    FileUtils.mkdir_p(codegen_dir)
-    FileUtils.mkdir_p(File.join(codegen_dir, 'react', 'renderer', 'components'))
-    
-    # react-native-screens를 위한 Codegen 파일 생성 (실제로는 빌드 시 생성되지만 체크 통과를 위해)
-    # New Architecture가 비활성화되어 있으므로 실제 Codegen 파일은 필요 없지만,
-    # 빌드 스크립트의 체크를 통과하기 위해 디렉토리 구조는 만들어둠
-    puts "📁 Codegen directory created: #{codegen_dir}"
-    
-    # generate-codegen-artifacts.js 스크립트가 있다면 실행 시도
-    codegen_script = File.join(repo_root, 'node_modules', 'react-native', 'scripts', 'generate-codegen-artifacts.js')
-    if File.exist?(codegen_script)
-      puts "🔧 Running React Native Codegen from Podfile post_install..."
-      # New Architecture가 비활성화되어 있어도 스크립트 실행 (에러 무시)
-      result = system("cd #{repo_root} && node #{codegen_script} 2>&1")
-      unless result
-        puts "⚠️ Codegen script returned non-zero (expected when newArchEnabled=false)"
-      end
-    else
-      puts "📝 Codegen script not found (this is OK when newArchEnabled=false)"
-    end
-  rescue => e
-    puts "⚠️ Codegen setup error (can be ignored when newArchEnabled=false): #{e.message}"
-  end
-
-  # Pods 프로젝트 루트 빌드 설정에도 C++20 강제 (일부 타겟이 xcconfig로 gnu++14를 참조하는 경우 대비)
-  installer.pods_project.build_configurations.each do |config|
-    config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++20'
-    config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
-  end
-
-  # RCT-Folly 전용: C++20 표준을 안전하게 강제 적용 (타겟 존재 시에만)
-  folly_target = installer.pods_project.targets.find { |t| t.name == 'RCT-Folly' }
-  if folly_target
-    folly_target.build_configurations.each do |config|
-      config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++20'
-    end
-  end
-
-  installer.pods_project.targets.each do |target|
-    target.build_configurations.each do |config|
-      # iOS 최소 타겟 상향 (Codegen 생성 Pod 요구 대응)
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-      
-      # Hermes/React C++ 컴파일 표준 및 라이브러리 강제 지정 (C++20 표준 사용)
-      config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++20'
-      config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
-      
-      # New Architecture 비활성화 (C/C++/Objective-C용)
-      defs = config.build_settings["GCC_PREPROCESSOR_DEFINITIONS"]
-      if defs.is_a?(String)
-        defs = defs.split(' ')
-      elsif defs.nil?
-        defs = []
-      end
-      defs = defs.reject { |d| d.to_s.start_with?("RCT_NEW_ARCH_ENABLED") }
-      config.build_settings["GCC_PREPROCESSOR_DEFINITIONS"] = defs
-      
-      # SWIFT_ACTIVE_COMPILATION_CONDITIONS에서도 RCT_NEW_ARCH_ENABLED 제거
-      swift_conditions = config.build_settings["SWIFT_ACTIVE_COMPILATION_CONDITIONS"] || []
-      if swift_conditions.is_a?(String)
-        swift_conditions = swift_conditions.empty? ? [] : swift_conditions.split(' ')
-      end
-      swift_conditions = swift_conditions.is_a?(Array) ? swift_conditions : []
-      swift_conditions = swift_conditions.reject { |c| c == 'RCT_NEW_ARCH_ENABLED' }
-      config.build_settings["SWIFT_ACTIVE_COMPILATION_CONDITIONS"] = swift_conditions.join(' ')
-          end
-        end
-
   # ExpoModulesCore Swift 파일들의 import React를 환경별로 안전하게 처리
-  # - RN 0.76/Xcode 16 조합에서 상위 모듈명이 React-Core로 노출되는 환경이 있어
-  #   Swift에서 'import React'가 실패할 수 있음 → canImport로 React / React_Core를 분기 임포트
   begin
     repo_root = File.expand_path('..', __dir__)
     expo_ios_dir = File.join(repo_root, 'node_modules', 'expo-modules-core', 'ios')
@@ -221,17 +134,5 @@ post_install do |installer|
     Pod::UI.puts "⚠️ [RN]Check rncore script tweak skipped: #{e.message}"
   end
 
-  # Folly 빌드 오류를 해결하기 위해 메인 타겟과 모든 Pod 타겟에 직접 설정 주입
-  # 이것이 가장 확실하고 우선순위가 높은 방법임
-  installer.pods_project.targets.each do |target|
-    target.build_configurations.each do |config|
-      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
-      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'FOLLY_NO_CONFIG=1'
-
-      config.build_settings['HEADER_SEARCH_PATHS'] ||= ['$(inherited)']
-      config.build_settings['HEADER_SEARCH_PATHS'] << '"$(PODS_ROOT)/boost"'
-      config.build_settings['HEADER_SEARCH_PATHS'] << '"$(PODS_ROOT)/RCT-Folly"'
-    end
-    end
-  end
+end
     
