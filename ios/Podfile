@@ -52,13 +52,28 @@ post_install do |installer|
     Pod::UI.puts "⚠️  react_native_post_install failed: #{e.message}"
   end
 
-  # --- Folly 코루틴 문제 및 C++ 표준을 해결하기 위한 최종 패치 ---
-  installer.pods_project.targets.each do |target|
+  # --- Folly 문제 및 C++ 표준을 해결하기 위한 최종 패치 ---
+  # 메인 프로젝트와 모든 Pod 라이브러리를 포함한 모든 타겟에 적용
+  all_targets = installer.pods_project.targets
+  if installer.aggregate_targets
+    all_targets = all_targets + installer.aggregate_targets
+  end
+  
+  all_targets.each do |target|
     target.build_configurations.each do |config|
-      # Folly 코루틴 비활성화 (핵심 해결책)
-      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
-      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'FOLLY_HAS_COROUTINES=0'
+      # Folly 관련 문제들을 해결하기 위한 플래그들을 모두 적용
+      defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+      
+      # 코루틴 기능 비활성화: 'folly/coro/Coroutine.h' 파일 찾기 오류 해결
+      defs.delete_if { |s| s == 'FOLLY_HAS_COROUTINES=1' }
+      defs << 'FOLLY_HAS_COROUTINES=0' unless defs.include?('FOLLY_HAS_COROUTINES=0')
+      
+      # Folly 설정 파일 없음 알림: 'folly/folly-config.h' 파일 찾기 오류 해결
+      defs.delete_if { |s| s == 'FOLLY_NO_CONFIG=0' }
+      defs << 'FOLLY_NO_CONFIG=1' unless defs.include?('FOLLY_NO_CONFIG=1')
 
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = defs.uniq
+      
       # C++ 언어 표준 유지
       config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++20'
     end
