@@ -223,13 +223,15 @@ post_install do |installer|
 
   # Folly 빌드 오류를 해결하기 위해 메인 타겟과 모든 Pod 타겟에 직접 설정 주입
   # 이것이 가장 확실하고 우선순위가 높은 방법임
-  config.user_target_xcconfig = {
-    'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) FOLLY_NO_CONFIG=1',
-    'HEADER_SEARCH_PATHS' => '$(inherited) "$(PODS_ROOT)/boost" "$(PODS_ROOT)/RCT-Folly"',
-  }
-  config.pod_target_xcconfig = {
-    'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) FOLLY_NO_CONFIG=1',
-    'HEADER_SEARCH_PATHS' => '$(inherited) "$(PODS_ROOT)/boost" "$(PODS_ROOT)/RCT-Folly"',
-  }
-end
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'FOLLY_NO_CONFIG=1'
 
+      config.build_settings['HEADER_SEARCH_PATHS'] ||= ['$(inherited)']
+      config.build_settings['HEADER_SEARCH_PATHS'] << '"$(PODS_ROOT)/boost"'
+      config.build_settings['HEADER_SEARCH_PATHS'] << '"$(PODS_ROOT)/RCT-Folly"'
+    end
+    end
+  end
+    
