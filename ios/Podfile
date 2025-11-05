@@ -143,7 +143,14 @@ post_install do |installer|
       end
     end
 
-    puts '🧩 Folly 설정을 모든 타겟에 직접 적용했습니다.'
+    if installer.respond_to?(:user_project)
+      installer.user_project.targets.each do |target|
+        next unless target.respond_to?(:build_configurations)
+        target.build_configurations.each(&apply_folly_settings)
+      end
+    end
+
+    Pod::UI.puts "🧩 Folly 설정을 모든 타겟에 직접 적용했습니다."
   rescue => e
     Pod::UI.puts "⚠️ Folly 설정 주입 실패: #{e.message}"
   end
