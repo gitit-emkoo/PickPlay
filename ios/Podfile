@@ -45,6 +45,8 @@ class Array
 end
 
 post_install do |installer|
+  react_native_post_install(installer)
+
   # --- 최종 해결책: 매크로 정의와 헤더 경로 주입을 모두 수행 ---
 
   # 통합할 모든 타겟을 수집 (Pod 프로젝트 + 메인 프로젝트)
@@ -220,7 +222,5 @@ post_install do |installer|
   rescue => e
     Pod::UI.puts "⚠️ [RN]Check rncore script tweak skipped: #{e.message}"
   end
-
-  react_native_post_install(installer)
 end
 
