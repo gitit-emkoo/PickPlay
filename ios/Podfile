@@ -76,29 +76,40 @@ post_install do |installer|
   Pod::UI.puts "--- Applying Folly/C++ patches to all Pod targets ---"
   installer.pods_project.targets.each(&apply_project_fixes)
 
-  # --- 메인 프로젝트에 CustomBuild.xcconfig 파일을 연결하여 빌드 설정을 안정적으로 주입 ---
+  # --- 메인 프로젝트의 Pods-generated xcconfig에 CustomBuild.xcconfig를 포함시켜 빌드 설정을 안정적으로 주입 ---
+  # 이 방법은 프로젝트 파일(.pbxproj)을 직접 건드리는 대신, CocoaPods가 생성한 설정 파일을 확장하는 방식이라 더 안전합니다.
   begin
-    project_path = 'PickPlay.xcodeproj'
-    project = Xcodeproj::Project.open(project_path)
-    main_target = project.targets.find { |t| t.name == 'PickPlay' }
-
-    if main_target
-      # 'ios' 폴더 내의 xcconfig 파일에 대한 참조 생성
-      xcconfig_file = project.new_file('CustomBuild.xcconfig', 'group_for_xcconfig_files_if_needed')
-      
-      main_target.build_configurations.each do |config|
-        config.base_configuration_reference = xcconfig_file
-        Pod::UI.puts "🔗 Linked CustomBuild.xcconfig to '#{main_target.name}' target (config: #{config.name})"
+    pod_project = installer.pods_project
+    target_support_files_group = pod_project.main_group['Target Support Files']
+    
+    if target_support_files_group
+      installer.aggregate_targets.each do |aggregate_target|
+        if aggregate_target.name == 'Pods-PickPlay'
+          aggregate_target.xcconfigs.each do |config_name, config_file|
+            xcconfig_path = aggregate_target.xcconfig_path(config_name)
+            
+            # CustomBuild.xcconfig를 include하는 구문 추가
+            # 경로는 xcconfig 파일 위치에서부터 상대적으로 계산
+            include_statement = "\n#include \"../../../CustomBuild.xcconfig\""
+            
+            # 파일에 이미 구문이 포함되어 있는지 확인하여 중복 추가 방지
+            content = File.read(xcconfig_path)
+            unless content.include?(include_statement)
+              File.open(xcconfig_path, 'a') do |file|
+                file.write(include_statement)
+              end
+              Pod::UI.puts "✅ Appended CustomBuild.xcconfig include to #{xcconfig_path}"
+            end
+          end
+        end
       end
-      
-      project.save
-      Pod::UI.puts "✅ Successfully saved project with CustomBuild.xcconfig linkage."
     else
-      Pod::UI.puts "⚠️ Could not find 'PickPlay' target to link CustomBuild.xcconfig."
+      Pod::UI.puts "⚠️ Could not find 'Target Support Files' group. Skipping xcconfig modification."
     end
   rescue => e
-    Pod::UI.puts "--- ⚠️ An error occurred while linking CustomBuild.xcconfig: #{e.message} ---"
+    Pod::UI.puts "--- ⚠️ An error occurred while modifying Pods xcconfig: #{e.message} ---"
   end
+
 
   # --- 기존에 유지되어야 했던 중요 패치들 ---
 
