@@ -222,5 +222,16 @@ post_install do |installer|
   rescue => e
     Pod::UI.puts "⚠️ [RN]Check rncore script tweak skipped: #{e.message}"
   end
+
+  # Folly 빌드 오류를 해결하기 위해 메인 타겟과 모든 Pod 타겟에 직접 설정 주입
+  # 이것이 가장 확실하고 우선순위가 높은 방법임
+  config.user_target_xcconfig = {
+    'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) FOLLY_NO_CONFIG=1',
+    'HEADER_SEARCH_PATHS' => '$(inherited) "$(PODS_ROOT)/boost" "$(PODS_ROOT)/RCT-Folly"',
+  }
+  config.pod_target_xcconfig = {
+    'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) FOLLY_NO_CONFIG=1',
+    'HEADER_SEARCH_PATHS' => '$(inherited) "$(PODS_ROOT)/boost" "$(PODS_ROOT)/RCT-Folly"',
+  }
 end
 
