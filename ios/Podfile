@@ -136,6 +136,7 @@ post_install do |installer|
       header_paths = Array(config.build_settings['HEADER_SEARCH_PATHS'])
       header_paths << '$(inherited)' if header_paths.empty?
       header_paths << '$(PROJECT_DIR)/folly'
+      header_paths << '$(PODS_ROOT)/../folly'
       config.build_settings['HEADER_SEARCH_PATHS'] = header_paths.uniq
     end
 
