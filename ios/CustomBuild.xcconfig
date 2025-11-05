@@ -1,0 +1,6 @@
+# Folly 및 React Native 0.76.x 호환을 위한 공통 빌드 설정
+GCC_PREPROCESSOR_DEFINITIONS = $(inherited) FOLLY_NO_CONFIG=1 FOLLY_HAS_COROUTINES=0
+CLANG_CXX_LANGUAGE_STANDARD = gnu++20
+CLANG_CXX_LIBRARY = libc++
+OTHER_CPLUSPLUSFLAGS = $(inherited) -std=gnu++20
+
