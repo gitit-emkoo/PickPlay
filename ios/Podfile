@@ -35,13 +35,6 @@ target 'PickPlay' do
     pod 'RNScreens', :path => '../node_modules/react-native-screens'
   end
 
-  # --- Folly & C++ 표준 문제를 해결하기 위해 메인 타겟에 빌드 설정 주입 ---
-  # post_install에서 installer.project가 nil이 되는 CI 환경 문제에 대한 대응
-  user_target_xcconfig = {
-    'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) FOLLY_HAS_COROUTINES=0 FOLLY_NO_CONFIG=1',
-    'CLANG_CXX_LANGUAGE_STANDARD' => 'gnu++20',
-  }
-
 end
 
 post_install do |installer|
@@ -82,6 +75,28 @@ post_install do |installer|
   # 모든 Pod 라이브러리에 패치 적용
   Pod::UI.puts "--- Applying Folly/C++ patches to all Pod targets ---"
   installer.pods_project.targets.each(&apply_project_fixes)
+
+  # --- CI 환경에서 installer.project가 nil이 되는 문제를 해결하기 위해 메인 프로젝트를 수동으로 패치 ---
+  begin
+    main_project_path = Pod::Config.instance.project_path
+    if main_project_path && File.exist?(main_project_path)
+      Pod::UI.puts "--- Manually patching main project at #{main_project_path} ---"
+      project = Xcodeproj::Project.open(main_project_path)
+      main_target = project.targets.find { |t| t.name == 'PickPlay' }
+      
+      if main_target
+        apply_project_fixes.call(main_target)
+        project.save
+        Pod::UI.puts "--- ✅ Successfully saved manual patches for main project ---"
+      else
+        Pod::UI.puts "--- ⚠️  Could not find 'PickPlay' target in main project to apply patches. ---"
+      end
+    else
+      Pod::UI.puts "--- ⚠️  Could not find main project path. Manual patch skipped. ---"
+    end
+  rescue => e
+    Pod::UI.puts "--- ⚠️  An error occurred during manual main project patching: #{e.message} ---"
+  end
 
   # --- 기존에 유지되어야 했던 중요 패치들 ---
 
