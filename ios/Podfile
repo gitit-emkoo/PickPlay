@@ -27,7 +27,18 @@ target 'PickPlay' do
   config = use_react_native!(
     :hermes_enabled => true,
     :fabric_enabled => false,
-    :app_path => "#{Pod::Config.instance.installation_root}/.."
+    :app_path => "#{Pod::Config.instance.installation_root}/..",
+    
+    # Folly 빌드 오류를 해결하기 위해 메인 타겟과 모든 Pod 타겟에 직접 설정 주입
+    # 이것이 가장 확실하고 우선순위가 높은 방법임
+    :user_target_xcconfig => {
+      'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) FOLLY_NO_CONFIG=1',
+      'HEADER_SEARCH_PATHS' => '$(inherited) "$(PODS_ROOT)/boost" "$(PODS_ROOT)/RCT-Folly"',
+    },
+    :pod_target_xcconfig => {
+      'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) FOLLY_NO_CONFIG=1',
+      'HEADER_SEARCH_PATHS' => '$(inherited) "$(PODS_ROOT)/boost" "$(PODS_ROOT)/RCT-Folly"',
+    }
   )
 
   # Fallback: Ensure RNScreens is resolvable for Expo pods (e.g., ExpoHead)
