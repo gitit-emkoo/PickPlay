@@ -111,27 +111,34 @@ post_install do |installer|
     Pod::UI.puts "⚠️ [RN]Check rncore script tweak skipped: #{e.message}"
   end
 
-  # Pods-PickPlay.xcconfig에 CustomBuild.xcconfig 포함 (Folly 플래그 & C++ 표준)
+  # Pods-pickplay.xcconfig에 CustomBuild.xcconfig 포함 (Folly 플래그 & C++ 표준)
   begin
-    include_line = '#include "$(PODS_ROOT)/../CustomBuild.xcconfig"'
+    require 'pathname'
+    custom_config = Pathname.new(File.join(__dir__, 'CustomBuild.xcconfig'))
+    if custom_config.exist?
+      installer.aggregate_targets.each do |aggregate_target|
+        label = aggregate_target.label
+        support_dir = File.join(__dir__, 'Pods', 'Target Support Files', label)
+        next unless Dir.exist?(support_dir)
 
-    installer.aggregate_targets.each do |aggregate_target|
-      label = aggregate_target.label
-      support_dir = File.join(__dir__, 'Pods', 'Target Support Files', label)
-      next unless Dir.exist?(support_dir)
+        %w[debug release profile].each do |config_name|
+          config_path = File.join(support_dir, "#{label}.#{config_name}.xcconfig")
+          next unless File.exist?(config_path)
 
-      %w[debug release profile].each do |config_name|
-        config_path = File.join(support_dir, "#{label}.#{config_name}.xcconfig")
-        next unless File.exist?(config_path)
+          relative_path = custom_config.relative_path_from(Pathname.new(File.dirname(config_path)))
+          include_line = %(#include "#{relative_path}")
 
-        content = File.read(config_path)
-        next if content.include?(include_line)
+          content = File.read(config_path)
+          next if content.include?(include_line)
 
-        File.open(config_path, 'a') do |file|
-          file.puts "\n#{include_line}"
+          File.open(config_path, 'a') do |file|
+            file.puts "\n#{include_line}"
+          end
+          puts "🧩 CustomBuild.xcconfig include 추가: #{config_path.sub(__dir__ + '/', '')}"
         end
-        puts "🧩 CustomBuild.xcconfig include 추가: #{config_path.sub(__dir__ + '/', '')}"
       end
+    else
+      Pod::UI.puts "⚠️ CustomBuild.xcconfig 파일을 찾을 수 없습니다: #{custom_config}"
     end
   rescue => e
     Pod::UI.puts "⚠️ CustomBuild.xcconfig include 작업 실패: #{e.message}"
