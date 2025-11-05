@@ -6,9 +6,9 @@ default_platform(:ios)
 # --- 프로젝트 경로/상수 ---
 REPO_ROOT   = File.expand_path('..', __dir__)       # Fastfile 기준 상위가 리포 루트
 IOS_DIR     = File.join(REPO_ROOT, "ios")
-XCODEPROJ   = File.join(IOS_DIR,  "PickPlay.xcodeproj")
-WORKSPACE   = File.join(IOS_DIR,  "PickPlay.xcworkspace")
-SCHEME      = "PickPlay"                             # Xcode 스킴명과 동일해야 함
+XCODEPROJ   = File.join(IOS_DIR,  "pickplay.xcodeproj")
+WORKSPACE   = File.join(IOS_DIR,  "pickplay.xcworkspace")
+SCHEME      = "pickplay"                             # Xcode 스킴명과 동일해야 함
 BUNDLE_ID   = "com.pickplay.kwcc"
 
 TEAM_ID     = ENV["APPLE_TEAM_ID"]                  # GitHub Secrets에서 주입됨
@@ -460,7 +460,6 @@ platform :ios do
       workspace:     WORKSPACE,
       scheme:        SCHEME,
       configuration: "Release",
-      export_method: "app-store",
       clean:         true,
       skip_codesigning: false,
       xcargs: [
@@ -468,7 +467,7 @@ platform :ios do
         "CODE_SIGN_STYLE=Manual",
         "CODE_SIGN_IDENTITY=\"Apple Distribution\"",
         "PRODUCT_BUNDLE_IDENTIFIER=#{BUNDLE_ID}",
-        "#{SCHEME}.PROVISIONING_PROFILE_SPECIFIER=#{specifier}",  # 메인 앱 타겟만 지정
+        "pickplay.PROVISIONING_PROFILE_SPECIFIER=#{specifier}",  # 메인 앱 타겟만 지정
         "SWIFT_OPTIMIZATION_LEVEL=-O",
         # BoringSSL-GRPC 타겟의 플래그를 $(inherited)로 강제 설정하여 -G 제거
         "BoringSSL-GRPC.OTHER_CFLAGS=$(inherited)",

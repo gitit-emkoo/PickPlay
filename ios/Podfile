@@ -113,7 +113,7 @@ post_install do |installer|
 
   # Pods-PickPlay.xcconfig에 CustomBuild.xcconfig 포함 (Folly 플래그 & C++ 표준)
   begin
-    include_line = '#include "../../../CustomBuild.xcconfig"'
+    include_line = '#include "$(PODS_ROOT)/../CustomBuild.xcconfig"'
 
     installer.aggregate_targets.each do |aggregate_target|
       label = aggregate_target.label
