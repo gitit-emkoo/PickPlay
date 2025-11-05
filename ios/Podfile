@@ -37,7 +37,7 @@ target 'PickPlay' do
 
   # --- Folly & C++ 표준 문제를 해결하기 위해 메인 타겟에 빌드 설정 주입 ---
   # post_install에서 installer.project가 nil이 되는 CI 환경 문제에 대한 대응
-  self.user_target_xcconfig = {
+  user_target_xcconfig = {
     'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) FOLLY_HAS_COROUTINES=0 FOLLY_NO_CONFIG=1',
     'CLANG_CXX_LANGUAGE_STANDARD' => 'gnu++20',
   }
