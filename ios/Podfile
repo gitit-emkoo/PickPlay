@@ -27,25 +27,7 @@ target 'PickPlay' do
   use_react_native!(
     :hermes_enabled => true,
     :fabric_enabled => false,
-    :app_path => "#{Pod::Config.instance.installation_root}/..",
-    
-    # --- Folly, C++ 표준, 신 아키텍처 비활성화 관련 모든 설정을 이곳에 통합 ---
-    # 이것이 가장 확실하고 우선순위가 높은 유일한 방법입니다.
-    :user_target_xcconfig => {
-      # 1. C++ 컴파일러가 Folly 헤더를 찾도록 USER_HEADER_SEARCH_PATHS 에 경로 추가 (핵심 수정)
-      'USER_HEADER_SEARCH_PATHS' => '"$(PODS_ROOT)/boost" "$(PODS_ROOT)/RCT-Folly"',
-      
-      # 2. FOLLY_NO_CONFIG 매크로 정의
-      'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) FOLLY_NO_CONFIG=1 RCT_NEW_ARCH_ENABLED=0',
-      
-      # 3. C++ 표준 강제
-      'CLANG_CXX_LANGUAGE_STANDARD' => 'gnu++20',
-    },
-    :pod_target_xcconfig => {
-      'USER_HEADER_SEARCH_PATHS' => '"$(PODS_ROOT)/boost" "$(PODS_ROOT)/RCT-Folly"',
-      'GCC_PREPROCESSOR_DEFINITIONS' => '$(inherited) FOLLY_NO_CONFIG=1 RCT_NEW_ARCH_ENABLED=0',
-      'CLANG_CXX_LANGUAGE_STANDARD' => 'gnu++20',
-    }
+    :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
 
   # Fallback: Ensure RNScreens is resolvable for Expo pods (e.g., ExpoHead)
@@ -63,13 +45,28 @@ class Array
 end
 
 post_install do |installer|
+  # react_native_post_install를 먼저 실행하여 기본 설정 적용
   begin
     react_native_post_install(installer)
   rescue => e
     Pod::UI.puts "⚠️  react_native_post_install failed: #{e.message}"
   end
+
+  # --- Folly 코루틴 문제 및 C++ 표준을 해결하기 위한 최종 패치 ---
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      # Folly 코루틴 비활성화 (핵심 해결책)
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'FOLLY_HAS_COROUTINES=0'
+
+      # C++ 언어 표준 유지
+      config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++20'
+    end
+  end
   
-  # ExpoModulesCore Swift 파일들의 import React를 환경별로 안전하게 처리
+  # --- 기존에 유지되어야 했던 중요 패치들 ---
+
+  # ExpoModulesCore Swift 파일들의 import React 패치
   begin
     repo_root = File.expand_path('..', __dir__)
     expo_ios_dir = File.join(repo_root, 'node_modules', 'expo-modules-core', 'ios')
