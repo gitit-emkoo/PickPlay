@@ -76,26 +76,28 @@ post_install do |installer|
   Pod::UI.puts "--- Applying Folly/C++ patches to all Pod targets ---"
   installer.pods_project.targets.each(&apply_project_fixes)
 
-  # --- CI 환경에서 installer.project가 nil이 되는 문제를 해결하기 위해 메인 프로젝트를 수동으로 패치 ---
+  # --- 메인 프로젝트에 CustomBuild.xcconfig 파일을 연결하여 빌드 설정을 안정적으로 주입 ---
   begin
-    main_project_path = Pod::Config.instance.project_path
-    if main_project_path && File.exist?(main_project_path)
-      Pod::UI.puts "--- Manually patching main project at #{main_project_path} ---"
-      project = Xcodeproj::Project.open(main_project_path)
-      main_target = project.targets.find { |t| t.name == 'PickPlay' }
+    project_path = 'PickPlay.xcodeproj'
+    project = Xcodeproj::Project.open(project_path)
+    main_target = project.targets.find { |t| t.name == 'PickPlay' }
+
+    if main_target
+      # 'ios' 폴더 내의 xcconfig 파일에 대한 참조 생성
+      xcconfig_file = project.new_file('CustomBuild.xcconfig', 'group_for_xcconfig_files_if_needed')
       
-      if main_target
-        apply_project_fixes.call(main_target)
-        project.save
-        Pod::UI.puts "--- ✅ Successfully saved manual patches for main project ---"
-      else
-        Pod::UI.puts "--- ⚠️  Could not find 'PickPlay' target in main project to apply patches. ---"
+      main_target.build_configurations.each do |config|
+        config.base_configuration_reference = xcconfig_file
+        Pod::UI.puts "🔗 Linked CustomBuild.xcconfig to '#{main_target.name}' target (config: #{config.name})"
       end
+      
+      project.save
+      Pod::UI.puts "✅ Successfully saved project with CustomBuild.xcconfig linkage."
     else
-      Pod::UI.puts "--- ⚠️  Could not find main project path. Manual patch skipped. ---"
+      Pod::UI.puts "⚠️ Could not find 'PickPlay' target to link CustomBuild.xcconfig."
     end
   rescue => e
-    Pod::UI.puts "--- ⚠️  An error occurred during manual main project patching: #{e.message} ---"
+    Pod::UI.puts "--- ⚠️ An error occurred while linking CustomBuild.xcconfig: #{e.message} ---"
   end
 
   # --- 기존에 유지되어야 했던 중요 패치들 ---
