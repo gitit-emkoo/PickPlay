@@ -195,6 +195,58 @@ ABSOLUTE_WORKSPACE_PATH = File.join(EXPO_PROJECT_ROOT, "ios", "PickPlay.xcworksp
 
 ---
 
+### 7️⃣ Folly Coroutine 헤더 & C++ 표준 불일치
+**에러 메시지:**
+```
+fatal error: 'folly/coro/Coroutine.h' file not found
+static assertion failed: __cplusplus >= 201703L
+```
+
+**원인:**
+- Expo prebuild로 생성된 iOS 프로젝트에서 Folly가 C++20 코루틴을 전제로 빌드되지만, Xcode 설정이 Pod마다 덮어쓰여 `gnu++14`로 회귀
+- `FOLLY_HAS_COROUTINES` 매크로가 다시 1로 정의되면서 Folly가 `<folly/coro/Coroutine.h>`를 요구하지만 실제로는 iOS 워크스페이스에 해당 헤더가 없음
+
+**최종 해결 (2025-11-06):**
+1. `vendor/folly/coro/Coroutine.h`에 Folly 공식 헤더(2024.10.14.00)를 포함시켜 Git으로 추적
+2. `Podfile` `post_install`에서 모든 타겟에 Folly/C++20 설정을 강제하고, 헤더를 Pods 경로에 동기화
+
+```ruby
+# ios/Podfile 발췌
+require 'fileutils'
+
+folly_definitions = [
+  'FOLLY_NO_CONFIG=1',
+  'FOLLY_HAS_COROUTINES=0',
+  'FOLLY_USE_COROUTINES=0',
+  'FOLLY_USE_CPP_COROUTINES=0'
+]
+
+cppflags.concat(%w[
+  -UFOLLY_HAS_COROUTINES
+  -DFOLLY_HAS_COROUTINES=0
+  -DFOLLY_USE_COROUTINES=0
+  -DFOLLY_USE_CPP_COROUTINES=0
+])
+
+folly_vendor_root = File.expand_path('../vendor/folly', __dir__)
+folly_header_src = File.join(folly_vendor_root, 'coro', 'Coroutine.h')
+folly_pods_header_dir = File.join(__dir__, 'Pods', 'Headers', 'Public', 'RCT-Folly', 'folly', 'coro')
+
+if File.exist?(folly_header_src)
+  FileUtils.mkdir_p(folly_pods_header_dir)
+  FileUtils.cp(folly_header_src, File.join(folly_pods_header_dir, 'Coroutine.h'))
+  Pod::UI.puts "[Folly] Synced Coroutine.h into Pods headers."
+end
+```
+
+3. 성공 커밋: `f49945d` / 태그 `ios-build-success-2025-11-06`
+
+**체크포인트:**
+- Folly 헤더는 `vendor/folly`에서 Git으로 관리 → Expo prebuild가 iOS 디렉터리를 재생성해도 문제 없음
+- 차후 SDK 업그레이드 시 Folly 버전이 바뀌면 헤더와 매크로 값 재검토
+
+---
+
 ## 🔍 향후 에러 대응 체크리스트
 
 ### 빌드가 실패하면:
@@ -247,7 +299,7 @@ ABSOLUTE_WORKSPACE_PATH = File.join(EXPO_PROJECT_ROOT, "ios", "PickPlay.xcworksp
 
 ---
 
-**마지막 업데이트:** 2025-10-27  
+**마지막 업데이트:** 2025-11-06  
 **담당:** iOS 빌드 자동화 (GitHub Actions + Fastlane)
 
 
