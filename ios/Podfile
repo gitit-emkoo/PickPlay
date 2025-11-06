@@ -1,4 +1,5 @@
 source 'https://cdn.cocoapods.org/'
+require 'fileutils'
 require_relative '../node_modules/react-native/scripts/react_native_pods'
 
 begin
@@ -113,7 +114,12 @@ post_install do |installer|
 
   # Folly 및 C++20 설정을 모든 타겟에 직접 주입
   begin
-    folly_definitions = ['FOLLY_NO_CONFIG=1', 'FOLLY_HAS_COROUTINES=0']
+    folly_definitions = [
+      'FOLLY_NO_CONFIG=1',
+      'FOLLY_HAS_COROUTINES=0',
+      'FOLLY_USE_COROUTINES=0',
+      'FOLLY_USE_CPP_COROUTINES=0'
+    ]
 
     apply_folly_settings = lambda do |config|
       next unless config.respond_to?(:build_settings)
@@ -125,12 +131,12 @@ post_install do |installer|
       defs_array = Array(defs).flat_map { |d| d.to_s.split(' ') }
       defs_array = ['$(inherited)'] if defs_array.empty?
       defs_array.concat(folly_definitions)
-      defs_array << 'FOLLY_USE_COROUTINES=0'
       config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = defs_array.uniq
 
       cppflags = Array(config.build_settings['OTHER_CPLUSPLUSFLAGS'])
       cppflags << '$(inherited)' if cppflags.empty?
       cppflags << '-std=gnu++20'
+      cppflags.concat(%w[-UFOLLY_HAS_COROUTINES -DFOLLY_HAS_COROUTINES=0 -DFOLLY_USE_COROUTINES=0 -DFOLLY_USE_CPP_COROUTINES=0])
       config.build_settings['OTHER_CPLUSPLUSFLAGS'] = cppflags.uniq
 
       header_paths = Array(config.build_settings['HEADER_SEARCH_PATHS'])
@@ -155,6 +161,18 @@ post_install do |installer|
         next unless target.respond_to?(:build_configurations)
         target.build_configurations.each(&apply_folly_settings)
       end
+    end
+
+    folly_vendor_root = File.expand_path('../vendor/folly', __dir__)
+    folly_header_src = File.join(folly_vendor_root, 'coro', 'Coroutine.h')
+    folly_pods_header_dir = File.join(__dir__, 'Pods', 'Headers', 'Public', 'RCT-Folly', 'folly', 'coro')
+
+    if File.exist?(folly_header_src)
+      FileUtils.mkdir_p(folly_pods_header_dir)
+      FileUtils.cp(folly_header_src, File.join(folly_pods_header_dir, 'Coroutine.h'))
+      Pod::UI.puts "[Folly] Synced Coroutine.h into Pods headers."
+    else
+      Pod::UI.puts "[Folly] Coroutine.h source not found: #{folly_header_src}"
     end
 
     Pod::UI.puts "🧩 Folly 설정을 모든 타겟에 직접 적용했습니다."
