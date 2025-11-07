@@ -557,7 +557,10 @@ platform :ios do
 
     # Development 프로비저닝 프로파일 사용 (internal distribution)
     # 프로파일이 없으면 자동으로 생성 (처음 한 번만)
-    # beta lane과 동일하게 api_key를 명시적으로 전달
+    # bootstrap_profiles lane과 동일하게 api_key 객체를 명시적으로 전달
+    # 두 match 호출 모두에서 동일한 api_key 객체 사용
+    # 단, app_store_connect_api_key가 설정한 api_key_path와 충돌 방지를 위해
+    # match 호출 시 api_key_path: nil을 명시적으로 전달하여 lane_context의 api_key_path 무시
     begin
       match(
         type: "development",
@@ -565,6 +568,7 @@ platform :ios do
         app_identifier: BUNDLE_ID,
         team_id: TEAM_ID,
         api_key: api_key,
+        api_key_path: nil,  # lane_context의 api_key_path 무시
         git_url: ENV["MATCH_GIT_URL"],
         git_basic_authorization: Base64.strict_encode64("#{ENV['MATCH_GIT_USERNAME']}:#{ENV['MATCH_GIT_PASSWORD']}"),
         keychain_name: "build",
@@ -577,14 +581,17 @@ platform :ios do
       if e.message.include?("No code signing identity found") || e.message.include?("readonly")
         UI.important("⚠️ Development 프로파일이 없습니다. 자동으로 생성합니다...")
         # 프로파일 자동 생성 (처음 한 번만)
-        # app_store_connect_api_key가 이미 lane_context에 api_key_path를 설정했으므로
-        # api_key 객체를 전달하지 않음 (충돌 방지)
+        # api_key 객체를 전달하여 lane_context의 api_key_path 무시
+        # Fastlane은 api_key가 있으면 api_key_path를 무시해야 하지만,
+        # 충돌이 발생할 수 있으므로 명시적으로 api_key_path를 nil로 설정
         match(
           type: "development",
           readonly: false,
           force: true,
           app_identifier: BUNDLE_ID,
           team_id: TEAM_ID,
+          api_key: api_key,
+          api_key_path: nil,  # lane_context의 api_key_path 무시
           git_url: ENV["MATCH_GIT_URL"],
           git_basic_authorization: Base64.strict_encode64("#{ENV['MATCH_GIT_USERNAME']}:#{ENV['MATCH_GIT_PASSWORD']}"),
           keychain_name: "build",
