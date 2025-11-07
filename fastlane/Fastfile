@@ -558,10 +558,8 @@ platform :ios do
     match(
       type: "development",
       readonly: false,
-      force: false,
       app_identifier: BUNDLE_ID,
       team_id: TEAM_ID,
-      api_key: api_key,
       git_url: ENV["MATCH_GIT_URL"],
       git_basic_authorization: Base64.strict_encode64("#{ENV['MATCH_GIT_USERNAME']}:#{ENV['MATCH_GIT_PASSWORD']}"),
       keychain_name: "build",
