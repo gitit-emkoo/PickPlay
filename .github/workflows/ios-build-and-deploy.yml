@@ -33,16 +33,30 @@ jobs:
         env:
           ASC_P8_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
           ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
         run: |
           if [ -z "$ASC_P8_BASE64" ]; then
             echo "::error::APP_STORE_CONNECT_API_KEY_BASE64 secret가 비어 있습니다." && exit 1
           fi
 
-          KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
-          echo "$ASC_P8_BASE64" | base64 --decode > "$KEY_PATH"
+          export KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.json"
+
+          python3 <<'PY'
+          import os, base64, json
+          key_base64 = os.environ['ASC_P8_BASE64']
+          key = base64.b64decode(key_base64).decode('utf-8')
+          data = {
+              'key_id': os.environ['ASC_KEY_ID'],
+              'issuer_id': os.environ['ASC_ISSUER_ID'],
+              'key': key
+          }
+          path = os.environ['KEY_PATH']
+          with open(path, 'w', encoding='utf-8') as f:
+              json.dump(data, f)
+          PY
 
           if [ ! -s "$KEY_PATH" ]; then
-            echo "::error::AuthKey.p8 생성 실패 (파일이 비어 있거나 존재하지 않음)" && exit 1
+            echo "::error::AuthKey JSON 생성 실패 (파일이 비어 있거나 존재하지 않음)" && exit 1
           fi
 
           chmod 600 "$KEY_PATH"
@@ -203,16 +217,30 @@ jobs:
         env:
           ASC_P8_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
           ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
         run: |
           if [ -z "$ASC_P8_BASE64" ]; then
             echo "::error::APP_STORE_CONNECT_API_KEY_BASE64 secret가 비어 있습니다." && exit 1
           fi
 
-          KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
-          echo "$ASC_P8_BASE64" | base64 --decode > "$KEY_PATH"
+          export KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.json"
+
+          python3 <<'PY'
+          import os, base64, json
+          key_base64 = os.environ['ASC_P8_BASE64']
+          key = base64.b64decode(key_base64).decode('utf-8')
+          data = {
+              'key_id': os.environ['ASC_KEY_ID'],
+              'issuer_id': os.environ['ASC_ISSUER_ID'],
+              'key': key
+          }
+          path = os.environ['KEY_PATH']
+          with open(path, 'w', encoding='utf-8') as f:
+              json.dump(data, f)
+          PY
 
           if [ ! -s "$KEY_PATH" ]; then
-            echo "::error::AuthKey.p8 생성 실패 (파일이 비어 있거나 존재하지 않음)" && exit 1
+            echo "::error::AuthKey JSON 생성 실패 (파일이 비어 있거나 존재하지 않음)" && exit 1
           fi
 
           chmod 600 "$KEY_PATH"
