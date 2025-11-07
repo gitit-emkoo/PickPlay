@@ -3,6 +3,11 @@ module.exports = {
     name: 'pickplay',
     slug: 'pickplay',
     version: '1.2.0',
+    extra: {
+      eas: {
+        projectId: 'f0389889-654e-4120-8839-8b795ff4b641'
+      }
+    },
     orientation: 'portrait',
     icon: './assets/images/icon.png',
     userInterfaceStyle: 'light',
@@ -47,7 +52,8 @@ module.exports = {
             }
           }
         }
-      ]
+      ],
+      './plugins/with-admob-test-device'
     ]
   }
 };

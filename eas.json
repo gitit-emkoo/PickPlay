@@ -7,6 +7,11 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "ios": {
+        "buildConfiguration": "Debug",
+        "credentialsSource": "remote",
+        "cocoapods": "1.15.2"
+      },
       "android": {
         "buildType": "apk"
       },

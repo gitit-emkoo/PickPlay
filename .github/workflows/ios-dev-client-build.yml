@@ -1,0 +1,234 @@
+name: iOS Dev Client Build
+
+on:
+  workflow_dispatch:
+  # Dev client 빌드는 수동 실행 권장 (workflow_dispatch 사용)
+  # 필요시 아래 주석 해제하여 자동 실행 가능
+  # push:
+  #   branches: [main]
+  #   paths:
+  #     - 'pickplay/app/**'
+  #     - 'pickplay/app.config.js'
+  #     - 'pickplay/package.json'
+  #     - 'pickplay/ios/**'
+  #     - '.github/workflows/ios-dev-client-build.yml'
+
+jobs:
+  ios-dev-client:
+    runs-on: macos-14
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 16.2
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "16.2"
+
+      - name: Setup Node.js (cache lockfile anywhere)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
+
+      # Save p8 key to temporary file for Fastlane
+      - name: Write App Store Connect API key to file
+        env:
+          ASC_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+        run: |
+          KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
+          echo "$ASC_P8" > "$KEY_PATH"
+          echo "APP_STORE_CONNECT_API_KEY_PATH=$KEY_PATH" >> $GITHUB_ENV
+
+      - name: Setup Ruby & tools
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+
+      - name: Install Fastlane/CocoaPods/xcodeproj
+        run: |
+          gem install fastlane --no-document
+          gem install cocoapods --no-document
+          gem install xcodeproj --no-document
+
+      # 프로젝트 디렉토리 감지
+      - name: Detect project dir
+        run: |
+          if [ -f ./pickplay/ios/Podfile ]; then
+            echo "PROJ_DIR=pickplay" >> $GITHUB_ENV
+          elif [ -f ./ios/Podfile ]; then
+            echo "PROJ_DIR=." >> $GITHUB_ENV
+          else
+            echo "::error::ios/Podfile not found"; exit 1
+          fi
+          echo "Detected PROJ_DIR=$PROJ_DIR"
+
+      # ✅ 캐시 및 빌드 잔재 완전 삭제
+      - name: Clean caches (clean build)
+        run: |
+          rm -rf "$PROJ_DIR/node_modules"
+          rm -rf "$PROJ_DIR/ios/Pods" "$PROJ_DIR/ios/Podfile.lock" "$PROJ_DIR/ios/build"
+          rm -rf ~/Library/Developer/Xcode/DerivedData/*
+          echo "✅ Clean build: 모든 Pods 및 빌드 아티팩트 제거 완료"
+
+      - name: Install JS deps (npm ci, no dev deps)
+        run: |
+          cd "$PROJ_DIR"
+          if [ -f package-lock.json ]; then
+            npm ci --omit=dev --legacy-peer-deps
+          else
+            echo "::warning::package-lock.json not found; running npm install"
+            npm install --omit=dev --legacy-peer-deps
+          fi
+
+      - name: Align RN/Expo package versions (expo install --fix)
+        run: |
+          cd "$PROJ_DIR"
+          echo "📦 Running expo install --fix..."
+          BEFORE=$(cat package.json 2>/dev/null | grep -E '"(react-native|expo)"' | head -2 || echo "")
+          npx expo install --fix --no-interactive || true
+          AFTER=$(cat package.json 2>/dev/null | grep -E '"(react-native|expo)"' | head -2 || echo "")
+          if [ "$BEFORE" != "$AFTER" ]; then
+            echo "::warning::expo install --fix changed package versions:"
+            echo "Before: $BEFORE"
+            echo "After: $AFTER"
+          else
+            echo "✅ No version changes detected"
+          fi
+
+      - name: Install RN autolinking CLI (prod)
+        run: |
+          cd "$PROJ_DIR"
+          npm i --save --legacy-peer-deps \
+            @react-native-community/cli \
+            @react-native-community/cli-platform-ios \
+            expo-modules-autolinking
+
+      # Expo prebuild 필요 시만 실행
+      - name: Ensure iOS native project (conditional Expo prebuild)
+        run: |
+          cd "$PROJ_DIR"
+          if [ -z "$(ls -1 ios/*.xcodeproj 2>/dev/null)" ]; then
+            echo "🛠  No .xcodeproj found — running Expo prebuild (iOS only)..."
+            npx expo prebuild --platform ios --no-install --clean
+            git checkout -- ios/Podfile || true # ✅ Podfile 되살리기
+          else
+            echo "✅ .xcodeproj found; skipping prebuild."
+          fi
+
+      - name: Debug iOS folder
+        run: |
+          cd "$PROJ_DIR/ios"
+          echo "== ios contents ==" && ls -la
+          echo "== Xcode projects ==" && ls -1 *.xcodeproj || true
+
+      - name: Cache Pods
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.PROJ_DIR }}/ios/Pods
+            ${{ env.PROJ_DIR }}/ios/Podfile.lock
+          key: pods-clear-${{ hashFiles(format('{0}/ios/Podfile.lock', env.PROJ_DIR)) }}
+
+      - name: Clean CocoaPods Cache
+        run: |
+          pod cache clean --all
+          echo "✅ CocoaPods cache cleaned."
+
+      - name: Install CocoaPods
+        run: |
+          cd "$PROJ_DIR/ios"
+          pod install --repo-update
+
+      - name: Verify React Native Codegen files
+        run: |
+          cd "$PROJ_DIR"
+          echo "🔍 Checking if React Native Codegen files were generated..."
+          CODEGEN_DIR="$PROJ_DIR/ios/build/generated/ios"
+          if [ ! -d "$CODEGEN_DIR" ]; then
+            echo "::warning::Codegen directory not found: $CODEGEN_DIR"
+            echo "Attempting to create Codegen directory structure..."
+            mkdir -p "$CODEGEN_DIR/react/renderer/components"
+            echo "⚠️ Codegen files may be generated during build"
+          else
+            echo "✅ Codegen directory found: $CODEGEN_DIR"
+            FILE_COUNT=$(find "$CODEGEN_DIR" -type f | wc -l)
+            echo "Found $FILE_COUNT Codegen files"
+            if [ "$FILE_COUNT" -eq 0 ]; then
+              echo "::warning::Codegen directory exists but contains no files"
+            fi
+          fi
+
+      - name: Verify post_install cleaned BoringSSL-GRPC
+        run: |
+          cd "$PROJ_DIR/ios"
+          if grep -R --line-number --fixed-strings " -G" Pods/Pods.xcodeproj/project.pbxproj; then
+            echo "::error::Found -G in Pods project after post_install"
+            exit 1
+          fi
+          echo "✅ No -G flags remain in Pods project"
+
+      - name: Verify C++ standard is gnu++20 for all Pods
+        run: |
+          cd "$PROJ_DIR/ios"
+          echo "🔍 Verifying C++20 standard is set for all Pod targets..."
+          if [ ! -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
+            echo "::warning::Pods project not found; skipping C++ standard check"
+            exit 0
+          fi
+
+          FILE="Pods/Pods.xcodeproj/project.pbxproj"
+          
+          # Check if gnu++20 or c++20 exists anywhere
+          HAS_CXX20=$(grep -iE "gnu\+\+20|c\+\+20" "$FILE" || true)
+          
+          if [ -z "$HAS_CXX20" ]; then
+            echo "::error::No C++20 standard (gnu++20 or c++20) found in Pods project."
+            exit 1
+          fi
+
+          CXX20_COUNT=$(echo "$HAS_CXX20" | grep -icE "(gnu\+\+20|c\+\+20)" || echo "0")
+          echo "✅ Detected C++20 standard in Pods project ($CXX20_COUNT occurrences)"
+
+      - name: Fastlane dev_client
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_PATH: ${{ env.APP_STORE_CONNECT_API_KEY_PATH }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_GIT_USERNAME: ${{ secrets.MATCH_GIT_USERNAME }}
+          MATCH_GIT_PASSWORD: ${{ secrets.MATCH_GIT_PASSWORD }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_GIT_BRANCH: master
+          KEYCHAIN_PASSWORD: actions
+        run: |
+          cd "$PROJ_DIR"
+          if [ -f Gemfile ]; then
+            bundle exec fastlane ios dev_client
+          else
+            fastlane ios dev_client
+          fi
+
+      # 빌드 아티팩트 업로드 (IPA 파일)
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-client-ipa
+          path: |
+            ${{ env.PROJ_DIR }}/*.ipa
+          retention-days: 30
+        if: success()
+
+      - name: Success message
+        run: |
+          echo "✅ Dev Client 빌드 완료!"
+          echo "📱 Actions 탭에서 IPA 파일을 다운로드하세요."
+          echo "📱 설치 후 'expo start --dev-client'로 Metro 서버를 실행하세요."
+

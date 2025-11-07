@@ -1,4 +1,4 @@
-name: iOS Beta (Fastlane)
+name: iOS Build (Dev Client → TestFlight)
 
 on:
   push:
@@ -6,7 +6,168 @@ on:
   workflow_dispatch:
 
 jobs:
+  # 1단계: Dev Client 빌드 (선행)
+  ios-dev-client:
+    runs-on: macos-14
+    timeout-minutes: 60
+    outputs:
+      build-success: ${{ job.status == 'success' }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 16.2
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "16.2"
+
+      - name: Setup Node.js (cache lockfile anywhere)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
+
+      - name: Write App Store Connect API key to file
+        env:
+          ASC_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+        run: |
+          KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
+          echo "$ASC_P8" > "$KEY_PATH"
+          echo "APP_STORE_CONNECT_API_KEY_PATH=$KEY_PATH" >> $GITHUB_ENV
+
+      - name: Setup Ruby & tools
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+
+      - name: Install Fastlane/CocoaPods/xcodeproj
+        run: |
+          gem install fastlane --no-document
+          gem install cocoapods --no-document
+          gem install xcodeproj --no-document
+
+      - name: Detect project dir
+        run: |
+          if [ -f ./pickplay/ios/Podfile ]; then
+            echo "PROJ_DIR=pickplay" >> $GITHUB_ENV
+          elif [ -f ./ios/Podfile ]; then
+            echo "PROJ_DIR=." >> $GITHUB_ENV
+          else
+            echo "::error::ios/Podfile not found"; exit 1
+          fi
+          echo "Detected PROJ_DIR=$PROJ_DIR"
+
+      - name: Clean caches (clean build)
+        run: |
+          rm -rf "$PROJ_DIR/node_modules"
+          rm -rf "$PROJ_DIR/ios/Pods" "$PROJ_DIR/ios/Podfile.lock" "$PROJ_DIR/ios/build"
+          rm -rf ~/Library/Developer/Xcode/DerivedData/*
+          echo "✅ Clean build: 모든 Pods 및 빌드 아티팩트 제거 완료"
+
+      - name: Install JS deps (npm ci, no dev deps)
+        run: |
+          cd "$PROJ_DIR"
+          if [ -f package-lock.json ]; then
+            npm ci --omit=dev --legacy-peer-deps
+          else
+            echo "::warning::package-lock.json not found; running npm install"
+            npm install --omit=dev --legacy-peer-deps
+          fi
+
+      - name: Align RN/Expo package versions (expo install --fix)
+        run: |
+          cd "$PROJ_DIR"
+          echo "📦 Running expo install --fix..."
+          BEFORE=$(cat package.json 2>/dev/null | grep -E '"(react-native|expo)"' | head -2 || echo "")
+          npx expo install --fix --no-interactive || true
+          AFTER=$(cat package.json 2>/dev/null | grep -E '"(react-native|expo)"' | head -2 || echo "")
+          if [ "$BEFORE" != "$AFTER" ]; then
+            echo "::warning::expo install --fix changed package versions:"
+            echo "Before: $BEFORE"
+            echo "After: $AFTER"
+          else
+            echo "✅ No version changes detected"
+          fi
+
+      - name: Install RN autolinking CLI (prod)
+        run: |
+          cd "$PROJ_DIR"
+          npm i --save --legacy-peer-deps \
+            @react-native-community/cli \
+            @react-native-community/cli-platform-ios \
+            expo-modules-autolinking
+
+      - name: Ensure iOS native project (conditional Expo prebuild)
+        run: |
+          cd "$PROJ_DIR"
+          if [ -z "$(ls -1 ios/*.xcodeproj 2>/dev/null)" ]; then
+            echo "🛠  No .xcodeproj found — running Expo prebuild (iOS only)..."
+            npx expo prebuild --platform ios --no-install --clean
+            git checkout -- ios/Podfile || true
+          else
+            echo "✅ .xcodeproj found; skipping prebuild."
+          fi
+
+      - name: Cache Pods
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.PROJ_DIR }}/ios/Pods
+            ${{ env.PROJ_DIR }}/ios/Podfile.lock
+          key: pods-clear-${{ hashFiles(format('{0}/ios/Podfile.lock', env.PROJ_DIR)) }}
+
+      - name: Clean CocoaPods Cache
+        run: |
+          pod cache clean --all
+          echo "✅ CocoaPods cache cleaned."
+
+      - name: Install CocoaPods
+        run: |
+          cd "$PROJ_DIR/ios"
+          pod install --repo-update
+
+      - name: Fastlane dev_client
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_PATH: ${{ env.APP_STORE_CONNECT_API_KEY_PATH }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_GIT_USERNAME: ${{ secrets.MATCH_GIT_USERNAME }}
+          MATCH_GIT_PASSWORD: ${{ secrets.MATCH_GIT_PASSWORD }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_GIT_BRANCH: master
+          KEYCHAIN_PASSWORD: actions
+        run: |
+          cd "$PROJ_DIR"
+          if [ -f Gemfile ]; then
+            bundle exec fastlane ios dev_client
+          else
+            fastlane ios dev_client
+          fi
+
+      - name: Upload Dev Client IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-client-ipa
+          path: |
+            ${{ env.PROJ_DIR }}/*.ipa
+          retention-days: 30
+        if: success()
+        continue-on-error: true
+
+      - name: Dev Client build success
+        run: |
+          echo "✅ Dev Client 빌드 성공 - TestFlight 빌드 진행합니다"
+
+  # 2단계: TestFlight 배포 (Dev Client 성공 후 실행)
   ios-beta:
+    needs: ios-dev-client
     runs-on: macos-14
     timeout-minutes: 60
     
