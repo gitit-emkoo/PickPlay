@@ -520,6 +520,7 @@ platform :ios do
     UI.message("🔧 Development 프로파일 생성 중...")
 
     # Development 프로비저닝 프로파일 생성 (force + readonly:false)
+    # beta lane과 동일한 방식으로 api_key 사용
     match(
       type: "development",
       readonly: false,
@@ -556,6 +557,7 @@ platform :ios do
 
     # Development 프로비저닝 프로파일 사용 (internal distribution)
     # 프로파일이 없으면 자동으로 생성 (처음 한 번만)
+    # beta lane과 동일한 방식으로 api_key 사용
     begin
       match(
         type: "development",
