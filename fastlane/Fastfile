@@ -557,14 +557,14 @@ platform :ios do
 
     # Development 프로비저닝 프로파일 사용 (internal distribution)
     # 프로파일이 없으면 자동으로 생성 (처음 한 번만)
-    # app_store_connect_api_key가 설정한 api_key_path를 match가 자동으로 사용
-    # api_key 파라미터를 전달하면 api_key_path와 충돌하므로 제거
+    # beta lane과 동일하게 api_key를 명시적으로 전달
     begin
       match(
         type: "development",
         readonly: true,
         app_identifier: BUNDLE_ID,
         team_id: TEAM_ID,
+        api_key: api_key,
         git_url: ENV["MATCH_GIT_URL"],
         git_basic_authorization: Base64.strict_encode64("#{ENV['MATCH_GIT_USERNAME']}:#{ENV['MATCH_GIT_PASSWORD']}"),
         keychain_name: "build",
@@ -577,13 +577,13 @@ platform :ios do
       if e.message.include?("No code signing identity found") || e.message.include?("readonly")
         UI.important("⚠️ Development 프로파일이 없습니다. 자동으로 생성합니다...")
         # 프로파일 자동 생성 (처음 한 번만)
-        # api_key 파라미터 제거하여 api_key_path 충돌 방지
         match(
           type: "development",
           readonly: false,
           force: true,
           app_identifier: BUNDLE_ID,
           team_id: TEAM_ID,
+          api_key: api_key,
           git_url: ENV["MATCH_GIT_URL"],
           git_basic_authorization: Base64.strict_encode64("#{ENV['MATCH_GIT_USERNAME']}:#{ENV['MATCH_GIT_PASSWORD']}"),
           keychain_name: "build",
