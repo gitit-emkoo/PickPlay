@@ -505,6 +505,41 @@ platform :ios do
     UI.success("✅ TestFlight 업로드 성공")
   end
 
+  desc "ONE-TIME: Development 프로파일 생성"
+  lane :bootstrap_dev_profiles do
+    prepare_ci!
+
+    api_key = app_store_connect_api_key(
+      key_id:       ENV["APP_STORE_CONNECT_API_KEY_ID"],
+      issuer_id:    ENV["APP_STORE_CONNECT_API_ISSUER_ID"],
+      key_filepath: ENV["APP_STORE_CONNECT_API_KEY_PATH"],
+      duration:     1200,
+      in_house:     false
+    )
+
+    UI.message("🔧 Development 프로파일 생성 중...")
+
+    # Development 프로비저닝 프로파일 생성 (force + readonly:false)
+    match(
+      type: "development",
+      readonly: false,
+      force: true,
+      app_identifier: BUNDLE_ID,
+      team_id: TEAM_ID,
+      api_key: api_key,
+      git_url: ENV["MATCH_GIT_URL"],
+      git_basic_authorization: Base64.strict_encode64("#{ENV['MATCH_GIT_USERNAME']}:#{ENV['MATCH_GIT_PASSWORD']}"),
+      keychain_name: "build",
+      keychain_password: KEYCHAIN_PW,
+      git_branch: MATCH_BRANCH,
+      clone_branch_directly: true,
+      shallow_clone: true
+    )
+
+    UI.success("✅ Development 프로파일 생성 완료")
+    UI.message("  → 다음부터는 readonly=true로 사용")
+  end
+
   desc "Dev Client 빌드 (Internal Distribution for debugging)"
   lane :dev_client do
     prepare_ci!
@@ -520,20 +555,46 @@ platform :ios do
     UI.message("🔧 Dev Client 빌드 시작 (Debug, Internal Distribution)")
 
     # Development 프로비저닝 프로파일 사용 (internal distribution)
-    match(
-      type: "development",
-      readonly: true,
-      app_identifier: BUNDLE_ID,
-      team_id: TEAM_ID,
-      api_key: api_key,
-      git_url: ENV["MATCH_GIT_URL"],
-      git_basic_authorization: Base64.strict_encode64("#{ENV['MATCH_GIT_USERNAME']}:#{ENV['MATCH_GIT_PASSWORD']}"),
-      keychain_name: "build",
-      keychain_password: KEYCHAIN_PW,
-      git_branch: MATCH_BRANCH,
-      clone_branch_directly: true,
-      shallow_clone: true
-    )
+    # 프로파일이 없으면 자동으로 생성 (처음 한 번만)
+    begin
+      match(
+        type: "development",
+        readonly: true,
+        app_identifier: BUNDLE_ID,
+        team_id: TEAM_ID,
+        api_key: api_key,
+        git_url: ENV["MATCH_GIT_URL"],
+        git_basic_authorization: Base64.strict_encode64("#{ENV['MATCH_GIT_USERNAME']}:#{ENV['MATCH_GIT_PASSWORD']}"),
+        keychain_name: "build",
+        keychain_password: KEYCHAIN_PW,
+        git_branch: MATCH_BRANCH,
+        clone_branch_directly: true,
+        shallow_clone: true
+      )
+    rescue => e
+      if e.message.include?("No code signing identity found") || e.message.include?("readonly")
+        UI.important("⚠️ Development 프로파일이 없습니다. 자동으로 생성합니다...")
+        # 프로파일 자동 생성 (처음 한 번만)
+        match(
+          type: "development",
+          readonly: false,
+          force: true,
+          app_identifier: BUNDLE_ID,
+          team_id: TEAM_ID,
+          api_key: api_key,
+          git_url: ENV["MATCH_GIT_URL"],
+          git_basic_authorization: Base64.strict_encode64("#{ENV['MATCH_GIT_USERNAME']}:#{ENV['MATCH_GIT_PASSWORD']}"),
+          keychain_name: "build",
+          keychain_password: KEYCHAIN_PW,
+          git_branch: MATCH_BRANCH,
+          clone_branch_directly: true,
+          shallow_clone: true
+        )
+        UI.success("✅ Development 프로파일 생성 완료")
+      else
+        raise e
+      end
+    end
 
     # 프로파일 정보 수집
     pp_uuid = (lane_context[SharedValues::SIGH_UDID] || "").to_s.strip
