@@ -618,7 +618,7 @@ platform :ios do
     )
 
     # 프로파일을 프로젝트에 임베드
-    if !profile_path.empty() && File.exist?(profile_path)
+    if !profile_path.to_s.empty? && File.exist?(profile_path)
       embedded_profile_path = File.join(IOS_DIR, SCHEME, "embedded.mobileprovision")
       FileUtils.mkdir_p(File.dirname(embedded_profile_path))
       FileUtils.cp(profile_path, embedded_profile_path)
