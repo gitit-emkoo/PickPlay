@@ -39,24 +39,19 @@ jobs:
             echo "::error::APP_STORE_CONNECT_API_KEY_BASE64 secret가 비어 있습니다." && exit 1
           fi
 
-          export KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.json"
+          export KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
 
           python3 <<'PY'
-          import os, base64, json
+          import os, base64
           key_base64 = os.environ['ASC_P8_BASE64']
           key = base64.b64decode(key_base64).decode('utf-8')
-          data = {
-              'key_id': os.environ['ASC_KEY_ID'],
-              'issuer_id': os.environ['ASC_ISSUER_ID'],
-              'key': key
-          }
           path = os.environ['KEY_PATH']
           with open(path, 'w', encoding='utf-8') as f:
-              json.dump(data, f)
+              f.write(key)
           PY
 
           if [ ! -s "$KEY_PATH" ]; then
-            echo "::error::AuthKey JSON 생성 실패 (파일이 비어 있거나 존재하지 않음)" && exit 1
+            echo "::error::AuthKey 파일 생성 실패 (파일이 비어 있거나 존재하지 않음)" && exit 1
           fi
 
           chmod 600 "$KEY_PATH"
@@ -223,24 +218,19 @@ jobs:
             echo "::error::APP_STORE_CONNECT_API_KEY_BASE64 secret가 비어 있습니다." && exit 1
           fi
 
-          export KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.json"
+          export KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
 
           python3 <<'PY'
-          import os, base64, json
+          import os, base64
           key_base64 = os.environ['ASC_P8_BASE64']
           key = base64.b64decode(key_base64).decode('utf-8')
-          data = {
-              'key_id': os.environ['ASC_KEY_ID'],
-              'issuer_id': os.environ['ASC_ISSUER_ID'],
-              'key': key
-          }
           path = os.environ['KEY_PATH']
           with open(path, 'w', encoding='utf-8') as f:
-              json.dump(data, f)
+              f.write(key)
           PY
 
           if [ ! -s "$KEY_PATH" ]; then
-            echo "::error::AuthKey JSON 생성 실패 (파일이 비어 있거나 존재하지 않음)" && exit 1
+            echo "::error::AuthKey 파일 생성 실패 (파일이 비어 있거나 존재하지 않음)" && exit 1
           fi
 
           chmod 600 "$KEY_PATH"
