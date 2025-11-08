@@ -39,7 +39,7 @@ export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
     let dots = 0;
     const loadingInterval = setInterval(() => {
       dots = (dots + 1) % 4;
-      setLoadingText('조금만 기다려주세요' + '🐟'.repeat(dots));
+      setLoadingText('조금만 기다려주세요' + '🎄'.repeat(dots));
     }, 500);
 
     // 3초 후 메인 화면으로 이동

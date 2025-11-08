@@ -21,7 +21,12 @@ module.exports = {
     ],
     ios: {
       supportsTablet: true,
-      bundleIdentifier: 'com.pickplay.kwcc'
+      bundleIdentifier: 'com.pickplay.kwcc',
+      infoPlist: {
+        // TODO: 실배포 시 실제 AdMob 앱 ID(아래 주석)로 교체하세요.
+        // 'ca-app-pub-2555567440328829~5483134579'
+        GADApplicationIdentifier: 'ca-app-pub-3940256099942544~1458002511'
+      }
     },
     android: {
       adaptiveIcon: {

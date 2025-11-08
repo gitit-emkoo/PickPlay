@@ -57,8 +57,11 @@ if (Platform.OS !== 'web') {
 
 // 플랫폼별 광고 단위 ID (실제 광고)
 const AD_UNITS = {
-  android: 'ca-app-pub-2555567440328829/7893158578', // 실제 광고
-  ios: 'ca-app-pub-2555567440328829/9198215970' // 실제 광고
+  android: TestIds.REWARDED_INTERSTITIAL,
+  ios: TestIds.REWARDED_INTERSTITIAL
+  // TODO: 실서비스 시 아래 실제 광고 단위 ID로 교체하세요.
+  // android: 'ca-app-pub-2555567440328829/7893158578',
+  // ios: 'ca-app-pub-2555567440328829/9198215970'
 };
 
 export async function initAds() { 

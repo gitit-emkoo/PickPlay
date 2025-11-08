@@ -20,7 +20,7 @@
           "remote-notification"
         ],
         "ITSAppUsesNonExemptEncryption": false,
-        "GADApplicationIdentifier": "ca-app-pub-2555567440328829~5483134579"
+        "GADApplicationIdentifier": "ca-app-pub-3940256099942544~1458002511"
       },
       "entitlements": {
         "aps-environment": "production"
