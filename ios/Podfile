@@ -31,6 +31,9 @@ target 'pickplay' do
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
 
+  # Ensure AdMob headers are available for AppDelegate logging during dev client builds
+  pod 'Google-Mobile-Ads-SDK'
+
   # Fallback: Ensure RNScreens is resolvable for Expo pods (e.g., ExpoHead)
   if File.exist?(File.join(__dir__, '../node_modules/react-native-screens/RNScreens.podspec'))
     pod 'RNScreens', :path => '../node_modules/react-native-screens'
