@@ -576,15 +576,23 @@ platform :ios do
     mapping = lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING] || {}
     profile_name = mapping[BUNDLE_ID]
 
+    dotted_uuid_key = "sigh_#{BUNDLE_ID}_development"
+    underscored_uuid_key = "sigh_#{BUNDLE_ID.tr('.', '_')}_development"
+
     profile_uuid = Actions.lane_context[SharedValues::SIGH_UUID] ||
                    Actions.lane_context[SharedValues::SIGH_UDID] ||
-                   ENV["sigh_#{BUNDLE_ID.gsub('.', '_')}_development"]
+                   ENV[dotted_uuid_key] ||
+                   ENV[underscored_uuid_key]
 
     if profile_uuid.to_s.empty? || profile_uuid.length != 36
       UI.user_error!("❌ match가 반환한 Development 프로비저닝 프로파일 UUID를 찾을 수 없습니다. fastlane ios bootstrap_dev_profiles 이후 다시 시도하세요.")
     end
 
-    profile_path = ENV["sigh_#{BUNDLE_ID.gsub('.', '_')}_development_profile-path"] ||
+    dotted_path_key = "sigh_#{BUNDLE_ID}_development_profile-path"
+    underscored_path_key = "sigh_#{BUNDLE_ID.tr('.', '_')}_development_profile-path"
+
+    profile_path = ENV[dotted_path_key] ||
+                   ENV[underscored_path_key] ||
                    Actions.lane_context[SharedValues::SIGH_PROFILE_PATH]
 
     if profile_path.to_s.empty? || !File.exist?(profile_path)
