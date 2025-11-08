@@ -555,6 +555,9 @@ platform :ios do
 
     UI.message("🔧 Dev Client 빌드 시작 (Debug, Internal Distribution)")
 
+    # GitHub Actions에서 설정한 api_key_path가 남아 있으면 match와 충돌하므로 제거
+    ENV.delete("APP_STORE_CONNECT_API_KEY_PATH")
+
     match(
       type: "development",
       readonly: false,
