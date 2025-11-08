@@ -566,7 +566,8 @@ platform :ios do
       keychain_password: KEYCHAIN_PW,
       git_branch: MATCH_BRANCH,
       clone_branch_directly: true,
-      shallow_clone: true
+      shallow_clone: true,
+      api_key: api_key
     )
 
     # 프로파일 정보 수집
