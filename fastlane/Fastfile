@@ -575,17 +575,14 @@ platform :ios do
 
     mapping = lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING] || {}
     profile_name = mapping[BUNDLE_ID]
-    profile_path = Actions.lane_context[SharedValues::SIGH_PROFILE_PATH]
-    profile_uuid = Actions.lane_context[SharedValues::SIGH_UUID] || Actions.lane_context[SharedValues::SIGH_UDID]
 
+    profile_path = Actions.lane_context[SharedValues::SIGH_PROFILE_PATH]
     profile_path = ENV["sigh_#{BUNDLE_ID.gsub('.', '_')}_development_profile-path"] if profile_path.to_s.empty?
+
+    profile_uuid = Actions.lane_context[SharedValues::SIGH_UUID] || Actions.lane_context[SharedValues::SIGH_UDID]
     profile_uuid = ENV["sigh_#{BUNDLE_ID.gsub('.', '_')}_development"] if profile_uuid.to_s.empty?
 
-    if profile_path.to_s.empty? || !File.exist?(profile_path)
-      UI.user_error!("❌ match가 반환한 Development 프로비저닝 프로파일 경로를 찾을 수 없습니다.")
-    end
-
-    if profile_uuid.to_s.empty? || profile_uuid.length != 36
+    if (profile_uuid.to_s.empty? || profile_uuid.length != 36) && !profile_path.to_s.empty?
       extracted_uuid = extract_profile_uuid(profile_path)
       profile_uuid = extracted_uuid if extracted_uuid.to_s.length == 36
     end
@@ -602,6 +599,17 @@ platform :ios do
 
     if profile_uuid.to_s.empty? || profile_uuid.length != 36
       UI.user_error!("❌ match가 반환한 Development 프로비저닝 프로파일 UUID를 찾을 수 없습니다. fastlane ios bootstrap_dev_profiles 이후 다시 시도하세요.")
+    end
+
+    profile_path = Actions.lane_context[SharedValues::SIGH_PROFILE_PATH] if profile_path.to_s.empty?
+    profile_path = ENV["sigh_#{BUNDLE_ID.gsub('.', '_')}_development_profile-path"] if profile_path.to_s.empty?
+    if (profile_path.to_s.empty? || !File.exist?(profile_path)) && profile_uuid.to_s.length == 36
+      fallback_path = File.expand_path(File.join("~", "Library", "MobileDevice", "Provisioning Profiles", "#{profile_uuid}.mobileprovision"))
+      profile_path = fallback_path if File.exist?(fallback_path)
+    end
+
+    if profile_path.to_s.empty? || !File.exist?(profile_path)
+      UI.user_error!("❌ match가 반환한 Development 프로비저닝 프로파일 경로를 찾을 수 없습니다.")
     end
 
     UI.success("✅ Development 프로파일 확인: #{profile_name || 'match Development ' + BUNDLE_ID}")
