@@ -576,34 +576,18 @@ platform :ios do
     mapping = lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING] || {}
     profile_name = mapping[BUNDLE_ID]
 
-    profile_path = Actions.lane_context[SharedValues::SIGH_PROFILE_PATH]
-    profile_path = ENV["sigh_#{BUNDLE_ID.gsub('.', '_')}_development_profile-path"] if profile_path.to_s.empty?
-
-    profile_uuid = Actions.lane_context[SharedValues::SIGH_UUID] || Actions.lane_context[SharedValues::SIGH_UDID]
-    profile_uuid = ENV["sigh_#{BUNDLE_ID.gsub('.', '_')}_development"] if profile_uuid.to_s.empty?
-
-    if (profile_uuid.to_s.empty? || profile_uuid.length != 36) && !profile_path.to_s.empty?
-      extracted_uuid = extract_profile_uuid(profile_path)
-      profile_uuid = extracted_uuid if extracted_uuid.to_s.length == 36
-    end
-
-    if profile_uuid.to_s.empty? || profile_uuid.length != 36
-      derived_uuid = File.basename(profile_path, '.mobileprovision')
-      if derived_uuid.length == 36
-        profile_uuid = derived_uuid
-      else
-        uuid_from_env = ENV["sigh_#{BUNDLE_ID.gsub('.', '_')}_development"]
-        profile_uuid = uuid_from_env if uuid_from_env.to_s.length == 36
-      end
-    end
+    profile_uuid = Actions.lane_context[SharedValues::SIGH_UUID] ||
+                   Actions.lane_context[SharedValues::SIGH_UDID] ||
+                   ENV["sigh_#{BUNDLE_ID.gsub('.', '_')}_development"]
 
     if profile_uuid.to_s.empty? || profile_uuid.length != 36
       UI.user_error!("❌ match가 반환한 Development 프로비저닝 프로파일 UUID를 찾을 수 없습니다. fastlane ios bootstrap_dev_profiles 이후 다시 시도하세요.")
     end
 
-    profile_path = Actions.lane_context[SharedValues::SIGH_PROFILE_PATH] if profile_path.to_s.empty?
-    profile_path = ENV["sigh_#{BUNDLE_ID.gsub('.', '_')}_development_profile-path"] if profile_path.to_s.empty?
-    if (profile_path.to_s.empty? || !File.exist?(profile_path)) && profile_uuid.to_s.length == 36
+    profile_path = ENV["sigh_#{BUNDLE_ID.gsub('.', '_')}_development_profile-path"] ||
+                   Actions.lane_context[SharedValues::SIGH_PROFILE_PATH]
+
+    if profile_path.to_s.empty? || !File.exist?(profile_path)
       fallback_path = File.expand_path(File.join("~", "Library", "MobileDevice", "Provisioning Profiles", "#{profile_uuid}.mobileprovision"))
       profile_path = fallback_path if File.exist?(fallback_path)
     end
@@ -626,7 +610,7 @@ platform :ios do
     )
 
     # 프로파일을 프로젝트에 임베드
-    if !profile_path.empty? && File.exist?(profile_path)
+    if !profile_path.empty() && File.exist?(profile_path)
       embedded_profile_path = File.join(IOS_DIR, SCHEME, "embedded.mobileprovision")
       FileUtils.mkdir_p(File.dirname(embedded_profile_path))
       FileUtils.cp(profile_path, embedded_profile_path)
