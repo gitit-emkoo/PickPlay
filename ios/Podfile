@@ -1,0 +1,185 @@
+﻿source 'https://cdn.cocoapods.org/'
+require 'fileutils'
+require_relative '../node_modules/react-native/scripts/react_native_pods'
+
+begin
+  require_relative '../node_modules/react-native/scripts/react_native_post_install'
+rescue LoadError
+  Pod::UI.puts '  react_native_post_install not found; continuing without it'
+  def react_native_post_install(*); end
+end
+
+begin
+  require_relative '../node_modules/expo/scripts/autolinking'
+rescue LoadError
+  Pod::UI.puts '  expo autolinking script not found; continuing without it'
+  def use_expo_modules!(*); end
+end
+
+platform :ios, '15.1'
+project 'pickplay.xcodeproj'
+
+target 'pickplay' do
+  use_expo_modules!
+
+  # New Architecture 명시적으로 비활성화
+  ENV['RCT_NEW_ARCH_ENABLED'] = '0'
+
+  use_react_native!(
+    :hermes_enabled => true,
+    :fabric_enabled => false,
+    :app_path => "#{Pod::Config.instance.installation_root}/.."
+  )
+
+  # Ensure AdMob headers are available for AppDelegate logging during dev client builds
+  pod 'Google-Mobile-Ads-SDK'
+
+  # Fallback: Ensure RNScreens is resolvable for Expo pods (e.g., ExpoHead)
+  if File.exist?(File.join(__dir__, '../node_modules/react-native-screens/RNScreens.podspec'))
+    pod 'RNScreens', :path => '../node_modules/react-native-screens'
+  end
+
+end
+
+post_install do |installer|
+  begin
+    react_native_post_install(installer)
+  rescue => e
+    Pod::UI.puts "  react_native_post_install failed: #{e.message}"
+  end
+
+  # --- 기존에 유지되어야 했던 중요 패치들 ---
+
+  # ExpoModulesCore Swift 파일들의 import React 패치
+  begin
+    repo_root = File.expand_path('..', __dir__)
+    expo_ios_dir = File.join(repo_root, 'node_modules', 'expo-modules-core', 'ios')
+    if Dir.exist?(expo_ios_dir)
+      Dir.glob(File.join(expo_ios_dir, '**', '*.swift')).each do |swift_file|
+        begin
+          content = File.read(swift_file)
+          original_content = content.dup
+
+          # 'import React' 패치
+          if content.include?('import React') && !content.include?('#if canImport(React)')
+            content.gsub!(/^\s*import\s+React\s*$/, <<~SWIFT.chomp
+              #if canImport(React)
+              import React
+              #elseif canImport(React_Core)
+              import React_Core
+              #endif
+            SWIFT
+            )
+          end
+
+          if content != original_content
+            File.write(swift_file, content)
+            puts " Patched React import in #{swift_file.sub(repo_root + '/', '')}"
+          end
+        rescue => e
+          Pod::UI.puts " Failed to patch module import in #{swift_file}: #{e.message}"
+        end
+      end
+    end
+  rescue => e
+    Pod::UI.puts " ExpoModulesCore module import patch skipped: #{e.message}"
+  end
+
+  # Hermes 스크립트 단계가 CI에서 실패하는 이슈 방지: 스크립트를 no-op 처리
+  begin
+    hermes_target = installer.pods_project.targets.find { |t| t.name == 'hermes-engine' }
+    if hermes_target
+      hermes_target.build_phases.grep(Xcodeproj::Project::Object::PBXShellScriptBuildPhase).each do |bp|
+        next unless bp.name.to_s.include?('Replace Hermes for the right configuration')
+        bp.shell_script = "echo \"[CI] Skipping Hermes replacement script (no-op).\""
+        puts "  Hermes replacement script converted to no-op for CI stability."
+      end
+    end
+  rescue => e
+    Pod::UI.puts " Hermes script phase tweak skipped: #{e.message}"
+  end
+
+  # [RN]Check rncore 스크립트 비활성화 (New Architecture 비활성화 상태에서 Codegen 체크 불필요)
+  begin
+    ['React-Fabric', 'React-FabricComponents'].each do |target_name|
+      target = installer.pods_project.targets.find { |t| t.name == target_name }
+      next unless target
+
+      target.build_phases.grep(Xcodeproj::Project::Object::PBXShellScriptBuildPhase).each do |bp|
+        next unless bp.name.to_s.include?('[RN]Check rncore')
+        bp.shell_script = "echo \"[CI] Skipping [RN]Check rncore script (newArchEnabled=false).\""
+        puts "  [RN]Check rncore script in #{target_name} converted to no-op."
+      end
+    end
+  rescue => e
+    Pod::UI.puts " [RN]Check rncore script tweak skipped: #{e.message}"
+  end
+
+  # Folly 및 C++20 설정을 모든 타겟에 직접 주입
+  begin
+    folly_definitions = [
+      'FOLLY_NO_CONFIG=1',
+      'FOLLY_HAS_COROUTINES=0',
+      'FOLLY_USE_COROUTINES=0',
+      'FOLLY_USE_CPP_COROUTINES=0'
+    ]
+
+    apply_folly_settings = lambda do |config|
+      next unless config.respond_to?(:build_settings)
+
+      config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++20'
+      config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
+
+      defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS']
+      defs_array = Array(defs).flat_map { |d| d.to_s.split(' ') }
+      defs_array = ['$(inherited)'] if defs_array.empty?
+      defs_array.concat(folly_definitions)
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = defs_array.uniq
+
+      cppflags = Array(config.build_settings['OTHER_CPLUSPLUSFLAGS'])
+      cppflags << '$(inherited)' if cppflags.empty?
+      cppflags << '-std=gnu++20'
+      cppflags.concat(%w[-UFOLLY_HAS_COROUTINES -DFOLLY_HAS_COROUTINES=0 -DFOLLY_USE_COROUTINES=0 -DFOLLY_USE_CPP_COROUTINES=0])
+      config.build_settings['OTHER_CPLUSPLUSFLAGS'] = cppflags.uniq
+
+      header_paths = Array(config.build_settings['HEADER_SEARCH_PATHS'])
+      header_paths << '$(inherited)' if header_paths.empty?
+      header_paths << '$(PROJECT_DIR)/../vendor/folly'
+      header_paths << '$(PODS_ROOT)/../../vendor/folly'
+      config.build_settings['HEADER_SEARCH_PATHS'] = header_paths.uniq
+    end
+
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each(&apply_folly_settings)
+    end
+
+    installer.aggregate_targets.each do |aggregate_target|
+      aggregate_target.user_targets.each do |user_target|
+        user_target.build_configurations.each(&apply_folly_settings)
+      end
+    end
+
+    if installer.respond_to?(:user_project)
+      installer.user_project.targets.each do |target|
+        next unless target.respond_to?(:build_configurations)
+        target.build_configurations.each(&apply_folly_settings)
+      end
+    end
+
+    folly_vendor_root = File.expand_path('../vendor/folly', __dir__)
+    folly_header_src = File.join(folly_vendor_root, 'coro', 'Coroutine.h')
+    folly_pods_header_dir = File.join(__dir__, 'Pods', 'Headers', 'Public', 'RCT-Folly', 'folly', 'coro')
+
+    if File.exist?(folly_header_src)
+      FileUtils.mkdir_p(folly_pods_header_dir)
+      FileUtils.cp(folly_header_src, File.join(folly_pods_header_dir, 'Coroutine.h'))
+      Pod::UI.puts "[Folly] Synced Coroutine.h into Pods headers."
+    else
+      Pod::UI.puts "[Folly] Coroutine.h source not found: #{folly_header_src}"
+    end
+
+    Pod::UI.puts " Folly 설정을 모든 타겟에 직접 적용했습니다."
+  rescue => e
+    Pod::UI.puts " Folly 설정 주입 실패: #{e.message}"
+  end
+end
