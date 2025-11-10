@@ -184,19 +184,20 @@ jobs:
           fi
 
       - name: Verify required pods
+        shell: bash
         run: |
           cd "$PROJ_DIR/ios"
-          REQUIRED_PODS=("RNGoogleMobileAds" "RNFBApp" "RNCAsyncStorage" "RNReanimated")
+          required_pods=("RNGoogleMobileAds" "RNFBApp" "RNCAsyncStorage" "RNReanimated")
           missing=0
-          for pod in "${REQUIRED_PODS[@]}"; do
+          for pod in "${required_pods[@]}"; do
             if grep -q "$pod" Podfile.lock; then
               echo "✅ Found $pod in Podfile.lock"
             else
               echo "::error::$pod not found in Podfile.lock"
               missing=1
             fi
-          end
-          if [ $missing -ne 0 ]; then
+          done
+          if [ "$missing" -ne 0 ]; then
             exit 1
           fi
 
