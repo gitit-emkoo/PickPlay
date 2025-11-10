@@ -233,4 +233,4 @@ jobs:
 
       - name: Dev Client build success
         run: |
-          echo "✅ Dev Client 빌드 성공"
+          echo "✅ Dev Client 빌드 성공이다"
