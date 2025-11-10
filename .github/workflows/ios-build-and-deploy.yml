@@ -183,6 +183,23 @@ jobs:
             echo "::warning::Podfile.lock not found after pod install"
           fi
 
+      - name: Verify required pods
+        run: |
+          cd "$PROJ_DIR/ios"
+          REQUIRED_PODS=("RNGoogleMobileAds" "RNFBApp" "RNCAsyncStorage" "RNReanimated")
+          missing=0
+          for pod in "${REQUIRED_PODS[@]}"; do
+            if grep -q "$pod" Podfile.lock; then
+              echo "✅ Found $pod in Podfile.lock"
+            else
+              echo "::error::$pod not found in Podfile.lock"
+              missing=1
+            fi
+          end
+          if [ $missing -ne 0 ]; then
+            exit 1
+          fi
+
       - name: Fastlane dev_client
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
