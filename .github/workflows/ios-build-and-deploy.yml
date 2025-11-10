@@ -172,6 +172,17 @@ jobs:
           cd "$PROJ_DIR/ios"
           pod install --repo-update
 
+      - name: Print Podfile.lock (debug)
+        run: |
+          cd "$PROJ_DIR/ios"
+          if [ -f Podfile.lock ]; then
+            echo "===== Podfile.lock (head) ====="
+            head -n 200 Podfile.lock
+            echo "===== End Podfile.lock (head) ====="
+          else
+            echo "::warning::Podfile.lock not found after pod install"
+          fi
+
       - name: Fastlane dev_client
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
