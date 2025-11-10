@@ -183,6 +183,17 @@ jobs:
             echo "::warning::Podfile.lock not found after pod install"
           fi
 
+      - name: Print Podfile (debug)
+        run: |
+          cd "$PROJ_DIR/ios"
+          if [ -f Podfile ]; then
+            echo "===== Podfile ====="
+            cat Podfile
+            echo "===== End Podfile ====="
+          else
+            echo "::warning::Podfile not found after prebuild"
+          fi
+
       - name: Verify required pods
         shell: bash
         run: |
