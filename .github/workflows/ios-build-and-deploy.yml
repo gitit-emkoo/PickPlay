@@ -140,12 +140,19 @@ jobs:
             echo "::error::Info.plist not found at $INFO_PLIST"
             exit 1
           fi
-          GAD_ID=$(/usr/libexec/PlistBuddy -c "Print :GADApplicationIdentifier" "$INFO_PLIST" 2>/dev/null || true)
-          if [ -z "$GAD_ID" ]; then
-            echo "::error::GADApplicationIdentifier가 Info.plist에 없습니다. app.config.js 설정을 확인하세요."
+          GAD_APP_ID=$(node -e "const config=require('./app.config.js'); const val=config?.expo?.ios?.infoPlist?.GADApplicationIdentifier; if(!val){process.exit(1);} process.stdout.write(val);" 2>/dev/null || true)
+          if [ -z "$GAD_APP_ID" ]; then
+            echo "::error::app.config.js에서 GADApplicationIdentifier 값을 찾을 수 없습니다."
             exit 1
           fi
-          echo "✅ Info.plist에 GADApplicationIdentifier 확인: $GAD_ID"
+          /usr/libexec/PlistBuddy -c "Set :GADApplicationIdentifier $GAD_APP_ID" "$INFO_PLIST" 2>/dev/null || \
+          /usr/libexec/PlistBuddy -c "Add :GADApplicationIdentifier string $GAD_APP_ID" "$INFO_PLIST"
+          CHECK_ID=$(/usr/libexec/PlistBuddy -c "Print :GADApplicationIdentifier" "$INFO_PLIST" 2>/dev/null || true)
+          if [ "$CHECK_ID" != "$GAD_APP_ID" ]; then
+            echo "::error::Info.plist에 GADApplicationIdentifier 설정에 실패했습니다."
+            exit 1
+          fi
+          echo "✅ Info.plist에 GADApplicationIdentifier 설정 완료: $CHECK_ID"
 
       - name: Cache Pods
         uses: actions/cache@v4
