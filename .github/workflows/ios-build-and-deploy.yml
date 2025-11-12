@@ -152,6 +152,27 @@ jobs:
             echo "✅ Podfile 커스텀 설정 추가 완료"
           fi
           echo "✅ Expo prebuild 완료"
+          
+          # react-native-google-mobile-ads가 app.json을 찾을 수 있도록 생성/업데이트
+          if [ ! -f app.json ]; then
+            echo "📝 app.json 생성 중..."
+            node -e "
+              const config = require('./app.config.js');
+              const fs = require('fs');
+              fs.writeFileSync('app.json', JSON.stringify(config.expo, null, 2));
+            "
+            echo "✅ app.json 생성 완료"
+          else
+            echo "📝 app.json 업데이트 중..."
+            node -e "
+              const config = require('./app.config.js');
+              const fs = require('fs');
+              const appJson = JSON.parse(fs.readFileSync('app.json', 'utf8'));
+              const merged = { ...appJson, ...config.expo };
+              fs.writeFileSync('app.json', JSON.stringify(merged, null, 2));
+            "
+            echo "✅ app.json 업데이트 완료"
+          fi
 
       - name: Ensure AdMob app id injected into Info.plist
         run: |
