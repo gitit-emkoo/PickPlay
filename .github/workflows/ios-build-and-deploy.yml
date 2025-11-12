@@ -97,6 +97,12 @@ jobs:
             echo "::warning::package-lock.json not found; running npm install"
             npm install --omit=dev --legacy-peer-deps
           fi
+          # react-native-worklets는 React Native 0.76.9와 호환되지 않으므로 제거
+          if [ -d "node_modules/react-native-worklets" ]; then
+            echo "⚠️  react-native-worklets 제거 중 (호환성 문제)"
+            rm -rf node_modules/react-native-worklets
+            npm uninstall react-native-worklets --legacy-peer-deps || true
+          fi
 
       - name: Align RN/Expo package versions (expo install --fix)
         run: |
