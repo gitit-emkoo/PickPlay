@@ -9,7 +9,7 @@ jobs:
   # 1단계: Dev Client 빌드 (선행)
   ios-dev-client:
     runs-on: macos-14
-    timeout-minutes: 60
+    timeout-minutes: 120
     outputs:
       build-success: ${{ job.status == 'success' }}
     
@@ -81,12 +81,13 @@ jobs:
           fi
           echo "Detected PROJ_DIR=$PROJ_DIR"
 
-      - name: Clean caches (clean build)
+      - name: Clean build artifacts only
         run: |
-          rm -rf "$PROJ_DIR/node_modules"
-          rm -rf "$PROJ_DIR/ios/Pods" "$PROJ_DIR/ios/Podfile.lock" "$PROJ_DIR/ios/build"
+          # node_modules와 Pods는 캐시를 활용하므로 삭제하지 않음
+          # 빌드 아티팩트만 정리
+          rm -rf "$PROJ_DIR/ios/build"
           rm -rf ~/Library/Developer/Xcode/DerivedData/*
-          echo "✅ Clean build: 모든 Pods 및 빌드 아티팩트 제거 완료"
+          echo "✅ Build artifacts cleaned (keeping node_modules and Pods for cache)"
 
       - name: Install JS deps (npm ci, no dev deps)
         run: |
@@ -133,6 +134,7 @@ jobs:
         run: |
           cd "$PROJ_DIR"
           echo "🛠  Expo prebuild (ios)로 Info.plist 및 native 설정을 동기화합니다..."
+          # --clean 플래그 제거: 기존 프로젝트 재사용 (더 빠름)
           npx expo prebuild --platform ios --no-install --non-interactive
           # expo prebuild가 생성한 Podfile을 사용하되, 필요한 커스텀 설정만 추가
           # (Google-Mobile-Ads-SDK 및 커스텀 post_install 스크립트)
@@ -181,15 +183,27 @@ jobs:
             ${{ env.PROJ_DIR }}/ios/Podfile.lock
           key: pods-clear-${{ hashFiles(format('{0}/ios/Podfile.lock', env.PROJ_DIR)) }}
 
-      - name: Clean CocoaPods Cache
+      - name: Clean CocoaPods Cache (skip if cached)
         run: |
-          pod cache clean --all
-          echo "✅ CocoaPods cache cleaned."
+          # 캐시가 있으면 CocoaPods 캐시 정리 건너뛰기 (빠른 빌드)
+          if [ ! -d "$PROJ_DIR/ios/Pods" ] || [ ! -f "$PROJ_DIR/ios/Podfile.lock" ]; then
+            echo "📦 Pods 캐시 없음, CocoaPods 캐시 정리"
+            pod cache clean --all || true
+          else
+            echo "✅ Pods 캐시 있음, CocoaPods 캐시 정리 건너뛰기"
+          fi
 
       - name: Install CocoaPods
         run: |
           cd "$PROJ_DIR/ios"
-          pod install --repo-update
+          # 캐시가 있으면 repo-update 생략 (빠른 설치)
+          if [ -d "Pods" ] && [ -f "Podfile.lock" ]; then
+            echo "📦 Pods 캐시 발견, 빠른 설치 모드"
+            pod install
+          else
+            echo "📦 Pods 캐시 없음, 전체 설치 (repo-update 포함)"
+            pod install --repo-update
+          fi
 
       - name: Print Podfile.lock (debug)
         run: |
