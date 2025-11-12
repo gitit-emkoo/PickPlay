@@ -154,25 +154,40 @@ jobs:
           echo "✅ Expo prebuild 완료"
           
           # react-native-google-mobile-ads가 app.json을 찾을 수 있도록 생성/업데이트
-          if [ ! -f app.json ]; then
-            echo "📝 app.json 생성 중..."
-            node -e "
-              const config = require('./app.config.js');
-              const fs = require('fs');
-              fs.writeFileSync('app.json', JSON.stringify(config.expo, null, 2));
-            "
-            echo "✅ app.json 생성 완료"
-          else
-            echo "📝 app.json 업데이트 중..."
-            node -e "
-              const config = require('./app.config.js');
-              const fs = require('fs');
-              const appJson = JSON.parse(fs.readFileSync('app.json', 'utf8'));
-              const merged = { ...appJson, ...config.expo };
-              fs.writeFileSync('app.json', JSON.stringify(merged, null, 2));
-            "
-            echo "✅ app.json 업데이트 완료"
-          fi
+          echo "📝 app.json 생성/업데이트 중..."
+          node -e "
+            const config = require('./app.config.js');
+            const fs = require('fs');
+            let appJson = {};
+            
+            // 기존 app.json이 있으면 읽기
+            if (fs.existsSync('app.json')) {
+              try {
+                appJson = JSON.parse(fs.readFileSync('app.json', 'utf8'));
+              } catch (e) {
+                console.log('기존 app.json 파싱 실패, 새로 생성');
+              }
+            }
+            
+            // config.expo 내용으로 병합
+            appJson = { ...appJson, ...config.expo };
+            
+            // extra의 react-native-google-mobile-ads를 루트 레벨에도 추가 (CocoaPods 스크립트가 찾을 수 있도록)
+            if (config.expo.extra && config.expo.extra['react-native-google-mobile-ads']) {
+              appJson['react-native-google-mobile-ads'] = config.expo.extra['react-native-google-mobile-ads'];
+            }
+            
+            fs.writeFileSync('app.json', JSON.stringify(appJson, null, 2));
+            console.log('✅ app.json 생성/업데이트 완료');
+            
+            // 디버깅: react-native-google-mobile-ads 설정 확인
+            const finalJson = JSON.parse(fs.readFileSync('app.json', 'utf8'));
+            if (finalJson['react-native-google-mobile-ads']) {
+              console.log('✅ react-native-google-mobile-ads 설정 확인:', JSON.stringify(finalJson['react-native-google-mobile-ads']));
+            } else {
+              console.log('⚠️  react-native-google-mobile-ads 설정이 app.json에 없습니다!');
+            }
+          "
 
       - name: Ensure AdMob app id injected into Info.plist
         run: |
