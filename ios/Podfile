@@ -1,12 +1,6 @@
 ﻿source 'https://cdn.cocoapods.org/'
 require 'fileutils'
 require_relative '../node_modules/react-native/scripts/react_native_pods'
-begin
-  require_relative '../node_modules/@react-native-community/cli-platform-ios/native_modules'
-rescue LoadError
-  Pod::UI.puts '⚠️  @react-native-community/cli-platform-ios/native_modules not found; autolinking disabled'
-  def use_native_modules!(*); {}; end
-end
 
 begin
   require_relative '../node_modules/react-native/scripts/react_native_post_install'
@@ -25,8 +19,6 @@ end
 platform :ios, '15.1'
 project 'pickplay.xcodeproj'
 
-config = use_native_modules!
-
 target 'pickplay' do
   use_expo_modules!
 
@@ -36,9 +28,7 @@ target 'pickplay' do
   use_react_native!(
     :hermes_enabled => true,
     :fabric_enabled => false,
-    :app_path => "#{Pod::Config.instance.installation_root}/..",
-    :react_native_path => config[:reactNativePath],
-    :config => config
+    :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
 
   # Ensure AdMob headers are available for AppDelegate logging during dev client builds
