@@ -128,8 +128,21 @@ jobs:
           cd "$PROJ_DIR"
           echo "🛠  Expo prebuild (ios)로 Info.plist 및 native 설정을 동기화합니다..."
           npx expo prebuild --platform ios --no-install --non-interactive
-          # Podfile은 레포지토리 버전을 유지 (커스텀 의존성 유지)
-          git checkout -- ios/Podfile || true
+          # expo prebuild가 생성한 Podfile을 사용하되, 필요한 커스텀 설정만 추가
+          # (Google-Mobile-Ads-SDK 및 커스텀 post_install 스크립트)
+          if [ -f ios/Podfile ]; then
+            echo "📝 expo prebuild가 생성한 Podfile에 커스텀 설정 추가..."
+            # Google-Mobile-Ads-SDK가 없으면 추가
+            if ! grep -q "Google-Mobile-Ads-SDK" ios/Podfile; then
+              # target 'pickplay' do 블록의 첫 번째 end 앞에 pod 추가
+              python3 -c "import re; content = open('ios/Podfile').read(); pattern = r\"(target ['\\\"].*pickplay.*['\\\"] do\\s+.*?)(\\nend)\"; replacement = r\"\\1\\n  # Ensure AdMob headers are available for AppDelegate logging during dev client builds\\n  pod 'Google-Mobile-Ads-SDK'\\2\"; content = re.sub(pattern, replacement, content, flags=re.DOTALL); open('ios/Podfile', 'w').write(content)"
+            fi
+            # 커스텀 post_install 블록이 없으면 추가
+            if ! grep -q "# Custom Folly and C++20 settings" ios/Podfile; then
+              cat scripts/add-folly-settings.rb >> ios/Podfile
+            fi
+            echo "✅ Podfile 커스텀 설정 추가 완료"
+          fi
           echo "✅ Expo prebuild 완료"
 
       - name: Ensure AdMob app id injected into Info.plist
