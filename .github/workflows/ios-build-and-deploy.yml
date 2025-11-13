@@ -316,10 +316,10 @@ jobs:
           if [ -d "node_modules/react-native-google-mobile-ads" ]; then
             echo "✅ node_modules/react-native-google-mobile-ads 디렉토리 발견"
             find node_modules/react-native-google-mobile-ads -type f \( -name "*.rb" -o -name "*.sh" -o -name "*.podspec" \) 2>/dev/null | head -10
-            # podspec 파일에서 스크립트 확인
+            # podspec 파일 전체 내용 확인
             if [ -f "node_modules/react-native-google-mobile-ads/RNGoogleMobileAds.podspec" ]; then
-              echo "--- RNGoogleMobileAds.podspec 내용 (스크립트 부분) ---"
-              grep -A 20 "script\|app.json\|ios_app_id" "node_modules/react-native-google-mobile-ads/RNGoogleMobileAds.podspec" 2>/dev/null | head -30
+              echo "--- RNGoogleMobileAds.podspec 전체 내용 ---"
+              cat "node_modules/react-native-google-mobile-ads/RNGoogleMobileAds.podspec" 2>/dev/null
             fi
           fi
 
@@ -439,11 +439,25 @@ jobs:
           # 여러 위치에 복사
           cp app.json ios/app.json 2>/dev/null || true
           cp app.json ios/pickplay/app.json 2>/dev/null || true
+          # SRCROOT 환경 변수 확인 (Xcode 빌드 시 사용됨)
+          echo "===== 빌드 직전 환경 변수 확인 ====="
+          echo "현재 작업 디렉토리: $(pwd)"
+          echo "SRCROOT는 Xcode 빌드 시 자동으로 설정됩니다 (프로젝트 루트)"
           echo "✅ 빌드 직전 app.json 복사 완료"
           if [ -f Gemfile ]; then
-            bundle exec fastlane ios dev_client
+            bundle exec fastlane ios dev_client 2>&1 | tee /tmp/fastlane_build.log || {
+              echo "::error::빌드 실패, 로그 확인 중..."
+              # app.json 관련 에러 찾기
+              grep -i "app.json\|ios_app_id\|react-native-google-mobile-ads" /tmp/fastlane_build.log | head -20 || true
+              exit 1
+            }
           else
-            fastlane ios dev_client
+            fastlane ios dev_client 2>&1 | tee /tmp/fastlane_build.log || {
+              echo "::error::빌드 실패, 로그 확인 중..."
+              # app.json 관련 에러 찾기
+              grep -i "app.json\|ios_app_id\|react-native-google-mobile-ads" /tmp/fastlane_build.log | head -20 || true
+              exit 1
+            }
           fi
 
       - name: Upload Dev Client IPA artifact

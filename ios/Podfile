@@ -48,6 +48,40 @@ post_install do |installer|
     Pod::UI.puts "  react_native_post_install failed: #{e.message}"
   end
 
+  # react-native-google-mobile-ads 스크립트가 app.json을 찾을 수 있도록 확인
+  begin
+    project_root = File.expand_path('..', __dir__)
+    app_json_path = File.join(project_root, 'app.json')
+    
+    if File.exist?(app_json_path)
+      Pod::UI.puts "  ✅ app.json 발견: #{app_json_path}"
+      # RNGoogleMobileAds 타겟의 스크립트 단계 확인 및 수정
+      installer.pods_project.targets.each do |target|
+        if target.name == 'RNGoogleMobileAds'
+          target.build_phases.grep(Xcodeproj::Project::Object::PBXShellScriptBuildPhase).each do |phase|
+            if phase.name && phase.name.include?('RNGoogleMobileAds') && phase.name.include?('Configuration')
+              Pod::UI.puts "  📝 RNGoogleMobileAds 스크립트 단계 발견: #{phase.name}"
+              # 스크립트가 SRCROOT를 사용하도록 확인
+              if phase.shell_script && phase.shell_script.include?('app.json')
+                Pod::UI.puts "  ✅ 스크립트에서 app.json 참조 확인됨"
+                # SRCROOT 환경 변수가 설정되어 있는지 확인
+                if !phase.shell_script.include?('$SRCROOT') && !phase.shell_script.include?('${SRCROOT}')
+                  Pod::UI.puts "  ⚠️  스크립트에 SRCROOT가 없습니다. 수정 중..."
+                  # 스크립트 시작 부분에 SRCROOT 설정 추가
+                  phase.shell_script = "cd \"${SRCROOT}\"\n#{phase.shell_script}"
+                end
+              end
+            end
+          end
+        end
+      end
+    else
+      Pod::UI.puts "  ⚠️  app.json을 찾을 수 없습니다: #{app_json_path}"
+    end
+  rescue => e
+    Pod::UI.puts "  react-native-google-mobile-ads app.json 확인 실패: #{e.message}"
+  end
+
   # --- 기존에 유지되어야 했던 중요 패치들 ---
 
   # ExpoModulesCore Swift 파일들의 import React 패치
