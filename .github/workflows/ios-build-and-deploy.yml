@@ -167,17 +167,40 @@ jobs:
           fi
           echo "✅ Expo prebuild 완료"
           
-          # expo prebuild 후에도 app.json이 올바르게 유지되는지 확인
+          # expo prebuild 후에도 app.json이 올바르게 유지되는지 확인 및 재생성
           echo "🔍 expo prebuild 후 app.json 확인 중..."
           if [ ! -f app.json ]; then
-            echo "::error::expo prebuild 후 app.json이 없습니다!"
-            exit 1
+            echo "⚠️  expo prebuild 후 app.json이 없습니다! 재생성합니다..."
+            node -e "
+              const config = require('./app.config.js');
+              const fs = require('fs');
+              let appJson = { ...config.expo };
+              if (config.expo.extra && config.expo.extra['react-native-google-mobile-ads']) {
+                appJson['react-native-google-mobile-ads'] = config.expo.extra['react-native-google-mobile-ads'];
+              }
+              fs.writeFileSync('app.json', JSON.stringify(appJson, null, 2));
+              console.log('✅ app.json 재생성 완료');
+            "
+          else
+            # app.json이 있지만 react-native-google-mobile-ads 설정이 없으면 재생성
+            if ! node -e "const fs=require('fs'); const json=JSON.parse(fs.readFileSync('app.json','utf8')); if(!json['react-native-google-mobile-ads']||!json['react-native-google-mobile-ads'].ios_app_id){console.log('❌ app.json에 react-native-google-mobile-ads 설정이 없습니다!'); process.exit(1);} console.log('✅ app.json 확인 완료');"; then
+              echo "⚠️  app.json에 react-native-google-mobile-ads 설정이 없습니다! 재생성합니다..."
+              node -e "
+                const config = require('./app.config.js');
+                const fs = require('fs');
+                let appJson = { ...config.expo };
+                if (config.expo.extra && config.expo.extra['react-native-google-mobile-ads']) {
+                  appJson['react-native-google-mobile-ads'] = config.expo.extra['react-native-google-mobile-ads'];
+                }
+                fs.writeFileSync('app.json', JSON.stringify(appJson, null, 2));
+                console.log('✅ app.json 재생성 완료');
+              "
+            fi
           fi
-          if ! node -e "const fs=require('fs'); const json=JSON.parse(fs.readFileSync('app.json','utf8')); if(!json['react-native-google-mobile-ads']||!json['react-native-google-mobile-ads'].ios_app_id){console.log('❌ app.json에 react-native-google-mobile-ads 설정이 없습니다!'); process.exit(1);} console.log('✅ app.json 확인 완료');"; then
-            echo "::error::expo prebuild 후 app.json이 손상되었습니다!"
-            exit 1
-          fi
-          echo "✅ app.json 확인 완료"
+          # 여러 위치에 복사
+          cp app.json ios/app.json 2>/dev/null || true
+          cp app.json ios/pickplay/app.json 2>/dev/null || true
+          echo "✅ app.json 확인 및 복사 완료"
 
       - name: Ensure AdMob app id injected into Info.plist
         run: |
@@ -236,6 +259,14 @@ jobs:
 
       - name: Install CocoaPods
         run: |
+          cd "$PROJ_DIR"
+          # pod install 전에 app.json을 여러 위치에 복사 (CocoaPods 스크립트가 찾을 수 있도록)
+          if [ -f app.json ]; then
+            echo "📋 pod install 전 app.json 복사 중..."
+            cp app.json ios/app.json 2>/dev/null || true
+            cp app.json ios/pickplay/app.json 2>/dev/null || true
+            echo "✅ app.json 복사 완료"
+          fi
           cd "$PROJ_DIR/ios"
           # 캐시가 있으면 repo-update 생략 (빠른 설치)
           if [ -d "Pods" ] && [ -f "Podfile.lock" ]; then
@@ -244,6 +275,31 @@ jobs:
           else
             echo "📦 Pods 캐시 없음, 전체 설치 (repo-update 포함)"
             pod install --repo-update
+          fi
+          # pod install 후에도 app.json 확인
+          cd "$PROJ_DIR"
+          if [ ! -f app.json ]; then
+            echo "::error::pod install 후 app.json이 없습니다!"
+            exit 1
+          fi
+          # pod install 후에도 여러 위치에 복사
+          cp app.json ios/app.json 2>/dev/null || true
+          cp app.json ios/pickplay/app.json 2>/dev/null || true
+          echo "✅ pod install 완료, app.json 확인 및 복사 완료"
+          # pod install 후 CocoaPods 스크립트 확인
+          echo "===== pod install 후 CocoaPods 스크립트 확인 ====="
+          if [ -d "ios/Pods/Target Support Files/RNGoogleMobileAds" ]; then
+            echo "RNGoogleMobileAds 타겟 지원 파일 발견"
+            # 스크립트 파일 찾기
+            find "ios/Pods/Target Support Files/RNGoogleMobileAds" -name "*.sh" 2>/dev/null | while read script; do
+              echo "--- 스크립트 파일: $script ---"
+              if grep -q "app.json" "$script" 2>/dev/null; then
+                echo "✅ 이 스크립트에서 app.json을 참조합니다:"
+                grep -n "app.json" "$script" 2>/dev/null | head -10
+                echo "--- 스크립트 전체 내용 (app.json 관련 부분) ---"
+                cat "$script" 2>/dev/null | grep -A 5 -B 5 "app.json" | head -20
+              fi
+            done
           fi
 
       - name: Print Podfile.lock (debug)
@@ -286,6 +342,45 @@ jobs:
             exit 1
           fi
 
+      - name: Debug CocoaPods script working directory and app.json path
+        run: |
+          cd "$PROJ_DIR"
+          echo "🔍 CocoaPods 스크립트가 실행되는 작업 디렉토리 및 app.json 경로 확인 중..."
+          echo "===== 프로젝트 구조 확인 ====="
+          echo "현재 작업 디렉토리: $(pwd)"
+          echo "프로젝트 루트: $PROJ_DIR"
+          echo "===== app.json 위치 확인 ====="
+          ls -la app.json 2>/dev/null && echo "✅ 프로젝트 루트에 app.json 존재" || echo "❌ 프로젝트 루트에 app.json 없음"
+          ls -la ios/app.json 2>/dev/null && echo "✅ ios/app.json 존재" || echo "❌ ios/app.json 없음"
+          ls -la ios/pickplay/app.json 2>/dev/null && echo "✅ ios/pickplay/app.json 존재" || echo "❌ ios/pickplay/app.json 없음"
+          echo "===== react-native-google-mobile-ads CocoaPods 스크립트 확인 ====="
+          if [ -d "ios/Pods" ]; then
+            echo "Pods 디렉토리 존재, CocoaPods 스크립트 확인 가능"
+            # react-native-google-mobile-ads의 CocoaPods 스크립트 찾기
+            echo "===== RNGoogleMobileAds 관련 스크립트 파일 찾기 ====="
+            find ios/Pods -path "*/RNGoogleMobileAds/*" -name "*.sh" -o -name "*.rb" 2>/dev/null | head -10 || echo "스크립트 파일 찾기 실패"
+            # 실제 CocoaPods 스크립트가 app.json을 어떻게 읽는지 확인
+            echo "===== CocoaPods 스크립트에서 app.json 경로 확인 ====="
+            if [ -f "ios/Pods/Target Support Files/RNGoogleMobileAds/RNGoogleMobileAds-umbrella.h" ] || [ -d "ios/Pods/RNGoogleMobileAds" ]; then
+              echo "RNGoogleMobileAds Pod 발견"
+              # 스크립트 파일 찾기
+              find ios/Pods -name "*RNGoogleMobileAds*" -type f \( -name "*.sh" -o -name "*.rb" \) 2>/dev/null | while read script; do
+                echo "--- 스크립트 파일: $script ---"
+                if grep -q "app.json" "$script" 2>/dev/null; then
+                  echo "✅ 이 스크립트에서 app.json을 참조합니다:"
+                  grep -n "app.json" "$script" 2>/dev/null | head -5
+                fi
+              done
+            fi
+          else
+            echo "⚠️  Pods 디렉토리가 없습니다 (pod install이 필요할 수 있습니다)"
+          fi
+          echo "===== Xcode 빌드 시 환경 변수 정보 ====="
+          echo "일반적으로 CocoaPods 스크립트는 다음 환경 변수를 사용합니다:"
+          echo "- SRCROOT: 프로젝트 루트 디렉토리 (일반적으로 ios/의 부모 디렉토리)"
+          echo "- PROJECT_DIR: 프로젝트 디렉토리"
+          echo "- PWD: 현재 작업 디렉토리 (빌드 시점에 다를 수 있음)"
+
       - name: Verify app.json before build
         run: |
           cd "$PROJ_DIR"
@@ -302,6 +397,7 @@ jobs:
           # CocoaPods 스크립트가 찾을 수 있도록 여러 위치에 복사
           echo "📋 app.json을 여러 위치에 복사 중..."
           cp app.json ios/app.json 2>/dev/null || true
+          cp app.json ios/pickplay/app.json 2>/dev/null || true
           # 프로젝트 루트의 app.json 내용 확인 (디버깅)
           echo "===== app.json의 react-native-google-mobile-ads 설정 ====="
           node -e "const fs=require('fs'); const json=JSON.parse(fs.readFileSync('app.json','utf8')); console.log(JSON.stringify(json['react-native-google-mobile-ads'], null, 2));"
