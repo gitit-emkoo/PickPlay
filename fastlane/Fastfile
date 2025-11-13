@@ -654,6 +654,10 @@ platform :ios do
     end
 
     # Dev Client 빌드 (Debug, Internal Distribution)
+    # IPA 파일을 프로젝트 루트에 생성하도록 output_directory 지정
+    project_root = File.expand_path('..', __dir__)
+    output_directory = project_root
+    
     build_app(
       workspace:     WORKSPACE,
       scheme:        SCHEME,
@@ -661,6 +665,7 @@ platform :ios do
       clean:         true,
       skip_codesigning: false,
       export_method: "development",  # Internal distribution
+      output_directory: output_directory,  # IPA 파일을 프로젝트 루트에 생성
       xcargs: [
         "DEVELOPMENT_TEAM=#{TEAM_ID}",
         "CODE_SIGN_STYLE=Manual",
@@ -675,6 +680,14 @@ platform :ios do
         }
       }
     )
+    
+    # 생성된 IPA 파일 확인
+    ipa_files = Dir.glob(File.join(output_directory, "*.ipa"))
+    if ipa_files.any?
+      UI.success("✅ IPA 파일 생성 완료: #{ipa_files.first}")
+    else
+      UI.important("⚠️ IPA 파일을 찾을 수 없습니다. output_directory: #{output_directory}")
+    end
 
     UI.success("✅ Dev Client 빌드 성공")
     UI.message("📱 빌드된 IPA 파일을 다운로드하여 설치하세요.")

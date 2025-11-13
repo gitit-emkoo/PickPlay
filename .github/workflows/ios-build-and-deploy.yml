@@ -460,12 +460,45 @@ jobs:
             }
           fi
 
+      - name: Find and upload IPA file
+        run: |
+          cd "$PROJ_DIR"
+          echo "🔍 IPA 파일 찾기 중..."
+          # 여러 가능한 위치에서 IPA 파일 찾기
+          IPA_FILE=$(find . -name "*.ipa" -type f 2>/dev/null | head -1)
+          if [ -z "$IPA_FILE" ]; then
+            # Fastlane이 생성한 기본 경로 확인
+            IPA_FILE=$(find . -path "*/fastlane/*.ipa" -o -name "*.ipa" 2>/dev/null | head -1)
+          fi
+          if [ -z "$IPA_FILE" ]; then
+            # 현재 디렉토리와 하위 디렉토리 모두 확인
+            IPA_FILE=$(find . -type f -name "*.ipa" 2>/dev/null | head -1)
+          fi
+          if [ -n "$IPA_FILE" ]; then
+            echo "✅ IPA 파일 발견: $IPA_FILE"
+            echo "파일 크기: $(ls -lh "$IPA_FILE" | awk '{print $5}')"
+            echo "파일 경로: $(realpath "$IPA_FILE" 2>/dev/null || echo "$IPA_FILE")"
+            # IPA 파일을 프로젝트 루트로 복사 (업로드 편의를 위해)
+            cp "$IPA_FILE" ./pickplay-dev-client.ipa 2>/dev/null || cp "$IPA_FILE" ./dev-client.ipa
+            echo "✅ IPA 파일 준비 완료"
+          else
+            echo "::error::IPA 파일을 찾을 수 없습니다!"
+            echo "현재 디렉토리: $(pwd)"
+            echo "디렉토리 내용:"
+            ls -la . | head -20
+            echo "하위 디렉토리 검색:"
+            find . -type f -name "*.ipa" 2>/dev/null || echo "IPA 파일 없음"
+            exit 1
+          fi
+
       - name: Upload Dev Client IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: dev-client-ipa
           path: |
             ${{ env.PROJ_DIR }}/*.ipa
+            ${{ env.PROJ_DIR }}/pickplay-dev-client.ipa
+            ${{ env.PROJ_DIR }}/dev-client.ipa
           retention-days: 30
         if: success()
         continue-on-error: true
