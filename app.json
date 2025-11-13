@@ -1,0 +1,65 @@
+{
+  "name": "pickplay",
+  "slug": "pickplay",
+  "version": "1.2.0",
+  "extra": {
+    "eas": {
+      "projectId": "f0389889-654e-4120-8839-8b795ff4b641"
+    },
+    "react-native-google-mobile-ads": {
+      "ios_app_id": "ca-app-pub-3940256099942544~1458002511"
+    }
+  },
+  "orientation": "portrait",
+  "icon": "./assets/images/icon.png",
+  "userInterfaceStyle": "light",
+  "splash": {
+    "image": "./assets/images/splash-icon.png",
+    "resizeMode": "contain",
+    "backgroundColor": "#ffffff"
+  },
+  "assetBundlePatterns": [
+    "**/*"
+  ],
+  "ios": {
+    "supportsTablet": true,
+    "bundleIdentifier": "com.pickplay.kwcc",
+    "infoPlist": {
+      "GADApplicationIdentifier": "ca-app-pub-3940256099942544~1458002511"
+    }
+  },
+  "android": {
+    "adaptiveIcon": {
+      "foregroundImage": "./assets/images/adaptive-icon.png",
+      "backgroundColor": "#ffffff"
+    }
+  },
+  "web": {
+    "favicon": "./assets/images/favicon.png"
+  },
+  "plugins": [
+    [
+      "expo-build-properties",
+      {
+        "ios": {
+          "newArchEnabled": false,
+          "flipper": false,
+          "deploymentTarget": "15.1",
+          "useFrameworks": "static",
+          "podTargetXcconfig": {
+            "GCC_PREPROCESSOR_DEFINITIONS": "$(inherited) FOLLY_NO_CONFIG=1 FOLLY_HAS_COROUTINES=0",
+            "CLANG_CXX_LANGUAGE_STANDARD": "gnu++20"
+          },
+          "userTargetXcconfig": {
+            "GCC_PREPROCESSOR_DEFINITIONS": "$(inherited) FOLLY_NO_CONFIG=1 FOLLY_HAS_COROUTINES=0",
+            "CLANG_CXX_LANGUAGE_STANDARD": "gnu++20"
+          }
+        }
+      }
+    ],
+    "./plugins/with-admob-test-device"
+  ],
+  "react-native-google-mobile-ads": {
+    "ios_app_id": "ca-app-pub-3940256099942544~1458002511"
+  }
+}
