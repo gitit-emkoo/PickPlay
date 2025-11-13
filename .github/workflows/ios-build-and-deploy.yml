@@ -459,35 +459,87 @@ jobs:
               exit 1
             }
           fi
+          
+          # Fastlane 빌드 로그에서 IPA 파일 경로 추출
+          echo "===== Fastlane 빌드 로그에서 IPA 파일 경로 확인 ====="
+          grep -i "\.ipa\|IPA\|export.*ipa\|generated.*ipa" /tmp/fastlane_build.log | tail -20 || echo "IPA 관련 로그 없음"
 
       - name: Find and upload IPA file
         run: |
           cd "$PROJ_DIR"
           echo "🔍 IPA 파일 찾기 중..."
-          # 여러 가능한 위치에서 IPA 파일 찾기
-          IPA_FILE=$(find . -name "*.ipa" -type f 2>/dev/null | head -1)
-          if [ -z "$IPA_FILE" ]; then
-            # Fastlane이 생성한 기본 경로 확인
-            IPA_FILE=$(find . -path "*/fastlane/*.ipa" -o -name "*.ipa" 2>/dev/null | head -1)
-          fi
-          if [ -z "$IPA_FILE" ]; then
-            # 현재 디렉토리와 하위 디렉토리 모두 확인
-            IPA_FILE=$(find . -type f -name "*.ipa" 2>/dev/null | head -1)
-          fi
+          echo "현재 작업 디렉토리: $(pwd)"
+          
+          # 1. 프로젝트 루트에서 검색
+          echo "===== 1. 프로젝트 루트 검색 ====="
+          IPA_FILE=$(find . -maxdepth 1 -name "*.ipa" -type f 2>/dev/null | head -1)
           if [ -n "$IPA_FILE" ]; then
+            echo "✅ 프로젝트 루트에서 발견: $IPA_FILE"
+          fi
+          
+          # 2. fastlane 디렉토리에서 검색
+          if [ -z "$IPA_FILE" ]; then
+            echo "===== 2. fastlane 디렉토리 검색 ====="
+            IPA_FILE=$(find ./fastlane -name "*.ipa" -type f 2>/dev/null | head -1)
+            if [ -n "$IPA_FILE" ]; then
+              echo "✅ fastlane 디렉토리에서 발견: $IPA_FILE"
+            fi
+          fi
+          
+          # 3. ios 디렉토리에서 검색
+          if [ -z "$IPA_FILE" ]; then
+            echo "===== 3. ios 디렉토리 검색 ====="
+            IPA_FILE=$(find ./ios -name "*.ipa" -type f 2>/dev/null | head -1)
+            if [ -n "$IPA_FILE" ]; then
+              echo "✅ ios 디렉토리에서 발견: $IPA_FILE"
+            fi
+          fi
+          
+          # 4. 전체 하위 디렉토리에서 검색 (DerivedData 제외)
+          if [ -z "$IPA_FILE" ]; then
+            echo "===== 4. 전체 하위 디렉토리 검색 (DerivedData 제외) ====="
+            IPA_FILE=$(find . -type f -name "*.ipa" -not -path "*/DerivedData/*" -not -path "*/build/*" -not -path "*/.git/*" 2>/dev/null | head -1)
+            if [ -n "$IPA_FILE" ]; then
+              echo "✅ 하위 디렉토리에서 발견: $IPA_FILE"
+            fi
+          fi
+          
+          # 5. Fastlane 빌드 로그에서 경로 추출 시도
+          if [ -z "$IPA_FILE" ] && [ -f /tmp/fastlane_build.log ]; then
+            echo "===== 5. Fastlane 빌드 로그에서 경로 추출 ====="
+            LOG_IPA_PATH=$(grep -i "\.ipa\|export.*ipa\|generated.*ipa" /tmp/fastlane_build.log | grep -oE "[^\s]+\.ipa" | head -1)
+            if [ -n "$LOG_IPA_PATH" ] && [ -f "$LOG_IPA_PATH" ]; then
+              IPA_FILE="$LOG_IPA_PATH"
+              echo "✅ 빌드 로그에서 발견: $IPA_FILE"
+            fi
+          fi
+          
+          # IPA 파일이 발견된 경우
+          if [ -n "$IPA_FILE" ] && [ -f "$IPA_FILE" ]; then
             echo "✅ IPA 파일 발견: $IPA_FILE"
             echo "파일 크기: $(ls -lh "$IPA_FILE" | awk '{print $5}')"
-            echo "파일 경로: $(realpath "$IPA_FILE" 2>/dev/null || echo "$IPA_FILE")"
+            echo "절대 경로: $(realpath "$IPA_FILE" 2>/dev/null || echo "$IPA_FILE")"
             # IPA 파일을 프로젝트 루트로 복사 (업로드 편의를 위해)
-            cp "$IPA_FILE" ./pickplay-dev-client.ipa 2>/dev/null || cp "$IPA_FILE" ./dev-client.ipa
-            echo "✅ IPA 파일 준비 완료"
+            cp "$IPA_FILE" ./pickplay-dev-client.ipa
+            echo "✅ IPA 파일 준비 완료: ./pickplay-dev-client.ipa"
           else
             echo "::error::IPA 파일을 찾을 수 없습니다!"
+            echo "===== 디버깅 정보 ====="
             echo "현재 디렉토리: $(pwd)"
-            echo "디렉토리 내용:"
-            ls -la . | head -20
-            echo "하위 디렉토리 검색:"
-            find . -type f -name "*.ipa" 2>/dev/null || echo "IPA 파일 없음"
+            echo "프로젝트 루트 내용:"
+            ls -la . | head -30
+            echo ""
+            echo "fastlane 디렉토리 내용:"
+            ls -la ./fastlane 2>/dev/null | head -20 || echo "fastlane 디렉토리 없음"
+            echo ""
+            echo "ios 디렉토리 내용:"
+            ls -la ./ios 2>/dev/null | head -20 || echo "ios 디렉토리 없음"
+            echo ""
+            echo "전체 IPA 파일 검색 결과:"
+            find . -type f -name "*.ipa" 2>/dev/null | head -10 || echo "IPA 파일 없음"
+            echo ""
+            echo "Fastlane 빌드 로그 마지막 50줄:"
+            tail -50 /tmp/fastlane_build.log 2>/dev/null || echo "빌드 로그 없음"
             exit 1
           fi
 
