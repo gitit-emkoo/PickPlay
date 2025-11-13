@@ -299,7 +299,13 @@ jobs:
             echo "::error::app.json에 react-native-google-mobile-ads 설정이 올바르지 않습니다!"
             exit 1
           fi
-          echo "✅ app.json 확인 완료"
+          # CocoaPods 스크립트가 찾을 수 있도록 여러 위치에 복사
+          echo "📋 app.json을 여러 위치에 복사 중..."
+          cp app.json ios/app.json 2>/dev/null || true
+          # 프로젝트 루트의 app.json 내용 확인 (디버깅)
+          echo "===== app.json의 react-native-google-mobile-ads 설정 ====="
+          node -e "const fs=require('fs'); const json=JSON.parse(fs.readFileSync('app.json','utf8')); console.log(JSON.stringify(json['react-native-google-mobile-ads'], null, 2));"
+          echo "✅ app.json 확인 및 복사 완료"
 
       - name: Fastlane dev_client
         env:
@@ -316,6 +322,15 @@ jobs:
           KEYCHAIN_PASSWORD: actions
         run: |
           cd "$PROJ_DIR"
+          # 빌드 직전에 app.json 확인 및 복사 (CocoaPods 스크립트가 찾을 수 있도록)
+          if [ ! -f app.json ]; then
+            echo "::error::빌드 직전에 app.json이 없습니다!"
+            exit 1
+          fi
+          # 여러 위치에 복사
+          cp app.json ios/app.json 2>/dev/null || true
+          cp app.json ios/pickplay/app.json 2>/dev/null || true
+          echo "✅ 빌드 직전 app.json 복사 완료"
           if [ -f Gemfile ]; then
             bundle exec fastlane ios dev_client
           else
