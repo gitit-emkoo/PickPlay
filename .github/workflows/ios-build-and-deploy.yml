@@ -288,18 +288,39 @@ jobs:
           echo "✅ pod install 완료, app.json 확인 및 복사 완료"
           # pod install 후 CocoaPods 스크립트 확인
           echo "===== pod install 후 CocoaPods 스크립트 확인 ====="
+          # RNGoogleMobileAds 관련 모든 파일 찾기
+          echo "--- RNGoogleMobileAds 관련 파일 찾기 ---"
+          find ios/Pods -type f -name "*RNGoogleMobileAds*" 2>/dev/null | head -20
+          # Target Support Files 디렉토리 확인
           if [ -d "ios/Pods/Target Support Files/RNGoogleMobileAds" ]; then
-            echo "RNGoogleMobileAds 타겟 지원 파일 발견"
+            echo "✅ RNGoogleMobileAds 타겟 지원 파일 디렉토리 발견"
+            echo "--- 디렉토리 내용 ---"
+            ls -la "ios/Pods/Target Support Files/RNGoogleMobileAds/" 2>/dev/null || true
             # 스크립트 파일 찾기
-            find "ios/Pods/Target Support Files/RNGoogleMobileAds" -name "*.sh" 2>/dev/null | while read script; do
-              echo "--- 스크립트 파일: $script ---"
+            find "ios/Pods/Target Support Files/RNGoogleMobileAds" -type f 2>/dev/null | while read script; do
+              echo "--- 파일: $script ---"
               if grep -q "app.json" "$script" 2>/dev/null; then
-                echo "✅ 이 스크립트에서 app.json을 참조합니다:"
+                echo "✅ 이 파일에서 app.json을 참조합니다:"
                 grep -n "app.json" "$script" 2>/dev/null | head -10
-                echo "--- 스크립트 전체 내용 (app.json 관련 부분) ---"
-                cat "$script" 2>/dev/null | grep -A 5 -B 5 "app.json" | head -20
+                echo "--- 파일 내용 (app.json 관련 부분) ---"
+                cat "$script" 2>/dev/null | grep -A 10 -B 10 "app.json" | head -30
               fi
             done
+          else
+            echo "⚠️  RNGoogleMobileAds 타겟 지원 파일 디렉토리를 찾을 수 없습니다"
+            echo "--- Target Support Files 디렉토리 목록 ---"
+            ls -la "ios/Pods/Target Support Files/" 2>/dev/null | grep -i "google\|mobile\|ads" || echo "관련 디렉토리 없음"
+          fi
+          # node_modules에서 원본 스크립트 확인
+          echo "===== node_modules에서 react-native-google-mobile-ads 스크립트 확인 ====="
+          if [ -d "node_modules/react-native-google-mobile-ads" ]; then
+            echo "✅ node_modules/react-native-google-mobile-ads 디렉토리 발견"
+            find node_modules/react-native-google-mobile-ads -type f \( -name "*.rb" -o -name "*.sh" -o -name "*.podspec" \) 2>/dev/null | head -10
+            # podspec 파일에서 스크립트 확인
+            if [ -f "node_modules/react-native-google-mobile-ads/RNGoogleMobileAds.podspec" ]; then
+              echo "--- RNGoogleMobileAds.podspec 내용 (스크립트 부분) ---"
+              grep -A 20 "script\|app.json\|ios_app_id" "node_modules/react-native-google-mobile-ads/RNGoogleMobileAds.podspec" 2>/dev/null | head -30
+            fi
           fi
 
       - name: Print Podfile.lock (debug)
@@ -353,27 +374,19 @@ jobs:
           ls -la app.json 2>/dev/null && echo "✅ 프로젝트 루트에 app.json 존재" || echo "❌ 프로젝트 루트에 app.json 없음"
           ls -la ios/app.json 2>/dev/null && echo "✅ ios/app.json 존재" || echo "❌ ios/app.json 없음"
           ls -la ios/pickplay/app.json 2>/dev/null && echo "✅ ios/pickplay/app.json 존재" || echo "❌ ios/pickplay/app.json 없음"
-          echo "===== react-native-google-mobile-ads CocoaPods 스크립트 확인 ====="
-          if [ -d "ios/Pods" ]; then
-            echo "Pods 디렉토리 존재, CocoaPods 스크립트 확인 가능"
-            # react-native-google-mobile-ads의 CocoaPods 스크립트 찾기
-            echo "===== RNGoogleMobileAds 관련 스크립트 파일 찾기 ====="
-            find ios/Pods -path "*/RNGoogleMobileAds/*" -name "*.sh" -o -name "*.rb" 2>/dev/null | head -10 || echo "스크립트 파일 찾기 실패"
-            # 실제 CocoaPods 스크립트가 app.json을 어떻게 읽는지 확인
-            echo "===== CocoaPods 스크립트에서 app.json 경로 확인 ====="
-            if [ -f "ios/Pods/Target Support Files/RNGoogleMobileAds/RNGoogleMobileAds-umbrella.h" ] || [ -d "ios/Pods/RNGoogleMobileAds" ]; then
-              echo "RNGoogleMobileAds Pod 발견"
-              # 스크립트 파일 찾기
-              find ios/Pods -name "*RNGoogleMobileAds*" -type f \( -name "*.sh" -o -name "*.rb" \) 2>/dev/null | while read script; do
-                echo "--- 스크립트 파일: $script ---"
-                if grep -q "app.json" "$script" 2>/dev/null; then
-                  echo "✅ 이 스크립트에서 app.json을 참조합니다:"
-                  grep -n "app.json" "$script" 2>/dev/null | head -5
-                fi
-              done
+          echo "===== node_modules에서 react-native-google-mobile-ads 원본 스크립트 확인 ====="
+          if [ -d "node_modules/react-native-google-mobile-ads" ]; then
+            echo "✅ node_modules/react-native-google-mobile-ads 디렉토리 발견"
+            # podspec 파일 확인
+            if [ -f "node_modules/react-native-google-mobile-ads/RNGoogleMobileAds.podspec" ]; then
+              echo "--- RNGoogleMobileAds.podspec 전체 내용 ---"
+              cat "node_modules/react-native-google-mobile-ads/RNGoogleMobileAds.podspec" 2>/dev/null | head -100
             fi
+            # iOS 스크립트 파일 찾기
+            echo "--- iOS 관련 스크립트 파일 찾기 ---"
+            find node_modules/react-native-google-mobile-ads/ios -type f \( -name "*.sh" -o -name "*.rb" -o -name "*.js" \) 2>/dev/null | head -10
           else
-            echo "⚠️  Pods 디렉토리가 없습니다 (pod install이 필요할 수 있습니다)"
+            echo "⚠️  node_modules/react-native-google-mobile-ads 디렉토리가 없습니다"
           fi
           echo "===== Xcode 빌드 시 환경 변수 정보 ====="
           echo "일반적으로 CocoaPods 스크립트는 다음 환경 변수를 사용합니다:"
