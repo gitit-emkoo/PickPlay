@@ -48,27 +48,54 @@ post_install do |installer|
     Pod::UI.puts "  react_native_post_install failed: #{e.message}"
   end
 
-  # react-native-google-mobile-ads 스크립트가 app.json을 찾을 수 있도록 확인
+  # react-native-google-mobile-ads 스크립트가 app.json을 찾을 수 있도록 수정
   begin
     project_root = File.expand_path('..', __dir__)
     app_json_path = File.join(project_root, 'app.json')
     
     if File.exist?(app_json_path)
       Pod::UI.puts "  ✅ app.json 발견: #{app_json_path}"
-      # RNGoogleMobileAds 타겟의 스크립트 단계 확인 및 수정
+      
+      # 프로젝트 타겟(pickplay)의 빌드 설정 수정
       installer.pods_project.targets.each do |target|
         if target.name == 'RNGoogleMobileAds'
           target.build_phases.grep(Xcodeproj::Project::Object::PBXShellScriptBuildPhase).each do |phase|
             if phase.name && phase.name.include?('RNGoogleMobileAds') && phase.name.include?('Configuration')
               Pod::UI.puts "  📝 RNGoogleMobileAds 스크립트 단계 발견: #{phase.name}"
-              # 스크립트가 SRCROOT를 사용하도록 확인
-              if phase.shell_script && phase.shell_script.include?('app.json')
-                Pod::UI.puts "  ✅ 스크립트에서 app.json 참조 확인됨"
-                # SRCROOT 환경 변수가 설정되어 있는지 확인
-                if !phase.shell_script.include?('$SRCROOT') && !phase.shell_script.include?('${SRCROOT}')
-                  Pod::UI.puts "  ⚠️  스크립트에 SRCROOT가 없습니다. 수정 중..."
-                  # 스크립트 시작 부분에 SRCROOT 설정 추가
-                  phase.shell_script = "cd \"${SRCROOT}\"\n#{phase.shell_script}"
+              
+              # 스크립트 내용 확인
+              if phase.shell_script
+                # PROJECT_DIR을 프로젝트 루트로 설정하는 코드 추가
+                # ios_config.sh는 PROJECT_DIR에서 시작해서 상위 디렉토리를 검색하므로
+                # PROJECT_DIR을 프로젝트 루트로 설정하면 app.json을 찾을 수 있습니다
+                original_script = phase.shell_script
+                
+                # 스크립트 시작 부분에 PROJECT_DIR을 프로젝트 루트로 설정
+                # SRCROOT는 Xcode가 자동으로 설정하는데, 이것이 프로젝트 루트를 가리킵니다
+                if !original_script.include?('PROJECT_DIR="${SRCROOT}"') && !original_script.include?("PROJECT_DIR=\"#{project_root}\"")
+                  Pod::UI.puts "  🔧 PROJECT_DIR을 프로젝트 루트로 설정 중..."
+                  # 스크립트 시작 부분에 PROJECT_DIR 설정 추가
+                  phase.shell_script = "export PROJECT_DIR=\"${SRCROOT}\"\n#{original_script}"
+                  Pod::UI.puts "  ✅ 스크립트 수정 완료"
+                else
+                  Pod::UI.puts "  ✅ 스크립트에 이미 PROJECT_DIR 설정이 있습니다"
+                end
+              end
+            end
+          end
+        end
+      end
+      
+      # 메인 프로젝트의 빌드 설정도 수정
+      installer.aggregate_targets.each do |aggregate_target|
+        aggregate_target.user_project.targets.each do |target|
+          if target.name == 'pickplay'
+            target.build_phases.grep(Xcodeproj::Project::Object::PBXShellScriptBuildPhase).each do |phase|
+              if phase.name && phase.name.include?('RNGoogleMobileAds') && phase.name.include?('Configuration')
+                Pod::UI.puts "  📝 pickplay 타겟의 RNGoogleMobileAds 스크립트 단계 발견: #{phase.name}"
+                if phase.shell_script && !phase.shell_script.include?('PROJECT_DIR="${SRCROOT}"')
+                  Pod::UI.puts "  🔧 pickplay 타겟의 스크립트도 수정 중..."
+                  phase.shell_script = "export PROJECT_DIR=\"${SRCROOT}\"\n#{phase.shell_script}"
                 end
               end
             end
@@ -80,6 +107,7 @@ post_install do |installer|
     end
   rescue => e
     Pod::UI.puts "  react-native-google-mobile-ads app.json 확인 실패: #{e.message}"
+    Pod::UI.puts "  스택 트레이스: #{e.backtrace.first(5).join("\n")}"
   end
 
   # --- 기존에 유지되어야 했던 중요 패치들 ---

@@ -446,16 +446,44 @@ jobs:
           echo "✅ 빌드 직전 app.json 복사 완료"
           if [ -f Gemfile ]; then
             bundle exec fastlane ios dev_client 2>&1 | tee /tmp/fastlane_build.log || {
-              echo "::error::빌드 실패, 로그 확인 중..."
+              echo "::error::빌드 실패, 상세 로그 확인 중..."
+              echo "===== 빌드 실패 - 에러 메시지 분석 ====="
+              # xcodebuild 에러 찾기
+              echo "--- xcodebuild 에러 메시지 ---"
+              grep -i "error:\|failed\|fatal" /tmp/fastlane_build.log | tail -30 || echo "xcodebuild 에러 없음"
+              echo ""
+              # 코드 서명 관련 에러 찾기
+              echo "--- 코드 서명 관련 에러 ---"
+              grep -i "code.*sign\|provisioning\|certificate\|keychain" /tmp/fastlane_build.log | tail -20 || echo "코드 서명 에러 없음"
+              echo ""
               # app.json 관련 에러 찾기
-              grep -i "app.json\|ios_app_id\|react-native-google-mobile-ads" /tmp/fastlane_build.log | head -20 || true
+              echo "--- app.json 관련 에러 ---"
+              grep -i "app.json\|ios_app_id\|react-native-google-mobile-ads" /tmp/fastlane_build.log | head -20 || echo "app.json 에러 없음"
+              echo ""
+              # 빌드 로그의 마지막 100줄 출력
+              echo "--- 빌드 로그 마지막 100줄 ---"
+              tail -100 /tmp/fastlane_build.log
               exit 1
             }
           else
             fastlane ios dev_client 2>&1 | tee /tmp/fastlane_build.log || {
-              echo "::error::빌드 실패, 로그 확인 중..."
+              echo "::error::빌드 실패, 상세 로그 확인 중..."
+              echo "===== 빌드 실패 - 에러 메시지 분석 ====="
+              # xcodebuild 에러 찾기
+              echo "--- xcodebuild 에러 메시지 ---"
+              grep -i "error:\|failed\|fatal" /tmp/fastlane_build.log | tail -30 || echo "xcodebuild 에러 없음"
+              echo ""
+              # 코드 서명 관련 에러 찾기
+              echo "--- 코드 서명 관련 에러 ---"
+              grep -i "code.*sign\|provisioning\|certificate\|keychain" /tmp/fastlane_build.log | tail -20 || echo "코드 서명 에러 없음"
+              echo ""
               # app.json 관련 에러 찾기
-              grep -i "app.json\|ios_app_id\|react-native-google-mobile-ads" /tmp/fastlane_build.log | head -20 || true
+              echo "--- app.json 관련 에러 ---"
+              grep -i "app.json\|ios_app_id\|react-native-google-mobile-ads" /tmp/fastlane_build.log | head -20 || echo "app.json 에러 없음"
+              echo ""
+              # 빌드 로그의 마지막 100줄 출력
+              echo "--- 빌드 로그 마지막 100줄 ---"
+              tail -100 /tmp/fastlane_build.log
               exit 1
             }
           fi
