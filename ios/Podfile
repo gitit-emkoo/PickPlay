@@ -42,15 +42,10 @@ target 'pickplay' do
 end
 
 post_install do |installer|
-  # 전역 예외 처리: 블록 전체를 감싸서 어떤 에러가 발생해도 로그를 남기고 계속 진행
-  begin
-    installer_context = installer
-    Pod::UI.puts "  📝 post_install 블록 시작 (installer 파라미터 받음: #{installer.class})"
-  rescue => e
-    Pod::UI.puts "  ⚠️  post_install 블록 시작 단계에서 에러 발생: #{e.class}: #{e.message}"
-    Pod::UI.puts "     스택: #{e.backtrace.first(5).join("\n     ")}"
-    raise e  # 이 에러는 치명적이므로 다시 던짐
-  end
+  # installer_context를 블록 시작 부분에서 명시적으로 정의
+  installer_context = installer
+  
+  Pod::UI.puts "  📝 post_install 블록 시작 (installer 파라미터 받음: #{installer.class})"
   
   # react_native_post_install는 건너뛰기 (이것이 에러 원인일 수 있음)
   # 대신 우리가 필요한 설정을 직접 수행
@@ -205,9 +200,7 @@ post_install do |installer|
 
   # Folly 및 C++20 설정을 모든 타겟에 직접 주입
   begin
-    Pod::UI.puts "  🔧 Folly 설정 시작 (installer_context: #{installer_context.class}, installer: #{installer.class rescue 'undefined'})"
-    $stderr.puts "[DEBUG] Folly 설정 블록 시작: installer_context=#{installer_context.class}"
-    $stderr.flush
+    Pod::UI.puts "  🔧 Folly 설정 시작 (installer_context: #{installer_context.class})"
     folly_definitions = [
       'FOLLY_NO_CONFIG=1',
       'FOLLY_HAS_COROUTINES=0',
