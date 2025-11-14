@@ -41,7 +41,7 @@ target 'pickplay' do
 
 end
 
-post_install do |installer_context|
+post_install do |installer|
   begin
     react_native_post_install(installer_context)
   rescue => e
@@ -57,7 +57,7 @@ post_install do |installer_context|
       Pod::UI.puts "  ✅ app.json 발견: #{app_json_path}"
       
       # 프로젝트 타겟(pickplay)의 빌드 설정 수정
-      installer_context.pods_project.targets.each do |target|
+      installer.pods_project.targets.each do |target|
         if target.name == 'RNGoogleMobileAds'
           target.build_phases.grep(Xcodeproj::Project::Object::PBXShellScriptBuildPhase).each do |phase|
             if phase.name && phase.name.include?('RNGoogleMobileAds') && phase.name.include?('Configuration')
@@ -87,7 +87,7 @@ post_install do |installer_context|
       end
       
       # 메인 프로젝트의 빌드 설정도 수정
-      installer_context.aggregate_targets.each do |aggregate_target|
+      installer.aggregate_targets.each do |aggregate_target|
         aggregate_target.user_project.targets.each do |target|
           if target.name == 'pickplay'
             target.build_phases.grep(Xcodeproj::Project::Object::PBXShellScriptBuildPhase).each do |phase|
