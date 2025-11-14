@@ -58,7 +58,7 @@ post_install do |installer|
     if defined?(react_native_post_install)
       begin
         Pod::UI.puts "  🔄 react_native_post_install 호출 시도..."
-        react_native_post_install(installer)
+        react_native_post_install(installer_context)
         Pod::UI.puts "  ✅ react_native_post_install 성공"
       rescue => e
         Pod::UI.puts "  ⚠️  react_native_post_install failed: #{e.class}: #{e.message}"
@@ -83,7 +83,7 @@ post_install do |installer|
       Pod::UI.puts "  ✅ app.json 발견: #{app_json_path}"
       
       # 프로젝트 타겟(pickplay)의 빌드 설정 수정
-      installer.pods_project.targets.each do |target|
+      installer_context.pods_project.targets.each do |target|
         if target.name == 'RNGoogleMobileAds'
           target.build_phases.grep(Xcodeproj::Project::Object::PBXShellScriptBuildPhase).each do |phase|
             if phase.name && phase.name.include?('RNGoogleMobileAds') && phase.name.include?('Configuration')
@@ -113,7 +113,7 @@ post_install do |installer|
       end
       
       # 메인 프로젝트의 빌드 설정도 수정
-      installer.aggregate_targets.each do |aggregate_target|
+      installer_context.aggregate_targets.each do |aggregate_target|
         aggregate_target.user_project.targets.each do |target|
           if target.name == 'pickplay'
             target.build_phases.grep(Xcodeproj::Project::Object::PBXShellScriptBuildPhase).each do |phase|
@@ -205,7 +205,9 @@ post_install do |installer|
 
   # Folly 및 C++20 설정을 모든 타겟에 직접 주입
   begin
-    Pod::UI.puts "  🔧 Folly 설정 시작 (installer_context 사용)"
+    Pod::UI.puts "  🔧 Folly 설정 시작 (installer_context: #{installer_context.class}, installer: #{installer.class rescue 'undefined'})"
+    $stderr.puts "[DEBUG] Folly 설정 블록 시작: installer_context=#{installer_context.class}"
+    $stderr.flush
     folly_definitions = [
       'FOLLY_NO_CONFIG=1',
       'FOLLY_HAS_COROUTINES=0',
