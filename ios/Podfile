@@ -251,45 +251,47 @@ post_install do |installer|
     pods_root = File.expand_path('Pods', __dir__)
     target_support_files = File.join(pods_root, 'Target Support Files')
     project_root = File.expand_path('..', __dir__)
+    fixed_count = 0
     
     installer.pods_project.targets.each do |target|
       target.build_configurations.each do |config|
-        # MODULEMAP_FILE 경로 수정
-        # 프로젝트 루트 기준 경로를 Pods 디렉토리 기준 경로로 변경
         target_name = target.name
         expected_modulemap = File.join(target_support_files, target_name, "#{target_name}.modulemap")
+        correct_path = "$(PODS_ROOT)/Target Support Files/#{target_name}/#{target_name}.modulemap"
         
-        if config.build_settings['MODULEMAP_FILE']
-          modulemap_path = config.build_settings['MODULEMAP_FILE'].to_s
+        # MODULEMAP_FILE이 설정되어 있는지 확인
+        current_modulemap = config.build_settings['MODULEMAP_FILE'].to_s
+        
+        # 파일이 존재하는 경우에만 경로를 설정/수정
+        if File.exist?(expected_modulemap)
+          # 잘못된 경로인지 확인 (프로젝트 루트를 가리키거나, Pods를 포함하지 않는 경우)
+          needs_fix = false
           
-          # 프로젝트 루트에서 Target Support Files를 찾는 잘못된 경로를 수정
-          if modulemap_path.include?('Target Support Files')
-            # 절대 경로가 프로젝트 루트를 가리키는 경우 수정
-            if modulemap_path.start_with?('/') && modulemap_path.include?(project_root) && !modulemap_path.include?(pods_root)
-              # 잘못된 경로: /Users/runner/work/PickPlay/PickPlay/Target Support Files/...
-              # 올바른 경로: $(PODS_ROOT)/Target Support Files/...
-              correct_path = "$(PODS_ROOT)/Target Support Files/#{target_name}/#{target_name}.modulemap"
-              config.build_settings['MODULEMAP_FILE'] = correct_path
-              Pod::UI.puts "  ✅ Module map 경로 수정: #{target.name}"
-              Pod::UI.puts "     잘못된 경로: #{modulemap_path}"
-              Pod::UI.puts "     올바른 경로: #{correct_path}"
+          if current_modulemap.empty?
+            # MODULEMAP_FILE이 설정되지 않은 경우
+            needs_fix = true
+          elsif current_modulemap.include?('Target Support Files')
+            # 프로젝트 루트를 가리키는 절대 경로인 경우
+            if current_modulemap.start_with?('/') && current_modulemap.include?(project_root) && !current_modulemap.include?(pods_root)
+              needs_fix = true
             # 상대 경로이지만 Pods를 포함하지 않는 경우
-            elsif !modulemap_path.include?('$(PODS_ROOT)') && !modulemap_path.include?('Pods/') && modulemap_path.include?('Target Support Files')
-              correct_path = "$(PODS_ROOT)/Target Support Files/#{target_name}/#{target_name}.modulemap"
-              config.build_settings['MODULEMAP_FILE'] = correct_path
-              Pod::UI.puts "  ✅ Module map 경로 수정: #{target.name} -> #{correct_path}"
-            # 절대 경로가 Pods 디렉토리를 가리키는 경우 상대 경로로 변환
-            elsif modulemap_path.start_with?('/') && modulemap_path.include?(pods_root)
-              relative_path = modulemap_path.sub(pods_root + '/', '$(PODS_ROOT)/')
-              config.build_settings['MODULEMAP_FILE'] = relative_path
-              Pod::UI.puts "  ✅ Module map 절대 경로를 상대 경로로 변환: #{target.name} -> #{relative_path}"
+            elsif !current_modulemap.include?('$(PODS_ROOT)') && !current_modulemap.include?('Pods/')
+              needs_fix = true
+            # 올바른 경로가 아닌 경우 (다른 형식)
+            elsif current_modulemap != correct_path && !current_modulemap.include?('$(PODS_ROOT)')
+              needs_fix = true
             end
           end
-        elsif File.exist?(expected_modulemap)
-          # MODULEMAP_FILE이 설정되지 않았지만 파일이 존재하는 경우 명시적으로 설정
-          correct_path = "$(PODS_ROOT)/Target Support Files/#{target_name}/#{target_name}.modulemap"
-          config.build_settings['MODULEMAP_FILE'] = correct_path
-          Pod::UI.puts "  ✅ Module map 경로 명시적 설정: #{target.name} -> #{correct_path}"
+          
+          if needs_fix
+            config.build_settings['MODULEMAP_FILE'] = correct_path
+            fixed_count += 1
+            if fixed_count <= 10  # 처음 10개만 로그 출력
+              Pod::UI.puts "  ✅ Module map 경로 수정: #{target_name}"
+              Pod::UI.puts "     이전: #{current_modulemap.empty? ? '(없음)' : current_modulemap}"
+              Pod::UI.puts "     수정: #{correct_path}"
+            end
+          end
         end
         
         # PODS_CONFIGURATION_BUILD_DIR이 올바르게 설정되도록 확인
@@ -302,6 +304,22 @@ post_install do |installer|
           config.build_settings['PODS_ROOT'] = '${SRCROOT}/Pods'
         end
       end
+    end
+    
+    if fixed_count > 10
+      Pod::UI.puts "  ✅ 총 #{fixed_count}개의 Module map 경로를 수정했습니다"
+    elsif fixed_count > 0
+      Pod::UI.puts "  ✅ 총 #{fixed_count}개의 Module map 경로를 수정했습니다"
+    else
+      Pod::UI.puts "  ✅ Module map 경로 확인 완료 (수정 불필요)"
+    end
+    
+    # 프로젝트 파일 저장 (빌드 설정 변경사항 반영)
+    begin
+      installer.pods_project.save
+      Pod::UI.puts "  ✅ Pods 프로젝트 파일 저장 완료"
+    rescue => e
+      Pod::UI.puts "  ⚠️  프로젝트 파일 저장 실패: #{e.message}"
     end
     
     # 메인 프로젝트의 빌드 설정도 확인

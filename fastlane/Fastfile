@@ -664,6 +664,9 @@ platform :ios do
     # PROJECT_DIR을 프로젝트 루트로 설정하면 app.json을 찾을 수 있습니다
     ENV['PROJECT_DIR'] = project_root
     
+    # Archive와 IPA Export를 한 번에 수행
+    # 만약 Archive는 성공하지만 IPA Export에서 실패한다면,
+    # skip_package_ipa: true로 설정하여 Archive만 수행할 수 있습니다
     build_app(
       workspace:     WORKSPACE,
       scheme:        SCHEME,
