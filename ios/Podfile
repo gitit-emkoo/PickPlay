@@ -44,9 +44,19 @@ end
 post_install do |installer|
   installer_context = installer
   begin
-    react_native_post_install(installer_context)
+    # react_native_post_install는 installer 파라미터를 기대할 수 있으므로
+    # installer와 installer_context 둘 다 전달 시도
+    if defined?(react_native_post_install)
+      begin
+        react_native_post_install(installer)
+      rescue ArgumentError => e
+        # installer로 실패하면 installer_context로 시도
+        react_native_post_install(installer_context)
+      end
+    end
   rescue => e
-    Pod::UI.puts "  react_native_post_install failed: #{e.message}"
+    Pod::UI.puts "  ⚠️  react_native_post_install failed: #{e.message}"
+    Pod::UI.puts "     (계속 진행합니다...)"
   end
 
   # react-native-google-mobile-ads 스크립트가 app.json을 찾을 수 있도록 수정
@@ -244,6 +254,8 @@ post_install do |installer|
     Pod::UI.puts " Folly 설정을 모든 타겟에 직접 적용했습니다."
   rescue => e
     Pod::UI.puts " Folly 설정 주입 실패: #{e.message}"
+    Pod::UI.puts "  에러 클래스: #{e.class}"
+    Pod::UI.puts "  스택 트레이스: #{e.backtrace.first(10).join("\n  ")}"
   end
 
   # Module map 파일 경로 문제 해결
