@@ -268,14 +268,11 @@ jobs:
             echo "✅ app.json 복사 완료"
           fi
           cd "$PROJ_DIR/ios"
-          # 캐시가 있으면 repo-update 생략 (빠른 설치)
-          if [ -d "Pods" ] && [ -f "Podfile.lock" ]; then
-            echo "📦 Pods 캐시 발견, 빠른 설치 모드"
-            pod install
-          else
-            echo "📦 Pods 캐시 없음, 전체 설치 (repo-update 포함)"
-            pod install --repo-update
-          fi
+          # module map 파일 문제 해결을 위해 Pods 디렉토리 완전 정리
+          echo "🧹 Pods 디렉토리 정리 중..."
+          rm -rf Pods Podfile.lock
+          echo "📦 깨끗한 상태에서 pod install 실행"
+          pod install --repo-update
           # pod install 후에도 app.json 확인
           cd "$PROJ_DIR"
           if [ ! -f app.json ]; then
