@@ -42,8 +42,15 @@ target 'pickplay' do
 end
 
 post_install do |installer|
-  installer_context = installer
-  Pod::UI.puts "  📝 post_install 블록 시작 (installer 파라미터 받음)"
+  # 전역 예외 처리: 블록 전체를 감싸서 어떤 에러가 발생해도 로그를 남기고 계속 진행
+  begin
+    installer_context = installer
+    Pod::UI.puts "  📝 post_install 블록 시작 (installer 파라미터 받음: #{installer.class})"
+  rescue => e
+    Pod::UI.puts "  ⚠️  post_install 블록 시작 단계에서 에러 발생: #{e.class}: #{e.message}"
+    Pod::UI.puts "     스택: #{e.backtrace.first(5).join("\n     ")}"
+    raise e  # 이 에러는 치명적이므로 다시 던짐
+  end
   
   # react_native_post_install는 건너뛰기 (이것이 에러 원인일 수 있음)
   # 대신 우리가 필요한 설정을 직접 수행
@@ -262,6 +269,16 @@ post_install do |installer|
 
     Pod::UI.puts " Folly 설정을 모든 타겟에 직접 적용했습니다."
   rescue => e
+    $stderr.puts "=" * 60
+    $stderr.puts " Folly 설정 주입 실패!"
+    $stderr.puts "  에러 클래스: #{e.class}"
+    $stderr.puts "  에러 메시지: #{e.message}"
+    $stderr.puts "  스택 트레이스 (최대 15줄):"
+    e.backtrace.first(15).each_with_index do |line, idx|
+      $stderr.puts "    [#{idx + 1}] #{line}"
+    end
+    $stderr.puts "=" * 60
+    $stderr.flush
     Pod::UI.puts " Folly 설정 주입 실패: #{e.message}"
     Pod::UI.puts "  에러 클래스: #{e.class}"
     Pod::UI.puts "  스택 트레이스: #{e.backtrace.first(10).join("\n  ")}"
