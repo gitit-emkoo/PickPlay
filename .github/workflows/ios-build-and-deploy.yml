@@ -271,8 +271,29 @@ jobs:
           # module map 파일 문제 해결을 위해 Pods 디렉토리 완전 정리
           echo "🧹 Pods 디렉토리 정리 중..."
           rm -rf Pods Podfile.lock
+          # Xcode 프로젝트의 빌드 설정도 정리 (DerivedData)
+          echo "🧹 Xcode DerivedData 정리 중..."
+          rm -rf ~/Library/Developer/Xcode/DerivedData/* 2>/dev/null || true
           echo "📦 깨끗한 상태에서 pod install 실행"
           pod install --repo-update
+          # pod install 후 module map 파일이 올바른 위치에 생성되었는지 확인
+          echo "===== pod install 후 module map 파일 확인 ====="
+          if [ -d "Pods/Target Support Files" ]; then
+            echo "✅ Target Support Files 디렉토리 발견"
+            # 몇 개의 module map 파일 확인
+            find "Pods/Target Support Files" -name "*.modulemap" 2>/dev/null | head -5 | while read f; do
+              echo "✅ Module map 파일 발견: $f"
+            done
+            modulemap_count=$(find "Pods/Target Support Files" -name "*.modulemap" 2>/dev/null | wc -l | tr -d ' ')
+            echo "총 $modulemap_count 개의 module map 파일 발견"
+            if [ "$modulemap_count" -eq 0 ]; then
+              echo "::error::Module map 파일이 생성되지 않았습니다!"
+              exit 1
+            fi
+          else
+            echo "::error::Target Support Files 디렉토리가 생성되지 않았습니다!"
+            exit 1
+          fi
           # pod install 후에도 app.json 확인
           cd "$PROJ_DIR"
           if [ ! -f app.json ]; then
@@ -412,6 +433,47 @@ jobs:
           echo "===== app.json의 react-native-google-mobile-ads 설정 ====="
           node -e "const fs=require('fs'); const json=JSON.parse(fs.readFileSync('app.json','utf8')); console.log(JSON.stringify(json['react-native-google-mobile-ads'], null, 2));"
           echo "✅ app.json 확인 및 복사 완료"
+
+      - name: Clean Xcode build and verify settings
+        run: |
+          cd "$PROJ_DIR/ios"
+          echo "===== Xcode 빌드 설정 확인 ====="
+          # Xcode 프로젝트의 빌드 설정 확인 (PODS_CONFIGURATION_BUILD_DIR 등)
+          if [ -f "pickplay.xcworkspace/contents.xcworkspacedata" ]; then
+            echo "✅ Xcode workspace 파일 발견"
+          fi
+          # 빌드 설정에서 PODS_CONFIGURATION_BUILD_DIR 확인
+          echo "===== 빌드 설정 확인 (PODS_CONFIGURATION_BUILD_DIR) ====="
+          xcodebuild -workspace pickplay.xcworkspace -scheme pickplay -configuration Debug -showBuildSettings 2>/dev/null | grep -i "PODS_CONFIGURATION_BUILD_DIR\|CONFIGURATION_BUILD_DIR\|SRCROOT" | head -10 || echo "빌드 설정 확인 실패 (정상, 빌드 전이므로)"
+          # Xcode clean 실행 (이전 빌드 설정 정리)
+          echo "🧹 Xcode clean 실행 중..."
+          xcodebuild -workspace pickplay.xcworkspace -scheme pickplay -configuration Debug clean 2>&1 | tail -20 || echo "Clean 완료 또는 이미 clean 상태"
+          # module map 파일이 올바른 위치에 있는지 다시 확인
+          echo "===== Module map 파일 위치 재확인 ====="
+          if [ -d "Pods/Target Support Files" ]; then
+            echo "✅ Target Support Files 디렉토리 확인"
+            # 몇 개의 module map 파일 확인
+            sample_modulemap=$(find "Pods/Target Support Files" -name "*.modulemap" 2>/dev/null | head -1)
+            if [ -n "$sample_modulemap" ]; then
+              echo "✅ Sample module map 파일: $sample_modulemap"
+              # 절대 경로 확인
+              abs_path=$(cd "$(dirname "$sample_modulemap")" && pwd)
+              echo "   절대 경로: $abs_path"
+              # 프로젝트 루트에서 찾으려고 하는 잘못된 경로와 비교
+              wrong_path="$PROJ_DIR/Target Support Files/$(basename "$sample_modulemap")"
+              echo "   잘못된 경로 (에러에서 찾는 경로): $wrong_path"
+              if [ -f "$wrong_path" ]; then
+                echo "⚠️  잘못된 경로에 파일이 존재합니다! 이것이 문제의 원인일 수 있습니다."
+              else
+                echo "✅ 잘못된 경로에 파일이 없습니다 (정상)"
+              fi
+            else
+              echo "⚠️  Module map 파일을 찾을 수 없습니다!"
+            fi
+          else
+            echo "::error::Target Support Files 디렉토리가 없습니다!"
+            exit 1
+          fi
 
       - name: Fastlane dev_client
         env:
