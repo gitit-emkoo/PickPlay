@@ -43,19 +43,27 @@ end
 
 post_install do |installer|
   installer_context = installer
+  Pod::UI.puts "  📝 post_install 블록 시작 (installer 파라미터 받음)"
+  
+  # react_native_post_install는 건너뛰기 (이것이 에러 원인일 수 있음)
+  # 대신 우리가 필요한 설정을 직접 수행
   begin
-    # react_native_post_install는 installer 파라미터를 기대할 수 있으므로
-    # installer와 installer_context 둘 다 전달 시도
     if defined?(react_native_post_install)
       begin
+        Pod::UI.puts "  🔄 react_native_post_install 호출 시도..."
         react_native_post_install(installer)
-      rescue ArgumentError => e
-        # installer로 실패하면 installer_context로 시도
-        react_native_post_install(installer_context)
+        Pod::UI.puts "  ✅ react_native_post_install 성공"
+      rescue => e
+        Pod::UI.puts "  ⚠️  react_native_post_install failed: #{e.class}: #{e.message}"
+        Pod::UI.puts "     스택: #{e.backtrace.first(3).join("\n     ")}"
+        Pod::UI.puts "     (계속 진행합니다...)"
       end
+    else
+      Pod::UI.puts "  ℹ️  react_native_post_install 함수가 정의되지 않음 (건너뜀)"
     end
   rescue => e
-    Pod::UI.puts "  ⚠️  react_native_post_install failed: #{e.message}"
+    Pod::UI.puts "  ⚠️  react_native_post_install 블록 전체 실패: #{e.class}: #{e.message}"
+    Pod::UI.puts "     스택: #{e.backtrace.first(5).join("\n     ")}"
     Pod::UI.puts "     (계속 진행합니다...)"
   end
 
@@ -190,6 +198,7 @@ post_install do |installer|
 
   # Folly 및 C++20 설정을 모든 타겟에 직접 주입
   begin
+    Pod::UI.puts "  🔧 Folly 설정 시작 (installer_context 사용)"
     folly_definitions = [
       'FOLLY_NO_CONFIG=1',
       'FOLLY_HAS_COROUTINES=0',
@@ -261,6 +270,7 @@ post_install do |installer|
   # Module map 파일 경로 문제 해결
   # Xcode가 프로젝트 루트에서 Target Support Files를 찾는 문제를 해결
   begin
+    Pod::UI.puts "  🔍 Module map 경로 수정 블록 시작..."
     pods_root = File.expand_path('Pods', __dir__)
     target_support_files = File.join(pods_root, 'Target Support Files')
     project_root = File.expand_path('..', __dir__)
