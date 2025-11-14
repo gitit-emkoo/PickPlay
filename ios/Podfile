@@ -41,9 +41,9 @@ target 'pickplay' do
 
 end
 
-post_install do |installer|
+post_install do |installer_context|
   begin
-    react_native_post_install(installer)
+    react_native_post_install(installer_context)
   rescue => e
     Pod::UI.puts "  react_native_post_install failed: #{e.message}"
   end
@@ -57,7 +57,7 @@ post_install do |installer|
       Pod::UI.puts "  ✅ app.json 발견: #{app_json_path}"
       
       # 프로젝트 타겟(pickplay)의 빌드 설정 수정
-      installer.pods_project.targets.each do |target|
+      installer_context.pods_project.targets.each do |target|
         if target.name == 'RNGoogleMobileAds'
           target.build_phases.grep(Xcodeproj::Project::Object::PBXShellScriptBuildPhase).each do |phase|
             if phase.name && phase.name.include?('RNGoogleMobileAds') && phase.name.include?('Configuration')
@@ -87,7 +87,7 @@ post_install do |installer|
       end
       
       # 메인 프로젝트의 빌드 설정도 수정
-      installer.aggregate_targets.each do |aggregate_target|
+      installer_context.aggregate_targets.each do |aggregate_target|
         aggregate_target.user_project.targets.each do |target|
           if target.name == 'pickplay'
             target.build_phases.grep(Xcodeproj::Project::Object::PBXShellScriptBuildPhase).each do |phase|
@@ -149,7 +149,7 @@ post_install do |installer|
 
   # Hermes 스크립트 단계가 CI에서 실패하는 이슈 방지: 스크립트를 no-op 처리
   begin
-    hermes_target = installer.pods_project.targets.find { |t| t.name == 'hermes-engine' }
+    hermes_target = installer_context.pods_project.targets.find { |t| t.name == 'hermes-engine' }
     if hermes_target
       hermes_target.build_phases.grep(Xcodeproj::Project::Object::PBXShellScriptBuildPhase).each do |bp|
         next unless bp.name.to_s.include?('Replace Hermes for the right configuration')
@@ -164,7 +164,7 @@ post_install do |installer|
   # [RN]Check rncore 스크립트 비활성화 (New Architecture 비활성화 상태에서 Codegen 체크 불필요)
   begin
     ['React-Fabric', 'React-FabricComponents'].each do |target_name|
-      target = installer.pods_project.targets.find { |t| t.name == target_name }
+      target = installer_context.pods_project.targets.find { |t| t.name == target_name }
       next unless target
 
       target.build_phases.grep(Xcodeproj::Project::Object::PBXShellScriptBuildPhase).each do |bp|
@@ -211,18 +211,18 @@ post_install do |installer|
       config.build_settings['HEADER_SEARCH_PATHS'] = header_paths.uniq
     end
 
-    installer.pods_project.targets.each do |target|
+    installer_context.pods_project.targets.each do |target|
       target.build_configurations.each(&apply_folly_settings)
     end
 
-    installer.aggregate_targets.each do |aggregate_target|
+    installer_context.aggregate_targets.each do |aggregate_target|
       aggregate_target.user_targets.each do |user_target|
         user_target.build_configurations.each(&apply_folly_settings)
       end
     end
 
-    if installer.respond_to?(:user_project)
-      installer.user_project.targets.each do |target|
+    if installer_context.respond_to?(:user_project)
+      installer_context.user_project.targets.each do |target|
         next unless target.respond_to?(:build_configurations)
         target.build_configurations.each(&apply_folly_settings)
       end
