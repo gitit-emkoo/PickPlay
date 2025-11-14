@@ -658,6 +658,12 @@ platform :ios do
     project_root = File.expand_path('..', __dir__)
     output_directory = project_root
     
+    # react-native-google-mobile-ads의 ios_config.sh가 app.json을 찾을 수 있도록
+    # PROJECT_DIR 환경 변수를 프로젝트 루트로 설정
+    # ios_config.sh는 PROJECT_DIR에서 시작해서 상위 디렉토리를 검색하므로
+    # PROJECT_DIR을 프로젝트 루트로 설정하면 app.json을 찾을 수 있습니다
+    ENV['PROJECT_DIR'] = project_root
+    
     build_app(
       workspace:     WORKSPACE,
       scheme:        SCHEME,
@@ -672,6 +678,7 @@ platform :ios do
         "CODE_SIGN_IDENTITY=\"Apple Development\"",
         "PRODUCT_BUNDLE_IDENTIFIER=#{BUNDLE_ID}",
         "pickplay.PROVISIONING_PROFILE_SPECIFIER=#{profile_uuid}",
+        "PROJECT_DIR=#{project_root}",  # 빌드 스크립트에서 사용할 수 있도록 설정
       ].compact.join(" "),
       export_options: {
         method: "development",

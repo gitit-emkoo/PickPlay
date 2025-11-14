@@ -439,9 +439,12 @@ jobs:
           # 여러 위치에 복사
           cp app.json ios/app.json 2>/dev/null || true
           cp app.json ios/pickplay/app.json 2>/dev/null || true
-          # SRCROOT 환경 변수 확인 (Xcode 빌드 시 사용됨)
+          # react-native-google-mobile-ads의 ios_config.sh가 app.json을 찾을 수 있도록
+          # PROJECT_DIR 환경 변수를 프로젝트 루트로 설정
+          export PROJECT_DIR="$(pwd)"
           echo "===== 빌드 직전 환경 변수 확인 ====="
           echo "현재 작업 디렉토리: $(pwd)"
+          echo "PROJECT_DIR: $PROJECT_DIR"
           echo "SRCROOT는 Xcode 빌드 시 자동으로 설정됩니다 (프로젝트 루트)"
           echo "✅ 빌드 직전 app.json 복사 완료"
           if [ -f Gemfile ]; then
@@ -450,19 +453,23 @@ jobs:
               echo "===== 빌드 실패 - 에러 메시지 분석 ====="
               # xcodebuild 에러 찾기
               echo "--- xcodebuild 에러 메시지 ---"
-              grep -i "error:\|failed\|fatal" /tmp/fastlane_build.log | tail -30 || echo "xcodebuild 에러 없음"
+              grep -i "error:\|failed\|fatal" /tmp/fastlane_build.log | tail -50 || echo "xcodebuild 에러 없음"
               echo ""
               # 코드 서명 관련 에러 찾기
               echo "--- 코드 서명 관련 에러 ---"
-              grep -i "code.*sign\|provisioning\|certificate\|keychain" /tmp/fastlane_build.log | tail -20 || echo "코드 서명 에러 없음"
+              grep -i "code.*sign\|provisioning\|certificate\|keychain" /tmp/fastlane_build.log | tail -30 || echo "코드 서명 에러 없음"
               echo ""
               # app.json 관련 에러 찾기
               echo "--- app.json 관련 에러 ---"
-              grep -i "app.json\|ios_app_id\|react-native-google-mobile-ads" /tmp/fastlane_build.log | head -20 || echo "app.json 에러 없음"
+              grep -i "app.json\|ios_app_id\|react-native-google-mobile-ads\|RNGoogleMobileAds" /tmp/fastlane_build.log | head -30 || echo "app.json 에러 없음"
               echo ""
-              # 빌드 로그의 마지막 100줄 출력
-              echo "--- 빌드 로그 마지막 100줄 ---"
-              tail -100 /tmp/fastlane_build.log
+              # 빌드 스크립트 에러 찾기
+              echo "--- 빌드 스크립트 에러 ---"
+              grep -i "script\|configuration\|ios_config" /tmp/fastlane_build.log | grep -i "error\|failed" | tail -20 || echo "스크립트 에러 없음"
+              echo ""
+              # 빌드 로그의 마지막 200줄 출력
+              echo "--- 빌드 로그 마지막 200줄 ---"
+              tail -200 /tmp/fastlane_build.log
               exit 1
             }
           else
@@ -471,19 +478,23 @@ jobs:
               echo "===== 빌드 실패 - 에러 메시지 분석 ====="
               # xcodebuild 에러 찾기
               echo "--- xcodebuild 에러 메시지 ---"
-              grep -i "error:\|failed\|fatal" /tmp/fastlane_build.log | tail -30 || echo "xcodebuild 에러 없음"
+              grep -i "error:\|failed\|fatal" /tmp/fastlane_build.log | tail -50 || echo "xcodebuild 에러 없음"
               echo ""
               # 코드 서명 관련 에러 찾기
               echo "--- 코드 서명 관련 에러 ---"
-              grep -i "code.*sign\|provisioning\|certificate\|keychain" /tmp/fastlane_build.log | tail -20 || echo "코드 서명 에러 없음"
+              grep -i "code.*sign\|provisioning\|certificate\|keychain" /tmp/fastlane_build.log | tail -30 || echo "코드 서명 에러 없음"
               echo ""
               # app.json 관련 에러 찾기
               echo "--- app.json 관련 에러 ---"
-              grep -i "app.json\|ios_app_id\|react-native-google-mobile-ads" /tmp/fastlane_build.log | head -20 || echo "app.json 에러 없음"
+              grep -i "app.json\|ios_app_id\|react-native-google-mobile-ads\|RNGoogleMobileAds" /tmp/fastlane_build.log | head -30 || echo "app.json 에러 없음"
               echo ""
-              # 빌드 로그의 마지막 100줄 출력
-              echo "--- 빌드 로그 마지막 100줄 ---"
-              tail -100 /tmp/fastlane_build.log
+              # 빌드 스크립트 에러 찾기
+              echo "--- 빌드 스크립트 에러 ---"
+              grep -i "script\|configuration\|ios_config" /tmp/fastlane_build.log | grep -i "error\|failed" | tail -20 || echo "스크립트 에러 없음"
+              echo ""
+              # 빌드 로그의 마지막 200줄 출력
+              echo "--- 빌드 로그 마지막 200줄 ---"
+              tail -200 /tmp/fastlane_build.log
               exit 1
             }
           fi
