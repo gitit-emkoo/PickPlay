@@ -304,6 +304,20 @@ jobs:
           cp app.json ios/app.json 2>/dev/null || true
           cp app.json ios/pickplay/app.json 2>/dev/null || true
           echo "✅ pod install 완료, app.json 확인 및 복사 완료"
+          # Xcode 프로젝트 파일의 MODULEMAP_FILE 설정 확인
+          echo "===== Xcode 프로젝트 파일의 MODULEMAP_FILE 설정 확인 ====="
+          if [ -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
+            # 몇 개의 타겟의 MODULEMAP_FILE 설정 확인
+            grep -A 5 "MODULEMAP_FILE" "Pods/Pods.xcodeproj/project.pbxproj" | head -20 || echo "MODULEMAP_FILE 설정 없음 (정상일 수 있음)"
+            # 잘못된 경로가 있는지 확인 (프로젝트 루트를 가리키는 경우)
+            wrong_paths=$(grep "MODULEMAP_FILE.*Target Support Files" "Pods/Pods.xcodeproj/project.pbxproj" | grep -v "\$(PODS_ROOT)" | grep -v "Pods/" | wc -l | tr -d ' ')
+            if [ "$wrong_paths" -gt 0 ]; then
+              echo "⚠️  잘못된 MODULEMAP_FILE 경로 발견: $wrong_paths 개"
+              echo "Podfile의 post_install 훅이 이를 수정해야 합니다"
+            else
+              echo "✅ MODULEMAP_FILE 경로가 올바르게 설정된 것으로 보입니다"
+            fi
+          fi
           # pod install 후 CocoaPods 스크립트 확인
           echo "===== pod install 후 CocoaPods 스크립트 확인 ====="
           # RNGoogleMobileAds 관련 모든 파일 찾기
