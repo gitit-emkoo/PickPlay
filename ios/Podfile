@@ -265,7 +265,7 @@ post_install do |installer_context|
       Pod::UI.puts "  ✅ Target Support Files 디렉토리 확인됨"
     end
     
-    installer.pods_project.targets.each do |target|
+    installer_context.pods_project.targets.each do |target|
       target.build_configurations.each do |config|
         target_name = target.name
         expected_modulemap = File.join(target_support_files, target_name, "#{target_name}.modulemap")
@@ -340,14 +340,14 @@ post_install do |installer_context|
     
     # 프로젝트 파일 저장 (빌드 설정 변경사항 반영)
     begin
-      installer.pods_project.save
+      installer_context.pods_project.save
       Pod::UI.puts "  ✅ Pods 프로젝트 파일 저장 완료"
     rescue => e
       Pod::UI.puts "  ⚠️  프로젝트 파일 저장 실패: #{e.message}"
     end
     
     # 메인 프로젝트의 빌드 설정도 확인
-    installer.aggregate_targets.each do |aggregate_target|
+    installer_context.aggregate_targets.each do |aggregate_target|
       aggregate_target.user_project.targets.each do |target|
         target.build_configurations.each do |config|
           # HEADER_SEARCH_PATHS에 Pods 경로가 포함되어 있는지 확인
