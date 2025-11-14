@@ -253,6 +253,18 @@ post_install do |installer|
     project_root = File.expand_path('..', __dir__)
     fixed_count = 0
     
+    Pod::UI.puts "  🔍 Module map 경로 수정 시작..."
+    Pod::UI.puts "     Pods 디렉토리: #{pods_root}"
+    Pod::UI.puts "     Target Support Files: #{target_support_files}"
+    Pod::UI.puts "     프로젝트 루트: #{project_root}"
+    
+    # Target Support Files 디렉토리 존재 확인
+    if !Dir.exist?(target_support_files)
+      Pod::UI.puts "  ⚠️  Target Support Files 디렉토리가 없습니다: #{target_support_files}"
+    else
+      Pod::UI.puts "  ✅ Target Support Files 디렉토리 확인됨"
+    end
+    
     installer.pods_project.targets.each do |target|
       target.build_configurations.each do |config|
         target_name = target.name
@@ -262,35 +274,47 @@ post_install do |installer|
         # MODULEMAP_FILE이 설정되어 있는지 확인
         current_modulemap = config.build_settings['MODULEMAP_FILE'].to_s
         
-        # 파일이 존재하는 경우에만 경로를 설정/수정
-        if File.exist?(expected_modulemap)
-          # 잘못된 경로인지 확인 (프로젝트 루트를 가리키거나, Pods를 포함하지 않는 경우)
-          needs_fix = false
-          
-          if current_modulemap.empty?
-            # MODULEMAP_FILE이 설정되지 않은 경우
+        # 파일 존재 여부 확인
+        file_exists = File.exist?(expected_modulemap)
+        
+        # 잘못된 경로인지 확인 (프로젝트 루트를 가리키거나, Pods를 포함하지 않는 경우)
+        needs_fix = false
+        
+        if current_modulemap.include?('Target Support Files')
+          # 프로젝트 루트를 가리키는 절대 경로인 경우
+          if current_modulemap.start_with?('/') && current_modulemap.include?(project_root) && !current_modulemap.include?(pods_root)
             needs_fix = true
-          elsif current_modulemap.include?('Target Support Files')
-            # 프로젝트 루트를 가리키는 절대 경로인 경우
-            if current_modulemap.start_with?('/') && current_modulemap.include?(project_root) && !current_modulemap.include?(pods_root)
-              needs_fix = true
-            # 상대 경로이지만 Pods를 포함하지 않는 경우
-            elsif !current_modulemap.include?('$(PODS_ROOT)') && !current_modulemap.include?('Pods/')
-              needs_fix = true
-            # 올바른 경로가 아닌 경우 (다른 형식)
-            elsif current_modulemap != correct_path && !current_modulemap.include?('$(PODS_ROOT)')
-              needs_fix = true
-            end
+            Pod::UI.puts "  🔧 잘못된 절대 경로 발견: #{target_name} -> #{current_modulemap}" if fixed_count < 5
+          # 상대 경로이지만 Pods를 포함하지 않는 경우
+          elsif !current_modulemap.include?('$(PODS_ROOT)') && !current_modulemap.include?('Pods/')
+            needs_fix = true
+            Pod::UI.puts "  🔧 잘못된 상대 경로 발견: #{target_name} -> #{current_modulemap}" if fixed_count < 5
+          # 올바른 경로가 아닌 경우 (다른 형식)
+          elsif current_modulemap != correct_path && !current_modulemap.include?('$(PODS_ROOT)')
+            needs_fix = true
+            Pod::UI.puts "  🔧 다른 형식의 경로 발견: #{target_name} -> #{current_modulemap}" if fixed_count < 5
           end
-          
-          if needs_fix
-            config.build_settings['MODULEMAP_FILE'] = correct_path
+        elsif file_exists && current_modulemap.empty?
+          # MODULEMAP_FILE이 설정되지 않았지만 파일이 존재하는 경우
+          needs_fix = true
+          Pod::UI.puts "  🔧 MODULEMAP_FILE 미설정: #{target_name}" if fixed_count < 5
+        end
+        
+        if needs_fix && file_exists
+          config.build_settings['MODULEMAP_FILE'] = correct_path
+          fixed_count += 1
+          if fixed_count <= 10  # 처음 10개만 로그 출력
+            Pod::UI.puts "  ✅ Module map 경로 수정: #{target_name}"
+            Pod::UI.puts "     이전: #{current_modulemap.empty? ? '(없음)' : current_modulemap}"
+            Pod::UI.puts "     수정: #{correct_path}"
+          end
+        elsif needs_fix && !file_exists
+          # 파일이 없지만 잘못된 경로가 설정된 경우, 경로를 제거하거나 올바른 경로로 설정
+          if current_modulemap.include?('Target Support Files') && (current_modulemap.include?(project_root) || !current_modulemap.include?('$(PODS_ROOT)'))
+            # 잘못된 경로를 제거 (빈 문자열로 설정하면 Xcode가 자동으로 찾을 수 있음)
+            config.build_settings['MODULEMAP_FILE'] = ""
             fixed_count += 1
-            if fixed_count <= 10  # 처음 10개만 로그 출력
-              Pod::UI.puts "  ✅ Module map 경로 수정: #{target_name}"
-              Pod::UI.puts "     이전: #{current_modulemap.empty? ? '(없음)' : current_modulemap}"
-              Pod::UI.puts "     수정: #{correct_path}"
-            end
+            Pod::UI.puts "  ⚠️  Module map 파일 없음, 잘못된 경로 제거: #{target_name}" if fixed_count <= 10
           end
         end
         
