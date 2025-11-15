@@ -45,26 +45,128 @@ post_install do |installer|
   # installer_context를 최상단에서 즉시 정의
   installer_context = installer
   
-  Pod::UI.puts "  📝 post_install 블록 시작 (installer_context: #{installer_context.class})"
+  Pod::UI.puts ""
+  Pod::UI.puts "═══════════════════════════════════════════════════════════"
+  Pod::UI.puts "  📝 post_install 블록 시작"
+  Pod::UI.puts "═══════════════════════════════════════════════════════════"
   
-  # react_native_post_install 호출
+  # 중요: Module map 경로 수정을 가장 먼저 실행 (다른 블록에서 에러가 발생해도 실행되도록)
+  # Module map 파일 경로 문제 해결
   begin
-    if defined?(react_native_post_install)
-      begin
-        Pod::UI.puts "  🔄 react_native_post_install 호출 시도..."
-        react_native_post_install(installer_context)
-        Pod::UI.puts "  ✅ react_native_post_install 성공"
-      rescue => e
-        Pod::UI.puts "  ⚠️  react_native_post_install failed: #{e.class}: #{e.message}"
-        Pod::UI.puts "     스택: #{e.backtrace.first(3).join("\n     ")}"
-        Pod::UI.puts "     (계속 진행합니다...)"
-      end
+    Pod::UI.puts "  🔍 [1단계] Module map 경로 수정 블록 시작..."
+    pods_root = File.expand_path('Pods', __dir__)
+    target_support_files = File.join(pods_root, 'Target Support Files')
+    project_root = File.expand_path('..', __dir__)
+    fixed_count = 0
+    
+    Pod::UI.puts "     Pods 디렉토리: #{pods_root}"
+    Pod::UI.puts "     Target Support Files: #{target_support_files}"
+    Pod::UI.puts "     프로젝트 루트: #{project_root}"
+    
+    if !Dir.exist?(target_support_files)
+      Pod::UI.puts "  ⚠️  Target Support Files 디렉토리가 없습니다 (정상일 수 있음)"
     else
-      Pod::UI.puts "  ℹ️  react_native_post_install 함수가 정의되지 않음 (건너뜀)"
+      Pod::UI.puts "  ✅ Target Support Files 디렉토리 확인됨"
+    end
+    
+    installer_context.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        target_name = target.name
+        expected_modulemap = File.join(target_support_files, target_name, "#{target_name}.modulemap")
+        correct_path = "$(PODS_ROOT)/Target Support Files/#{target_name}/#{target_name}.modulemap"
+        
+        current_modulemap = config.build_settings['MODULEMAP_FILE'].to_s
+        file_exists = File.exist?(expected_modulemap)
+        needs_fix = false
+        
+        if !current_modulemap.empty?
+          if current_modulemap.include?('Target Support Files') && !current_modulemap.include?('$(PODS_ROOT)')
+            needs_fix = true
+          elsif current_modulemap.start_with?('/') && current_modulemap.include?(project_root) && !current_modulemap.include?(pods_root)
+            needs_fix = true
+          elsif file_exists && current_modulemap != correct_path && !current_modulemap.include?('$(PODS_ROOT)')
+            needs_fix = true
+          end
+        elsif file_exists && current_modulemap.empty?
+          needs_fix = true
+        end
+        
+        if needs_fix && file_exists
+          config.build_settings['MODULEMAP_FILE'] = correct_path
+          fixed_count += 1
+          if fixed_count <= 5
+            Pod::UI.puts "  ✅ [#{fixed_count}] Module map 경로 수정: #{target_name}"
+            Pod::UI.puts "     이전: #{current_modulemap.empty? ? '(없음)' : current_modulemap}"
+            Pod::UI.puts "     수정: #{correct_path}"
+          end
+        elsif needs_fix && !file_exists && !current_modulemap.empty?
+          config.build_settings['MODULEMAP_FILE'] = ""
+          fixed_count += 1
+          if fixed_count <= 5
+            Pod::UI.puts "  ⚠️  [#{fixed_count}] Module map 파일 없음, 경로 제거: #{target_name}"
+          end
+        end
+        
+        if config.build_settings['PODS_CONFIGURATION_BUILD_DIR'].nil?
+          config.build_settings['PODS_CONFIGURATION_BUILD_DIR'] = '$(BUILD_DIR)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)'
+        end
+        if config.build_settings['PODS_ROOT'].nil?
+          config.build_settings['PODS_ROOT'] = '${SRCROOT}/Pods'
+        end
+      end
+    end
+    
+    if fixed_count > 5
+      Pod::UI.puts "  ✅ 총 #{fixed_count}개의 Module map 경로를 수정했습니다"
+    elsif fixed_count > 0
+      Pod::UI.puts "  ✅ 총 #{fixed_count}개의 Module map 경로를 수정했습니다"
+    else
+      Pod::UI.puts "  ✅ Module map 경로 확인 완료 (수정 불필요)"
+    end
+    
+    installer_context.pods_project.save
+    Pod::UI.puts "  ✅ Pods 프로젝트 파일 저장 완료"
+    
+    installer_context.aggregate_targets.each do |aggregate_target|
+      aggregate_target.user_project.targets.each do |target|
+        target.build_configurations.each do |config|
+          header_paths = Array(config.build_settings['HEADER_SEARCH_PATHS'] || [])
+          pods_header_path = '$(PODS_ROOT)/Headers/Public'
+          if !header_paths.include?(pods_header_path) && !header_paths.include?('$(inherited)')
+            header_paths << '$(inherited)'
+            header_paths << pods_header_path
+            config.build_settings['HEADER_SEARCH_PATHS'] = header_paths.uniq
+          end
+          
+          framework_paths = Array(config.build_settings['FRAMEWORK_SEARCH_PATHS'] || [])
+          pods_framework_path = '$(PODS_ROOT)/Frameworks'
+          if !framework_paths.include?(pods_framework_path) && !framework_paths.include?('$(inherited)')
+            framework_paths << '$(inherited)'
+            framework_paths << pods_framework_path
+            config.build_settings['FRAMEWORK_SEARCH_PATHS'] = framework_paths.uniq
+          end
+        end
+      end
+    end
+    
+    Pod::UI.puts "  ✅ [1단계] Module map 경로 수정 완료"
+  rescue => e
+    Pod::UI.puts "  ❌ [1단계] Module map 경로 수정 실패: #{e.class}: #{e.message}"
+    Pod::UI.puts "     스택: #{e.backtrace.first(3).join("\n     ")}"
+    Pod::UI.puts "     (계속 진행합니다...)"
+  end
+  
+  # react_native_post_install 호출 (에러가 발생해도 계속 진행)
+  begin
+    Pod::UI.puts "  🔄 [2단계] react_native_post_install 호출 시도..."
+    if defined?(react_native_post_install)
+      react_native_post_install(installer_context)
+      Pod::UI.puts "  ✅ [2단계] react_native_post_install 성공"
+    else
+      Pod::UI.puts "  ℹ️  [2단계] react_native_post_install 함수가 정의되지 않음 (건너뜀)"
     end
   rescue => e
-    Pod::UI.puts "  ⚠️  react_native_post_install 블록 전체 실패: #{e.class}: #{e.message}"
-    Pod::UI.puts "     스택: #{e.backtrace.first(5).join("\n     ")}"
+    Pod::UI.puts "  ⚠️  [2단계] react_native_post_install 실패: #{e.class}: #{e.message}"
     Pod::UI.puts "     (계속 진행합니다...)"
   end
 
@@ -197,140 +299,8 @@ post_install do |installer|
     Pod::UI.puts " [RN]Check rncore script tweak skipped: #{e.message}"
   end
 
-  # Folly 및 C++20 설정 - 일시적으로 비활성화 (에러 원인 확인 중)
-  # TODO: module map 문제 해결 후 다시 활성화
-  Pod::UI.puts "  ⏭️  Folly 설정 블록 일시 비활성화 (에러 원인 조사 중)"
-
-  # Module map 파일 경로 문제 해결
-  # Xcode가 프로젝트 루트에서 Target Support Files를 찾는 문제를 해결
-  begin
-    Pod::UI.puts "  🔍 Module map 경로 수정 블록 시작..."
-    pods_root = File.expand_path('Pods', __dir__)
-    target_support_files = File.join(pods_root, 'Target Support Files')
-    project_root = File.expand_path('..', __dir__)
-    fixed_count = 0
-    
-    Pod::UI.puts "  🔍 Module map 경로 수정 시작..."
-    Pod::UI.puts "     Pods 디렉토리: #{pods_root}"
-    Pod::UI.puts "     Target Support Files: #{target_support_files}"
-    Pod::UI.puts "     프로젝트 루트: #{project_root}"
-    
-    # Target Support Files 디렉토리 존재 확인
-    if !Dir.exist?(target_support_files)
-      Pod::UI.puts "  ⚠️  Target Support Files 디렉토리가 없습니다: #{target_support_files}"
-    else
-      Pod::UI.puts "  ✅ Target Support Files 디렉토리 확인됨"
-    end
-    
-    installer_context.pods_project.targets.each do |target|
-      target.build_configurations.each do |config|
-        target_name = target.name
-        expected_modulemap = File.join(target_support_files, target_name, "#{target_name}.modulemap")
-        correct_path = "$(PODS_ROOT)/Target Support Files/#{target_name}/#{target_name}.modulemap"
-        
-        # MODULEMAP_FILE이 설정되어 있는지 확인
-        current_modulemap = config.build_settings['MODULEMAP_FILE'].to_s
-        
-        # 파일 존재 여부 확인
-        file_exists = File.exist?(expected_modulemap)
-        
-        # 잘못된 경로인지 확인 - 더 포괄적으로 체크
-        needs_fix = false
-        
-        # MODULEMAP_FILE이 설정되어 있는 경우
-        if !current_modulemap.empty?
-          # $(PODS_ROOT)를 포함하지 않고, Target Support Files를 포함하는 경우 → 무조건 수정 필요
-          if current_modulemap.include?('Target Support Files') && !current_modulemap.include?('$(PODS_ROOT)')
-            needs_fix = true
-            Pod::UI.puts "  🔧 잘못된 경로 발견 (PODS_ROOT 없음): #{target_name} -> #{current_modulemap}" if fixed_count < 5
-          # 절대 경로가 프로젝트 루트를 가리키는 경우
-          elsif current_modulemap.start_with?('/') && current_modulemap.include?(project_root) && !current_modulemap.include?(pods_root)
-            needs_fix = true
-            Pod::UI.puts "  🔧 잘못된 절대 경로 발견: #{target_name} -> #{current_modulemap}" if fixed_count < 5
-          # 파일이 존재하고, 올바른 $(PODS_ROOT) 경로가 아닌 경우
-          elsif file_exists && current_modulemap != correct_path && !current_modulemap.include?('$(PODS_ROOT)')
-            needs_fix = true
-            Pod::UI.puts "  🔧 다른 형식의 경로 발견: #{target_name} -> #{current_modulemap}" if fixed_count < 5
-          end
-        elsif file_exists && current_modulemap.empty?
-          # MODULEMAP_FILE이 설정되지 않았지만 파일이 존재하는 경우
-          needs_fix = true
-          Pod::UI.puts "  🔧 MODULEMAP_FILE 미설정: #{target_name}" if fixed_count < 5
-        end
-        
-        # 파일이 존재하면 올바른 경로로 수정
-        if needs_fix && file_exists
-          config.build_settings['MODULEMAP_FILE'] = correct_path
-          fixed_count += 1
-          if fixed_count <= 10  # 처음 10개만 로그 출력
-            Pod::UI.puts "  ✅ Module map 경로 수정: #{target_name}"
-            Pod::UI.puts "     이전: #{current_modulemap.empty? ? '(없음)' : current_modulemap}"
-            Pod::UI.puts "     수정: #{correct_path}"
-          end
-        # 파일이 없고 잘못된 경로가 설정된 경우, 경로 제거
-        elsif needs_fix && !file_exists && !current_modulemap.empty?
-          # 잘못된 경로를 제거 (빈 문자열로 설정하면 Xcode가 자동으로 찾을 수 있음)
-          config.build_settings['MODULEMAP_FILE'] = ""
-          fixed_count += 1
-          Pod::UI.puts "  ⚠️  Module map 파일 없음, 잘못된 경로 제거: #{target_name}" if fixed_count <= 10
-        end
-        
-        # PODS_CONFIGURATION_BUILD_DIR이 올바르게 설정되도록 확인
-        if config.build_settings['PODS_CONFIGURATION_BUILD_DIR'].nil?
-          config.build_settings['PODS_CONFIGURATION_BUILD_DIR'] = '$(BUILD_DIR)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)'
-        end
-        
-        # PODS_ROOT가 올바르게 설정되도록 확인
-        if config.build_settings['PODS_ROOT'].nil?
-          config.build_settings['PODS_ROOT'] = '${SRCROOT}/Pods'
-        end
-      end
-    end
-    
-    if fixed_count > 10
-      Pod::UI.puts "  ✅ 총 #{fixed_count}개의 Module map 경로를 수정했습니다"
-    elsif fixed_count > 0
-      Pod::UI.puts "  ✅ 총 #{fixed_count}개의 Module map 경로를 수정했습니다"
-    else
-      Pod::UI.puts "  ✅ Module map 경로 확인 완료 (수정 불필요)"
-    end
-    
-    # 프로젝트 파일 저장 (빌드 설정 변경사항 반영)
-    begin
-      installer_context.pods_project.save
-      Pod::UI.puts "  ✅ Pods 프로젝트 파일 저장 완료"
-    rescue => e
-      Pod::UI.puts "  ⚠️  프로젝트 파일 저장 실패: #{e.message}"
-    end
-    
-    # 메인 프로젝트의 빌드 설정도 확인
-    installer_context.aggregate_targets.each do |aggregate_target|
-      aggregate_target.user_project.targets.each do |target|
-        target.build_configurations.each do |config|
-          # HEADER_SEARCH_PATHS에 Pods 경로가 포함되어 있는지 확인
-          header_paths = Array(config.build_settings['HEADER_SEARCH_PATHS'] || [])
-          pods_header_path = '$(PODS_ROOT)/Headers/Public'
-          if !header_paths.include?(pods_header_path) && !header_paths.include?('$(inherited)')
-            header_paths << '$(inherited)'
-            header_paths << pods_header_path
-            config.build_settings['HEADER_SEARCH_PATHS'] = header_paths.uniq
-          end
-          
-          # FRAMEWORK_SEARCH_PATHS에도 Pods 경로 확인
-          framework_paths = Array(config.build_settings['FRAMEWORK_SEARCH_PATHS'] || [])
-          pods_framework_path = '$(PODS_ROOT)/Frameworks'
-          if !framework_paths.include?(pods_framework_path) && !framework_paths.include?('$(inherited)')
-            framework_paths << '$(inherited)'
-            framework_paths << pods_framework_path
-            config.build_settings['FRAMEWORK_SEARCH_PATHS'] = framework_paths.uniq
-          end
-        end
-      end
-    end
-    
-    Pod::UI.puts "  Module map 경로 설정 확인 완료"
-  rescue => e
-    Pod::UI.puts "  Module map 경로 설정 실패: #{e.message}"
-    Pod::UI.puts "  스택 트레이스: #{e.backtrace.first(5).join("\n")}"
-  end
+  Pod::UI.puts ""
+  Pod::UI.puts "═══════════════════════════════════════════════════════════"
+  Pod::UI.puts "  ✅ post_install 블록 완료"
+  Pod::UI.puts "═══════════════════════════════════════════════════════════"
 end
