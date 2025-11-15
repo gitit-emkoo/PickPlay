@@ -612,48 +612,67 @@ platform :ios do
     sh("cd #{IOS_DIR} && pod install")
 
     # Module map 경로 수정 (절대 경로 -> $(PODS_ROOT) 상대 경로)
+    # CocoaPods가 절대 경로로 잘못 생성하는 버그 수정
+    # 목적: 빌드 성공 → Archive 성공 → IPA 생성
     begin
       require 'xcodeproj'
       pods_project_path = File.join(IOS_DIR, 'Pods', 'Pods.xcodeproj')
       if File.exist?(pods_project_path)
-        UI.message("🔧 Module map 경로 수정 중...")
+        UI.message("🔧 [빌드 수정] Module map 경로 수정 중... (최종 목표: IPA 생성)")
         pods_project = Xcodeproj::Project.open(pods_project_path)
         project_root = File.expand_path('..', IOS_DIR)
-        pods_root = File.join(IOS_DIR, 'Pods')
+        pods_target_support = File.join(IOS_DIR, 'Pods', 'Target Support Files')
         fixed_count = 0
+        skipped_count = 0
         
         pods_project.targets.each do |target|
+          target_name = target.name
+          correct_path = "$(PODS_ROOT)/Target Support Files/#{target_name}/#{target_name}.modulemap"
+          expected_file = File.join(pods_target_support, target_name, "#{target_name}.modulemap")
+          file_exists = File.exist?(expected_file)
+          
           target.build_configurations.each do |config|
             current_modulemap = config.build_settings['MODULEMAP_FILE'].to_s
             
-            # 절대 경로를 $(PODS_ROOT) 상대 경로로 변경
-            if !current_modulemap.empty? && current_modulemap.include?(project_root)
-              # 절대 경로에서 Target Support Files 부분 추출
-              if current_modulemap.include?('Target Support Files')
-                target_name = target.name
-                correct_path = "$(PODS_ROOT)/Target Support Files/#{target_name}/#{target_name}.modulemap"
-                config.build_settings['MODULEMAP_FILE'] = correct_path
-                fixed_count += 1
+            # 이미 올바른 경로인 경우 스킵
+            if current_modulemap == correct_path
+              skipped_count += 1
+              next
+            end
+            
+            # 파일이 존재하면 올바른 경로로 설정
+            if file_exists
+              old_path = current_modulemap.empty? ? '(없음)' : current_modulemap
+              config.build_settings['MODULEMAP_FILE'] = correct_path
+              fixed_count += 1
+              if fixed_count <= 10
+                UI.message("  ✅ [#{fixed_count}] #{target_name}: #{old_path} -> #{correct_path}")
               end
-            elsif !current_modulemap.empty? && current_modulemap.start_with?('/') && !current_modulemap.include?('$(PODS_ROOT)')
-              # 다른 절대 경로도 수정
-              if current_modulemap.include?('Target Support Files')
-                target_name = target.name
-                correct_path = "$(PODS_ROOT)/Target Support Files/#{target_name}/#{target_name}.modulemap"
-                config.build_settings['MODULEMAP_FILE'] = correct_path
+            else
+              # 파일이 없는데 잘못된 경로가 설정되어 있으면 제거
+              if !current_modulemap.empty?
+                config.build_settings['MODULEMAP_FILE'] = ""
                 fixed_count += 1
+                if fixed_count <= 10
+                  UI.message("  ⚠️  [#{fixed_count}] #{target_name}: 모듈 맵 파일 없음, 경로 제거")
+                end
               end
             end
           end
         end
         
         pods_project.save
-        UI.success("✅ Module map 경로 수정 완료 (#{fixed_count}개 타겟)")
+        UI.success("✅ [빌드 수정] Module map 경로 수정 완료 (수정: #{fixed_count}개, 이미 올바름: #{skipped_count}개)")
+        UI.message("  → 다음 단계: 빌드 성공 → Archive → IPA 생성")
+      else
+        UI.important("⚠️ Pods.xcodeproj 파일을 찾을 수 없습니다: #{pods_project_path}")
       end
-    rescue LoadError
+    rescue LoadError => e
       UI.important("⚠️ xcodeproj gem 없음 - Module map 경로 수정 건너뜀")
+      UI.important("  설치: gem install xcodeproj")
     rescue => e
-      UI.important("⚠️ Module map 경로 수정 실패: #{e.message}")
+      UI.important("⚠️ Module map 경로 수정 실패: #{e.class}: #{e.message}")
+      UI.important("  스택: #{e.backtrace.first(5).join("\n  ")}")
     end
 
     # Team ID 주입
