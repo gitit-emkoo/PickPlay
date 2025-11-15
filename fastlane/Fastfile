@@ -917,6 +917,23 @@ platform :ios do
             UI.important("  ⚠️  ios 디렉토리 심볼릭 링크 [2] 생성 실패: #{e.message}")
           end
         end
+
+        # build 디렉토리 경로 문제 해결
+        # React Native Codegen이 /Users/runner/work/PickPlay/build/generated/ios/...를 찾으려고 하는 경우
+        # 실제 파일은 /Users/runner/work/PickPlay/PickPlay/ios/build/generated/ios/...에 있음
+        correct_build_dir = File.join(IOS_DIR, 'build')
+        wrong_build_dir_pickplay = File.join(File.dirname(project_root), 'build')  # /Users/runner/work/PickPlay/build
+        
+        if Dir.exist?(correct_build_dir) && !File.symlink?(wrong_build_dir_pickplay) && !File.exist?(wrong_build_dir_pickplay)
+          begin
+            FileUtils.mkdir_p(File.dirname(wrong_build_dir_pickplay))
+            FileUtils.ln_sf(File.expand_path(correct_build_dir), wrong_build_dir_pickplay)
+            UI.success("  ✅ build 디렉토리 심볼릭 링크 생성: #{wrong_build_dir_pickplay} -> #{correct_build_dir}")
+            header_fixed_count += 1
+          rescue => e
+            UI.important("  ⚠️  build 디렉토리 심볼릭 링크 생성 실패: #{e.message}")
+          end
+        end
         
         # Pods 디렉토리 내 pod들이 프로젝트 루트에서 찾으려고 하는 경우
         # 예: /Users/runner/work/PickPlay/PickPlay/nanopb -> ios/Pods/nanopb
