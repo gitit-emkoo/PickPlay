@@ -611,6 +611,51 @@ platform :ios do
     # Pods 재설치
     sh("cd #{IOS_DIR} && pod install")
 
+    # Module map 경로 수정 (절대 경로 -> $(PODS_ROOT) 상대 경로)
+    begin
+      require 'xcodeproj'
+      pods_project_path = File.join(IOS_DIR, 'Pods', 'Pods.xcodeproj')
+      if File.exist?(pods_project_path)
+        UI.message("🔧 Module map 경로 수정 중...")
+        pods_project = Xcodeproj::Project.open(pods_project_path)
+        project_root = File.expand_path('..', IOS_DIR)
+        pods_root = File.join(IOS_DIR, 'Pods')
+        fixed_count = 0
+        
+        pods_project.targets.each do |target|
+          target.build_configurations.each do |config|
+            current_modulemap = config.build_settings['MODULEMAP_FILE'].to_s
+            
+            # 절대 경로를 $(PODS_ROOT) 상대 경로로 변경
+            if !current_modulemap.empty? && current_modulemap.include?(project_root)
+              # 절대 경로에서 Target Support Files 부분 추출
+              if current_modulemap.include?('Target Support Files')
+                target_name = target.name
+                correct_path = "$(PODS_ROOT)/Target Support Files/#{target_name}/#{target_name}.modulemap"
+                config.build_settings['MODULEMAP_FILE'] = correct_path
+                fixed_count += 1
+              end
+            elsif !current_modulemap.empty? && current_modulemap.start_with?('/') && !current_modulemap.include?('$(PODS_ROOT)')
+              # 다른 절대 경로도 수정
+              if current_modulemap.include?('Target Support Files')
+                target_name = target.name
+                correct_path = "$(PODS_ROOT)/Target Support Files/#{target_name}/#{target_name}.modulemap"
+                config.build_settings['MODULEMAP_FILE'] = correct_path
+                fixed_count += 1
+              end
+            end
+          end
+        end
+        
+        pods_project.save
+        UI.success("✅ Module map 경로 수정 완료 (#{fixed_count}개 타겟)")
+      end
+    rescue LoadError
+      UI.important("⚠️ xcodeproj gem 없음 - Module map 경로 수정 건너뜀")
+    rescue => e
+      UI.important("⚠️ Module map 경로 수정 실패: #{e.message}")
+    end
+
     # Team ID 주입
     update_project_team(
       path: XCODEPROJ,
