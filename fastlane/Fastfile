@@ -704,13 +704,104 @@ platform :ios do
         end
         
         # 빌드 단계(Build Phase)에서 Copy Headers의 output 경로도 수정
+        # Pods-pickplay 타겟의 Copy Headers 단계 출력 경로 문제 해결
         pods_project.targets.each do |target|
+          next unless target.name == 'Pods-pickplay'
+          
+          # Copy Files 빌드 단계 찾기 (Copy Headers는 Copy Files의 일종)
           target.build_phases.each do |phase|
-            next unless phase.is_a?(Xcodeproj::Project::Object::PBXHeadersBuildPhase)
+            if phase.is_a?(Xcodeproj::Project::Object::PBXCopyFilesBuildPhase)
+              # 출력 경로가 프로젝트 루트로 잘못 설정된 경우 수정
+              if phase.dst_path && phase.dst_path.to_s.include?(project_root) && !phase.dst_path.to_s.include?('$(PODS_ROOT)')
+                new_dst_path = phase.dst_path.to_s.sub(project_root, '$(PODS_ROOT)')
+                phase.dst_path = new_dst_path
+                header_fixed_count += 1
+                UI.message("  ✅ Copy Files 단계 출력 경로 수정: #{target.name}")
+              end
+              
+              # 각 파일 참조의 출력 경로도 확인
+              phase.files.each do |file|
+                if file.file_ref && file.file_ref.path
+                  # 파일 참조 경로가 프로젝트 루트를 포함하는 경우
+                  file_path = file.file_ref.path.to_s
+                  if file_path.include?('Target Support Files') && !file_path.include?('$(PODS_ROOT)') && !file_path.start_with?('$(PODS_ROOT)')
+                    # 이미 올바른 경로이거나 Xcode가 자동으로 처리할 것으로 예상
+                  end
+                end
+              end
+            end
             
-            # Copy Headers 단계의 출력 파일 참조 경로는 Xcode가 자동으로 관리하므로
-            # 여기서는 빌드 설정만 수정
+            # Headers 빌드 단계 확인
+            if phase.is_a?(Xcodeproj::Project::Object::PBXHeadersBuildPhase)
+              # Headers 빌드 단계의 파일 참조 확인
+              phase.files.each do |file|
+                # Public/Private/Project 헤더 설정 확인
+                if file.settings && file.settings['ATTRIBUTES']
+                  # 헤더 속성은 이미 올바르게 설정되어 있을 것으로 예상
+                end
+              end
+            end
           end
+          
+          # 빌드 설정에서 추가 경로 확인
+          target.build_configurations.each do |config|
+            # COPY_PHASE_STRIP 체크
+            # PUBLIC_HEADERS_FOLDER_PATH 다시 확인 (이미 위에서 수정했지만)
+            public_headers_path = config.build_settings['PUBLIC_HEADERS_FOLDER_PATH'].to_s
+            if public_headers_path.include?(project_root) && !public_headers_path.include?('$(PODS_ROOT)')
+              new_path = public_headers_path.sub(project_root, '$(PODS_ROOT)')
+              config.build_settings['PUBLIC_HEADERS_FOLDER_PATH'] = new_path
+              header_fixed_count += 1
+              UI.message("  ✅ PUBLIC_HEADERS_FOLDER_PATH 수정: #{target.name}.#{config.name}")
+            end
+          end
+        end
+        
+        # Pods-pickplay umbrella header 경로 문제 추가 해결
+        # CocoaPods가 잘못된 경로를 생성하는 경우를 대비하여 디렉토리 생성
+        pods_pickplay_target_support = File.join(IOS_DIR, 'Pods', 'Target Support Files', 'Pods-pickplay')
+        project_root_target_support = File.join(project_root, 'Target Support Files', 'Pods-pickplay')
+        
+        # 올바른 위치에 디렉토리가 있는지 확인
+        if Dir.exist?(pods_pickplay_target_support)
+          UI.message("  ✅ 올바른 Pods-pickplay Target Support Files 디렉토리 존재: #{pods_pickplay_target_support}")
+          
+          # 프로젝트 루트에 잘못된 경로가 필요한 경우 심볼릭 링크 생성
+          # CocoaPods가 프로젝트 루트에서 Target Support Files를 찾으려고 하므로
+          # 심볼릭 링크를 생성하여 올바른 위치로 리다이렉트
+          if !Dir.exist?(project_root_target_support) || !File.symlink?(project_root_target_support)
+            begin
+              # 기존 디렉토리/파일이 있으면 제거
+              FileUtils.rm_rf(project_root_target_support) if File.exist?(project_root_target_support)
+              
+              # 상위 디렉토리 생성
+              FileUtils.mkdir_p(File.dirname(project_root_target_support))
+              
+              # 심볼릭 링크 생성 (절대 경로 사용)
+              absolute_pods_path = File.expand_path(pods_pickplay_target_support)
+              FileUtils.ln_sf(absolute_pods_path, project_root_target_support)
+              
+              UI.success("  ✅ 심볼릭 링크 생성 완료: #{project_root_target_support} -> #{absolute_pods_path}")
+              header_fixed_count += 1
+            rescue => e
+              UI.important("  ⚠️  심볼릭 링크 생성 실패: #{e.message}")
+              UI.important("  → 대안: 디렉토리 복사 시도...")
+              
+              # 심볼릭 링크가 실패하면 디렉토리 복사
+              begin
+                FileUtils.mkdir_p(project_root_target_support)
+                FileUtils.cp_r(File.join(pods_pickplay_target_support, '.'), project_root_target_support)
+                UI.success("  ✅ 디렉토리 복사 완료: #{pods_pickplay_target_support} -> #{project_root_target_support}")
+                header_fixed_count += 1
+              rescue => e2
+                UI.important("  ⚠️  디렉토리 복사도 실패: #{e2.message}")
+              end
+            end
+          else
+            UI.message("  ✅ 올바른 심볼릭 링크 이미 존재: #{project_root_target_support}")
+          end
+        else
+          UI.important("  ⚠️  Pods-pickplay Target Support Files 디렉토리를 찾을 수 없습니다: #{pods_pickplay_target_support}")
         end
         
         pods_project.save
