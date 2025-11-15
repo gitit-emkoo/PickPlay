@@ -934,6 +934,23 @@ platform :ios do
             UI.important("  ⚠️  build 디렉토리 심볼릭 링크 생성 실패: #{e.message}")
           end
         end
+
+        # pickplay 디렉토리 경로 문제 해결
+        # Xcode가 /Users/runner/work/PickPlay/PickPlay/pickplay/...를 찾으려고 하는 경우
+        # 실제 파일은 /Users/runner/work/PickPlay/PickPlay/ios/pickplay/...에 있음
+        correct_pickplay_dir = File.join(IOS_DIR, 'pickplay')
+        wrong_pickplay_dir = File.join(project_root, 'pickplay')  # /Users/runner/work/PickPlay/PickPlay/pickplay
+        
+        if Dir.exist?(correct_pickplay_dir) && !File.symlink?(wrong_pickplay_dir) && !File.exist?(wrong_pickplay_dir)
+          begin
+            FileUtils.mkdir_p(File.dirname(wrong_pickplay_dir))
+            FileUtils.ln_sf(File.expand_path(correct_pickplay_dir), wrong_pickplay_dir)
+            UI.success("  ✅ pickplay 디렉토리 심볼릭 링크 생성: #{wrong_pickplay_dir} -> #{correct_pickplay_dir}")
+            header_fixed_count += 1
+          rescue => e
+            UI.important("  ⚠️  pickplay 디렉토리 심볼릭 링크 생성 실패: #{e.message}")
+          end
+        end
         
         # Pods 디렉토리 내 pod들이 프로젝트 루트에서 찾으려고 하는 경우
         # 예: /Users/runner/work/PickPlay/PickPlay/nanopb -> ios/Pods/nanopb
@@ -977,6 +994,100 @@ platform :ios do
         if header_fixed_count > 0
           UI.success("✅ [빌드 수정] 헤더 경로 수정 완료 (수정: #{header_fixed_count}개)")
         end
+
+        # 메인 프로젝트(pickplay.xcodeproj)의 파일 참조 경로 수정
+        # Xcode가 /Users/runner/work/PickPlay/PickPlay/pickplay/...를 찾지만
+        # 실제 파일은 /Users/runner/work/PickPlay/PickPlay/ios/pickplay/...에 있음
+        UI.message("  🔍 메인 프로젝트 파일 참조 경로 수정 중...")
+        begin
+          main_project = Xcodeproj::Project.open(XCODEPROJ)
+          main_project_fixed_count = 0
+          
+          main_project.targets.each do |target|
+            target.build_phases.each do |phase|
+              # Copy Files 빌드 단계 확인
+              if phase.is_a?(Xcodeproj::Project::Object::PBXCopyFilesBuildPhase)
+                phase.files.each do |file|
+                  next unless file.file_ref
+                  
+                  file_path = file.file_ref.path.to_s
+                  if file_path.include?('/Users/runner/work/PickPlay/PickPlay/pickplay/') && !file_path.include?('/ios/')
+                    # 잘못된 경로를 올바른 경로로 수정
+                    new_path = file_path.sub('/Users/runner/work/PickPlay/PickPlay/pickplay/', 'pickplay/')
+                    file.file_ref.path = new_path
+                    main_project_fixed_count += 1
+                    if main_project_fixed_count <= 5
+                      UI.message("  ✅ 파일 참조 경로 수정 [#{main_project_fixed_count}]: #{file_path} -> #{new_path}")
+                    end
+                  end
+                end
+              end
+              
+              # Copy Headers 빌드 단계 확인
+              if phase.is_a?(Xcodeproj::Project::Object::PBXHeadersBuildPhase)
+                phase.files.each do |file|
+                  next unless file.file_ref
+                  
+                  file_path = file.file_ref.path.to_s
+                  if file_path.include?('/Users/runner/work/PickPlay/PickPlay/pickplay/') && !file_path.include?('/ios/')
+                    new_path = file_path.sub('/Users/runner/work/PickPlay/PickPlay/pickplay/', 'pickplay/')
+                    file.file_ref.path = new_path
+                    main_project_fixed_count += 1
+                    if main_project_fixed_count <= 5
+                      UI.message("  ✅ 헤더 참조 경로 수정 [#{main_project_fixed_count}]: #{file_path} -> #{new_path}")
+                    end
+                  end
+                end
+              end
+              
+              # Copy Bundle Resources 빌드 단계 확인
+              if phase.is_a?(Xcodeproj::Project::Object::PBXResourcesBuildPhase)
+                phase.files.each do |file|
+                  next unless file.file_ref
+                  
+                  file_path = file.file_ref.path.to_s
+                  if file_path.include?('/Users/runner/work/PickPlay/PickPlay/pickplay/') && !file_path.include?('/ios/')
+                    new_path = file_path.sub('/Users/runner/work/PickPlay/PickPlay/pickplay/', 'pickplay/')
+                    file.file_ref.path = new_path
+                    main_project_fixed_count += 1
+                    if main_project_fixed_count <= 5
+                      UI.message("  ✅ 리소스 참조 경로 수정 [#{main_project_fixed_count}]: #{file_path} -> #{new_path}")
+                    end
+                  end
+                end
+              end
+            end
+            
+            # 빌드 설정에서 잘못된 절대 경로 수정
+            target.build_configurations.each do |config|
+              # INFOPLIST_FILE 등의 경로 확인
+              ['INFOPLIST_FILE', 'ASSETCATALOG_COMPILER_APPICON_NAME'].each do |key|
+                current_path = config.build_settings[key].to_s
+                if !current_path.empty? && current_path.include?('/Users/runner/work/PickPlay/PickPlay/pickplay/') && !current_path.include?('/ios/')
+                  new_path = current_path.sub('/Users/runner/work/PickPlay/PickPlay/pickplay/', 'pickplay/')
+                  config.build_settings[key] = new_path
+                  main_project_fixed_count += 1
+                  if main_project_fixed_count <= 5
+                    UI.message("  ✅ 빌드 설정 경로 수정 [#{main_project_fixed_count}]: #{key} = #{new_path}")
+                  end
+                end
+              end
+            end
+          end
+          
+          main_project.save
+          if main_project_fixed_count > 5
+            UI.success("  ✅ 총 #{main_project_fixed_count}개의 메인 프로젝트 파일 참조 경로를 수정했습니다 (처음 5개만 표시)")
+          elsif main_project_fixed_count > 0
+            UI.success("  ✅ 총 #{main_project_fixed_count}개의 메인 프로젝트 파일 참조 경로를 수정했습니다")
+          else
+            UI.message("  ✅ 메인 프로젝트 파일 참조 경로 확인 완료 (수정 불필요)")
+          end
+        rescue => e
+          UI.important("  ⚠️  메인 프로젝트 파일 참조 경로 수정 실패: #{e.class}: #{e.message}")
+          UI.important("     (계속 진행합니다...)")
+        end
+        
         UI.message("  → 다음 단계: 빌드 성공 → Archive → IPA 생성")
       else
         UI.important("⚠️ Pods.xcodeproj 파일을 찾을 수 없습니다: #{pods_project_path}")
