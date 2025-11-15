@@ -568,7 +568,7 @@ platform :ios do
       keychain_name: "build",
       keychain_password: KEYCHAIN_PW,
       git_branch: MATCH_BRANCH,
-      clone_branch_directly: true,
+      clone_branch_directly: false,  # CI 환경에서 브랜치 충돌 방지
       shallow_clone: true,
       api_key: api_key
     )
