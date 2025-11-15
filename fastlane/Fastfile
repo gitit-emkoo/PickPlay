@@ -809,33 +809,67 @@ platform :ios do
         # node_modules 경로 문제도 해결
         # CocoaPods가 /Users/runner/work/node_modules/...를 찾으려고 하는 경우
         # 올바른 경로로 심볼릭 링크 생성
-        wrong_node_modules = File.join(File.dirname(project_root), 'node_modules')
+        # /Users/runner/work/PickPlay/node_modules와 /Users/runner/work/node_modules 모두 생성
         correct_node_modules = File.join(project_root, 'node_modules')
         
-        if Dir.exist?(correct_node_modules) && !Dir.exist?(wrong_node_modules)
+        # /Users/runner/work/PickPlay/node_modules 심볼릭 링크
+        wrong_node_modules_pickplay = File.join(File.dirname(project_root), 'node_modules')
+        if Dir.exist?(correct_node_modules) && !File.symlink?(wrong_node_modules_pickplay)
           begin
-            FileUtils.mkdir_p(File.dirname(wrong_node_modules))
-            FileUtils.ln_sf(File.expand_path(correct_node_modules), wrong_node_modules)
-            UI.success("  ✅ node_modules 심볼릭 링크 생성: #{wrong_node_modules} -> #{correct_node_modules}")
+            FileUtils.rm_rf(wrong_node_modules_pickplay) if File.exist?(wrong_node_modules_pickplay)
+            FileUtils.mkdir_p(File.dirname(wrong_node_modules_pickplay))
+            FileUtils.ln_sf(File.expand_path(correct_node_modules), wrong_node_modules_pickplay)
+            UI.success("  ✅ node_modules 심볼릭 링크 [1] 생성: #{wrong_node_modules_pickplay} -> #{correct_node_modules}")
             header_fixed_count += 1
           rescue => e
-            UI.important("  ⚠️  node_modules 심볼릭 링크 생성 실패: #{e.message}")
+            UI.important("  ⚠️  node_modules 심볼릭 링크 [1] 생성 실패: #{e.message}")
+          end
+        end
+        
+        # /Users/runner/work/node_modules 심볼릭 링크 (더 상위 레벨)
+        wrong_node_modules_work = File.join(File.dirname(File.dirname(project_root)), 'node_modules')
+        if Dir.exist?(correct_node_modules) && !File.symlink?(wrong_node_modules_work)
+          begin
+            FileUtils.rm_rf(wrong_node_modules_work) if File.exist?(wrong_node_modules_work)
+            FileUtils.mkdir_p(File.dirname(wrong_node_modules_work))
+            FileUtils.ln_sf(File.expand_path(correct_node_modules), wrong_node_modules_work)
+            UI.success("  ✅ node_modules 심볼릭 링크 [2] 생성: #{wrong_node_modules_work} -> #{correct_node_modules}")
+            header_fixed_count += 1
+          rescue => e
+            UI.important("  ⚠️  node_modules 심볼릭 링크 [2] 생성 실패: #{e.message}")
           end
         end
         
         # ios 디렉토리 경로 문제도 해결
         # CocoaPods가 /Users/runner/work/ios/...를 찾으려고 하는 경우
-        wrong_ios_dir = File.join(File.dirname(project_root), 'ios')
+        # /Users/runner/work/PickPlay/ios와 /Users/runner/work/ios 모두 생성
         correct_ios_dir = IOS_DIR
         
-        if Dir.exist?(correct_ios_dir) && !Dir.exist?(wrong_ios_dir)
+        # /Users/runner/work/PickPlay/ios 심볼릭 링크
+        wrong_ios_dir_pickplay = File.join(File.dirname(project_root), 'ios')
+        if Dir.exist?(correct_ios_dir) && !File.symlink?(wrong_ios_dir_pickplay)
           begin
-            FileUtils.mkdir_p(File.dirname(wrong_ios_dir))
-            FileUtils.ln_sf(File.expand_path(correct_ios_dir), wrong_ios_dir)
-            UI.success("  ✅ ios 디렉토리 심볼릭 링크 생성: #{wrong_ios_dir} -> #{correct_ios_dir}")
+            FileUtils.rm_rf(wrong_ios_dir_pickplay) if File.exist?(wrong_ios_dir_pickplay)
+            FileUtils.mkdir_p(File.dirname(wrong_ios_dir_pickplay))
+            FileUtils.ln_sf(File.expand_path(correct_ios_dir), wrong_ios_dir_pickplay)
+            UI.success("  ✅ ios 디렉토리 심볼릭 링크 [1] 생성: #{wrong_ios_dir_pickplay} -> #{correct_ios_dir}")
             header_fixed_count += 1
           rescue => e
-            UI.important("  ⚠️  ios 디렉토리 심볼릭 링크 생성 실패: #{e.message}")
+            UI.important("  ⚠️  ios 디렉토리 심볼릭 링크 [1] 생성 실패: #{e.message}")
+          end
+        end
+        
+        # /Users/runner/work/ios 심볼릭 링크 (더 상위 레벨)
+        wrong_ios_dir_work = File.join(File.dirname(File.dirname(project_root)), 'ios')
+        if Dir.exist?(correct_ios_dir) && !File.symlink?(wrong_ios_dir_work)
+          begin
+            FileUtils.rm_rf(wrong_ios_dir_work) if File.exist?(wrong_ios_dir_work)
+            FileUtils.mkdir_p(File.dirname(wrong_ios_dir_work))
+            FileUtils.ln_sf(File.expand_path(correct_ios_dir), wrong_ios_dir_work)
+            UI.success("  ✅ ios 디렉토리 심볼릭 링크 [2] 생성: #{wrong_ios_dir_work} -> #{correct_ios_dir}")
+            header_fixed_count += 1
+          rescue => e
+            UI.important("  ⚠️  ios 디렉토리 심볼릭 링크 [2] 생성 실패: #{e.message}")
           end
         end
         
