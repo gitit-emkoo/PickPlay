@@ -757,51 +757,86 @@ platform :ios do
           end
         end
         
-        # Pods-pickplay umbrella header 경로 문제 추가 해결
-        # CocoaPods가 잘못된 경로를 생성하는 경우를 대비하여 디렉토리 생성
-        pods_pickplay_target_support = File.join(IOS_DIR, 'Pods', 'Target Support Files', 'Pods-pickplay')
-        project_root_target_support = File.join(project_root, 'Target Support Files', 'Pods-pickplay')
+        # 모든 타겟의 Target Support Files 심볼릭 링크 생성
+        # CocoaPods가 프로젝트 루트에서 Target Support Files를 찾으려고 하는 버그 해결
+        pods_target_support_base = File.join(IOS_DIR, 'Pods', 'Target Support Files')
+        project_root_target_support_base = File.join(project_root, 'Target Support Files')
         
-        # 올바른 위치에 디렉토리가 있는지 확인
-        if Dir.exist?(pods_pickplay_target_support)
-          UI.message("  ✅ 올바른 Pods-pickplay Target Support Files 디렉토리 존재: #{pods_pickplay_target_support}")
+        if Dir.exist?(pods_target_support_base)
+          UI.message("  🔍 모든 타겟의 Target Support Files 심볼릭 링크 생성 중...")
           
-          # 프로젝트 루트에 잘못된 경로가 필요한 경우 심볼릭 링크 생성
-          # CocoaPods가 프로젝트 루트에서 Target Support Files를 찾으려고 하므로
-          # 심볼릭 링크를 생성하여 올바른 위치로 리다이렉트
-          if !Dir.exist?(project_root_target_support) || !File.symlink?(project_root_target_support)
-            begin
-              # 기존 디렉토리/파일이 있으면 제거
-              FileUtils.rm_rf(project_root_target_support) if File.exist?(project_root_target_support)
-              
-              # 상위 디렉토리 생성
-              FileUtils.mkdir_p(File.dirname(project_root_target_support))
-              
-              # 심볼릭 링크 생성 (절대 경로 사용)
-              absolute_pods_path = File.expand_path(pods_pickplay_target_support)
-              FileUtils.ln_sf(absolute_pods_path, project_root_target_support)
-              
-              UI.success("  ✅ 심볼릭 링크 생성 완료: #{project_root_target_support} -> #{absolute_pods_path}")
-              header_fixed_count += 1
-            rescue => e
-              UI.important("  ⚠️  심볼릭 링크 생성 실패: #{e.message}")
-              UI.important("  → 대안: 디렉토리 복사 시도...")
-              
-              # 심볼릭 링크가 실패하면 디렉토리 복사
+          # 프로젝트 루트에 Target Support Files 디렉토리 생성
+          FileUtils.mkdir_p(project_root_target_support_base) unless Dir.exist?(project_root_target_support_base)
+          
+          # 모든 타겟 디렉토리에 대해 심볼릭 링크 생성
+          Dir.entries(pods_target_support_base).each do |entry|
+            next if entry.start_with?('.')
+            
+            target_dir = File.join(pods_target_support_base, entry)
+            next unless Dir.exist?(target_dir)
+            
+            project_root_target_dir = File.join(project_root_target_support_base, entry)
+            
+            # 심볼릭 링크가 없거나 잘못된 경우 생성
+            if !Dir.exist?(project_root_target_dir) || (!File.symlink?(project_root_target_dir) && project_root_target_dir != target_dir)
               begin
-                FileUtils.mkdir_p(project_root_target_support)
-                FileUtils.cp_r(File.join(pods_pickplay_target_support, '.'), project_root_target_support)
-                UI.success("  ✅ 디렉토리 복사 완료: #{pods_pickplay_target_support} -> #{project_root_target_support}")
+                # 기존 디렉토리/파일이 있으면 제거
+                FileUtils.rm_rf(project_root_target_dir) if File.exist?(project_root_target_dir)
+                
+                # 심볼릭 링크 생성 (절대 경로 사용)
+                absolute_target_path = File.expand_path(target_dir)
+                FileUtils.ln_sf(absolute_target_path, project_root_target_dir)
+                
                 header_fixed_count += 1
-              rescue => e2
-                UI.important("  ⚠️  디렉토리 복사도 실패: #{e2.message}")
+                if header_fixed_count <= 10
+                  UI.message("  ✅ 심볼릭 링크 [#{header_fixed_count}]: #{entry}")
+                end
+              rescue => e
+                UI.important("  ⚠️  심볼릭 링크 생성 실패 (#{entry}): #{e.message}")
               end
             end
-          else
-            UI.message("  ✅ 올바른 심볼릭 링크 이미 존재: #{project_root_target_support}")
+          end
+          
+          if header_fixed_count > 10
+            UI.success("  ✅ 총 #{header_fixed_count}개의 Target Support Files 심볼릭 링크 생성 완료")
+          elsif header_fixed_count > 0
+            UI.success("  ✅ #{header_fixed_count}개의 Target Support Files 심볼릭 링크 생성 완료")
           end
         else
-          UI.important("  ⚠️  Pods-pickplay Target Support Files 디렉토리를 찾을 수 없습니다: #{pods_pickplay_target_support}")
+          UI.important("  ⚠️  Target Support Files 디렉토리를 찾을 수 없습니다: #{pods_target_support_base}")
+        end
+        
+        # node_modules 경로 문제도 해결
+        # CocoaPods가 /Users/runner/work/node_modules/...를 찾으려고 하는 경우
+        # 올바른 경로로 심볼릭 링크 생성
+        wrong_node_modules = File.join(File.dirname(project_root), 'node_modules')
+        correct_node_modules = File.join(project_root, 'node_modules')
+        
+        if Dir.exist?(correct_node_modules) && !Dir.exist?(wrong_node_modules)
+          begin
+            FileUtils.mkdir_p(File.dirname(wrong_node_modules))
+            FileUtils.ln_sf(File.expand_path(correct_node_modules), wrong_node_modules)
+            UI.success("  ✅ node_modules 심볼릭 링크 생성: #{wrong_node_modules} -> #{correct_node_modules}")
+            header_fixed_count += 1
+          rescue => e
+            UI.important("  ⚠️  node_modules 심볼릭 링크 생성 실패: #{e.message}")
+          end
+        end
+        
+        # ios 디렉토리 경로 문제도 해결
+        # CocoaPods가 /Users/runner/work/ios/...를 찾으려고 하는 경우
+        wrong_ios_dir = File.join(File.dirname(project_root), 'ios')
+        correct_ios_dir = IOS_DIR
+        
+        if Dir.exist?(correct_ios_dir) && !Dir.exist?(wrong_ios_dir)
+          begin
+            FileUtils.mkdir_p(File.dirname(wrong_ios_dir))
+            FileUtils.ln_sf(File.expand_path(correct_ios_dir), wrong_ios_dir)
+            UI.success("  ✅ ios 디렉토리 심볼릭 링크 생성: #{wrong_ios_dir} -> #{correct_ios_dir}")
+            header_fixed_count += 1
+          rescue => e
+            UI.important("  ⚠️  ios 디렉토리 심볼릭 링크 생성 실패: #{e.message}")
+          end
         end
         
         pods_project.save
