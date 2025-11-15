@@ -770,36 +770,68 @@ platform :ios do
           end
         end
         
+        # PUBLIC_HEADERS_FOLDER_PATH가 잘못된 절대 경로를 사용하는 경우 수정
+        # 예: /Users/runner/work/PickPlay/Pods/Target Support Files/... -> $(PODS_ROOT)/Target Support Files/...
+        pods_project.targets.each do |target|
+          target.build_configurations.each do |config|
+            ['PUBLIC_HEADERS_FOLDER_PATH', 'PRIVATE_HEADERS_FOLDER_PATH'].each do |header_path_key|
+              current_path = config.build_settings[header_path_key].to_s
+              
+              # /Users/runner/work/PickPlay/Pods/ 경로가 포함된 경우 수정
+              if !current_path.empty? && current_path.include?('/Users/runner/work/PickPlay/Pods/') && !current_path.include?('$(PODS_ROOT)')
+                new_path = current_path.sub('/Users/runner/work/PickPlay/Pods/', '$(PODS_ROOT)/')
+                config.build_settings[header_path_key] = new_path
+                header_fixed_count += 1
+                if header_fixed_count <= 5
+                  UI.message("  ✅ [#{header_fixed_count}] #{target.name}.#{config.name}: #{header_path_key} 수정")
+                  UI.message("     이전: #{current_path}")
+                  UI.message("     수정: #{new_path}")
+                end
+              end
+            end
+          end
+        end
+
         # 모든 타겟의 Target Support Files 심볼릭 링크 생성
         # CocoaPods가 프로젝트 루트에서 Target Support Files를 찾으려고 하는 버그 해결
         pods_target_support_base = File.join(IOS_DIR, 'Pods', 'Target Support Files')
         project_root_target_support_base = File.join(project_root, 'Target Support Files')
+        wrong_pods_target_support_base = File.join(File.dirname(project_root), 'Pods', 'Target Support Files')  # /Users/runner/work/PickPlay/Pods/Target Support Files
         
         if Dir.exist?(pods_target_support_base)
           UI.message("  🔍 모든 타겟의 Target Support Files 심볼릭 링크 생성 중...")
           
-          # 프로젝트 루트에 Target Support Files 디렉토리 생성
+          # 1. 프로젝트 루트에 Target Support Files 디렉토리 생성
           FileUtils.mkdir_p(project_root_target_support_base) unless Dir.exist?(project_root_target_support_base)
           
-          # 모든 타겟 디렉토리에 대해 심볼릭 링크 생성
+          # 2. /Users/runner/work/PickPlay/Pods/ 디렉토리 생성 및 Target Support Files 심볼릭 링크
+          wrong_pods_base = File.join(File.dirname(project_root), 'Pods')
+          correct_pods_base = File.join(IOS_DIR, 'Pods')
+          if Dir.exist?(correct_pods_base) && !File.symlink?(wrong_pods_base) && !File.exist?(wrong_pods_base)
+            begin
+              FileUtils.mkdir_p(File.dirname(wrong_pods_base))
+              FileUtils.ln_sf(File.expand_path(correct_pods_base), wrong_pods_base)
+              UI.success("  ✅ Pods 디렉토리 심볼릭 링크 생성: #{wrong_pods_base} -> #{correct_pods_base}")
+              header_fixed_count += 1
+            rescue => e
+              UI.important("  ⚠️  Pods 디렉토리 심볼릭 링크 생성 실패: #{e.message}")
+            end
+          end
+          
+          # 3. 모든 타겟 디렉토리에 대해 심볼릭 링크 생성
           Dir.entries(pods_target_support_base).each do |entry|
             next if entry.start_with?('.')
             
             target_dir = File.join(pods_target_support_base, entry)
             next unless Dir.exist?(target_dir)
             
+            # 프로젝트 루트에 심볼릭 링크
             project_root_target_dir = File.join(project_root_target_support_base, entry)
-            
-            # 심볼릭 링크가 없거나 잘못된 경우 생성
             if !Dir.exist?(project_root_target_dir) || (!File.symlink?(project_root_target_dir) && project_root_target_dir != target_dir)
               begin
-                # 기존 디렉토리/파일이 있으면 제거
                 FileUtils.rm_rf(project_root_target_dir) if File.exist?(project_root_target_dir)
-                
-                # 심볼릭 링크 생성 (절대 경로 사용)
                 absolute_target_path = File.expand_path(target_dir)
                 FileUtils.ln_sf(absolute_target_path, project_root_target_dir)
-                
                 header_fixed_count += 1
                 if header_fixed_count <= 10
                   UI.message("  ✅ 심볼릭 링크 [#{header_fixed_count}]: #{entry}")
