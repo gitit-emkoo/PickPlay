@@ -873,6 +873,42 @@ platform :ios do
           end
         end
         
+        # Pods 디렉토리 내 pod들이 프로젝트 루트에서 찾으려고 하는 경우
+        # 예: /Users/runner/work/PickPlay/PickPlay/nanopb -> ios/Pods/nanopb
+        pods_dir = File.join(IOS_DIR, 'Pods')
+        if Dir.exist?(pods_dir)
+          # Pods 디렉토리 내 모든 pod 디렉토리 확인
+          Dir.entries(pods_dir).each do |entry|
+            next if entry.start_with?('.')
+            next if entry == 'Headers'
+            next if entry == 'Target Support Files'
+            next if entry == 'Local Podspecs'
+            next if entry == 'Manifest.lock'
+            next if entry.include?('.framework')
+            next if entry.include?('.a')
+            
+            pod_dir_in_pods = File.join(pods_dir, entry)
+            next unless Dir.exist?(pod_dir_in_pods)
+            
+            # 프로젝트 루트에 pod 디렉토리 심볼릭 링크 생성
+            pod_dir_in_project_root = File.join(project_root, entry)
+            if !File.symlink?(pod_dir_in_project_root) && !File.exist?(pod_dir_in_project_root)
+              begin
+                FileUtils.ln_sf(File.expand_path(pod_dir_in_pods), pod_dir_in_project_root)
+                header_fixed_count += 1
+                if header_fixed_count <= 155  # 처음 몇 개만 로그 출력
+                  UI.success("  ✅ Pod 심볼릭 링크 생성: #{entry}")
+                end
+              rescue => e
+                UI.important("  ⚠️  Pod 심볼릭 링크 생성 실패 (#{entry}): #{e.message}")
+              end
+            end
+          end
+          if header_fixed_count > 155
+            UI.success("  ✅ 추가 Pod 심볼릭 링크 생성 완료")
+          end
+        end
+        
         pods_project.save
         total_fixed = fixed_count + header_fixed_count
         UI.success("✅ [빌드 수정] Module map 경로 수정 완료 (수정: #{fixed_count}개, 이미 올바름: #{skipped_count}개)")
