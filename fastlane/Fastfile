@@ -661,8 +661,64 @@ platform :ios do
           end
         end
         
+        # 헤더 파일 경로도 수정 (umbrella header 등)
+        # Pods-pickplay 타겟의 Copy Headers 단계 경로 문제 해결
+        header_fixed_count = 0
+        pods_project.targets.each do |target|
+          target.build_configurations.each do |config|
+            # PUBLIC_HEADERS_FOLDER_PATH, PRIVATE_HEADERS_FOLDER_PATH 체크
+            ['PUBLIC_HEADERS_FOLDER_PATH', 'PRIVATE_HEADERS_FOLDER_PATH'].each do |header_path_key|
+              current_header_path = config.build_settings[header_path_key].to_s
+              
+              # 프로젝트 루트를 포함하는 잘못된 절대 경로 수정
+              if !current_header_path.empty? && current_header_path.include?(project_root) && !current_header_path.include?('$(PODS_ROOT)')
+                # Target Support Files 경로를 $(PODS_ROOT)로 변경
+                new_path = current_header_path.sub(project_root, '$(PODS_ROOT)')
+                config.build_settings[header_path_key] = new_path
+                header_fixed_count += 1
+                if header_fixed_count <= 5
+                  UI.message("  ✅ 헤더 경로 수정 [#{header_fixed_count}] #{target.name}.#{config.name}: #{header_path_key}")
+                end
+              end
+            end
+            
+            # HEADER_SEARCH_PATHS에서 잘못된 경로 수정
+            header_search_paths = Array(config.build_settings['HEADER_SEARCH_PATHS'] || [])
+            modified = false
+            header_search_paths = header_search_paths.map do |path|
+              path_str = path.to_s
+              if path_str.include?(project_root) && path_str.include?('Target Support Files') && !path_str.include?('$(PODS_ROOT)')
+                new_path = path_str.sub(project_root, '$(PODS_ROOT)')
+                modified = true
+                new_path
+              else
+                path
+              end
+            end
+            
+            if modified
+              config.build_settings['HEADER_SEARCH_PATHS'] = header_search_paths.uniq
+              header_fixed_count += 1
+            end
+          end
+        end
+        
+        # 빌드 단계(Build Phase)에서 Copy Headers의 output 경로도 수정
+        pods_project.targets.each do |target|
+          target.build_phases.each do |phase|
+            next unless phase.is_a?(Xcodeproj::Project::Object::PBXHeadersBuildPhase)
+            
+            # Copy Headers 단계의 출력 파일 참조 경로는 Xcode가 자동으로 관리하므로
+            # 여기서는 빌드 설정만 수정
+          end
+        end
+        
         pods_project.save
+        total_fixed = fixed_count + header_fixed_count
         UI.success("✅ [빌드 수정] Module map 경로 수정 완료 (수정: #{fixed_count}개, 이미 올바름: #{skipped_count}개)")
+        if header_fixed_count > 0
+          UI.success("✅ [빌드 수정] 헤더 경로 수정 완료 (수정: #{header_fixed_count}개)")
+        end
         UI.message("  → 다음 단계: 빌드 성공 → Archive → IPA 생성")
       else
         UI.important("⚠️ Pods.xcodeproj 파일을 찾을 수 없습니다: #{pods_project_path}")
