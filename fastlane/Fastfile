@@ -1103,6 +1103,89 @@ platform :ios do
           UI.important("  ⚠️  Pods-pickplay umbrella 재참조 보강 중 오류: #{e.message}")
         end
         
+        # 6) 모든 Pod 타겟에 대해 umbrella.h 및 node_modules 헤더 경로 전역 보정
+        begin
+          general_umbrella_fixed = 0
+          node_modules_headers_fixed = 0
+          wrong_root_prefix = '/Users/runner/work/PickPlay/PickPlay/'
+          wrong_ios_prefix  = '/Users/runner/work/ios/'
+          wrong_node_modules_prefixes = [
+            '/Users/runner/work/node_modules/',
+            '/Users/runner/work/PickPlay/node_modules/'
+          ]
+          pods_project.targets.each do |t|
+            t.build_phases.each do |phase|
+              next unless phase.respond_to?(:files)
+              # 잘못된 CopyFiles의 umbrella 항목 제거
+              if phase.is_a?(Xcodeproj::Project::Object::PBXCopyFilesBuildPhase)
+                to_remove = []
+                phase.files.each do |bf|
+                  next unless bf.file_ref && bf.file_ref.path
+                  p = bf.file_ref.path.to_s
+                  if p.end_with?('-umbrella.h') && p.include?('Target Support Files')
+                    to_remove << bf
+                  end
+                end
+                to_remove.each do |bf|
+                  begin
+                    phase.remove_file_reference(bf.file_ref)
+                  rescue
+                    begin
+                      pods_project.objects.delete(bf)
+                    rescue
+                    end
+                  end
+                end
+                general_umbrella_fixed += to_remove.size if to_remove.size > 0
+              end
+              # Headers 단계/모든 파일참조에 대해 경로 보정
+              phase.files.each do |bf|
+                next unless bf.file_ref && bf.file_ref.path
+                p = bf.file_ref.path.to_s
+                # umbrella.h가 TSF 절대/상대 경로면 $(PODS_ROOT) 기준으로
+                if p.end_with?('-umbrella.h') && p.include?('Target Support Files') && !p.start_with?('$(PODS_ROOT)')
+                  rel = p.dup
+                  if rel.start_with?(wrong_root_prefix)
+                    rel = rel.sub(wrong_root_prefix, '')
+                  elsif rel.start_with?(wrong_ios_prefix + 'Pods/')
+                    rel = rel.sub(wrong_ios_prefix + 'Pods/', '')
+                  else
+                    rel = rel.sub(%r{\APods/}, '')
+                  end
+                  rel = rel.sub(%r{\ATarget Support Files/}, 'Target Support Files/')
+                  bf.file_ref.path = File.join('$(PODS_ROOT)', rel)
+                  begin
+                    bf.file_ref.source_tree = 'PODS_ROOT'
+                  rescue
+                  end
+                  general_umbrella_fixed += 1
+                end
+                # node_modules 헤더 절대경로를 $(PROJECT_DIR)/node_modules 로 교정
+                wrong_node_modules_prefixes.each do |nm_prefix|
+                  if p.start_with?(nm_prefix)
+                    rel_nm = p.sub(nm_prefix, '')
+                    bf.file_ref.path = File.join('$(PROJECT_DIR)', 'node_modules', rel_nm)
+                    begin
+                      bf.file_ref.source_tree = 'SOURCE_ROOT'
+                    rescue
+                    end
+                    node_modules_headers_fixed += 1
+                    break
+                  end
+                end
+              end
+            end
+          end
+          if general_umbrella_fixed > 0
+            UI.success("  ✅ 모든 Pod 타겟 umbrella/Copy 보정: #{general_umbrella_fixed}건")
+          end
+          if node_modules_headers_fixed > 0
+            UI.success("  ✅ node_modules 헤더 경로 보정: #{node_modules_headers_fixed}건")
+          end
+        rescue => e
+          UI.important("  ⚠️  전역 umbrella/node_modules 보정 중 오류: #{e.message}")
+        end
+        
         pods_project.save
         total_fixed = fixed_count + header_fixed_count
         UI.success("✅ [빌드 수정] Module map 경로 수정 완료 (수정: #{fixed_count}개, 이미 올바름: #{skipped_count}개)")
