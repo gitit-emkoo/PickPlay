@@ -927,9 +927,23 @@ platform :ios do
           umbrella_fixed = 0
           wrong_root_prefix = '/Users/runner/work/PickPlay/PickPlay/'
           wrong_ios_prefix  = '/Users/runner/work/ios/'
+          headers_dst_fixed = 0
           pods_project.targets.each do |t|
             t.build_phases.each do |phase|
               next unless phase.respond_to?(:files)
+              # 1) Headers/Copy Files 단계의 잘못된 목적지 경로 교정 (TSF로 향하는 경우)
+              if (phase.is_a?(Xcodeproj::Project::Object::PBXHeadersBuildPhase) || phase.is_a?(Xcodeproj::Project::Object::PBXCopyFilesBuildPhase))
+                if phase.respond_to?(:dst_path) && phase.dst_path && phase.dst_path.to_s.include?('Target Support Files')
+                  # 표준: 프레임워크 Headers 폴더로
+                  phase.dst_path = '$(TARGET_BUILD_DIR)/$(WRAPPER_NAME)/Headers'
+                  begin
+                    # Headers 폴더로 복사되도록 서브폴더 스펙 보정 (없어도 무방)
+                    phase.dst_subfolder_spec = '0'
+                  rescue
+                  end
+                  headers_dst_fixed += 1
+                end
+              end
               phase.files.each do |bf|
                 next unless bf.respond_to?(:file_ref) && bf.file_ref && bf.file_ref.path
                 path_str = bf.file_ref.path.to_s
@@ -958,6 +972,9 @@ platform :ios do
           end
           if umbrella_fixed > 0
             UI.success("  ✅ umbrella.h 참조 교정: #{umbrella_fixed}건")
+          end
+          if headers_dst_fixed > 0
+            UI.success("  ✅ Headers/Copy 단계 목적지 경로 교정: #{headers_dst_fixed}건")
           end
         rescue => e
           UI.important("  ⚠️  umbrella.h 참조 교정 중 오류: #{e.message}")
