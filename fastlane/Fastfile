@@ -796,6 +796,11 @@ platform :ios do
         # 예: /Users/runner/work/PickPlay/PickPlay/Target Support Files/... -> $(PODS_ROOT)/Target Support Files/...
         begin
           wrong_root_prefix = '/Users/runner/work/PickPlay/PickPlay/'
+          wrong_ios_prefix = '/Users/runner/work/ios/'
+          wrong_node_modules_prefixes = [
+            '/Users/runner/work/node_modules/',
+            '/Users/runner/work/PickPlay/node_modules/'
+          ]
           pods_fixed_files = 0
           pods_project.files.each do |file_ref|
             next if file_ref.path.to_s.empty?
@@ -812,6 +817,34 @@ platform :ios do
               if pods_fixed_files <= 5
                 UI.message("  ✅ Pods 파일참조 수정 [#{pods_fixed_files}]: #{relative_path}")
               end
+            elsif file_ref.path.start_with?(wrong_ios_prefix + 'Pods/')
+              relative_path = file_ref.path.sub(wrong_ios_prefix, '') # 'Pods/...'
+              file_ref.path = File.join('$(PODS_ROOT)', relative_path.sub(%r{\APods/}, ''))
+              begin
+                file_ref.source_tree = 'PODS_ROOT'
+              rescue
+              end
+              pods_fixed_files += 1
+              if pods_fixed_files <= 5
+                UI.message("  ✅ Pods 파일참조(iOS prefix) 수정 [#{pods_fixed_files}]: #{relative_path}")
+              end
+            else
+              wrong_node_modules_prefixes.each do |nm_prefix|
+                if file_ref.path.start_with?(nm_prefix)
+                  # $(PROJECT_DIR)/node_modules 로 정규화
+                  relative_nm = file_ref.path.sub(nm_prefix, '')
+                  file_ref.path = File.join('$(PROJECT_DIR)', 'node_modules', relative_nm)
+                  begin
+                    file_ref.source_tree = 'SOURCE_ROOT'
+                  rescue
+                  end
+                  pods_fixed_files += 1
+                  if pods_fixed_files <= 5
+                    UI.message("  ✅ node_modules 파일참조 수정 [#{pods_fixed_files}]: #{relative_nm}")
+                  end
+                  break
+                end
+              end
             end
           end
           if pods_fixed_files > 5
@@ -819,6 +852,61 @@ platform :ios do
           end
         rescue => e
           UI.important("  ⚠️  Pods 파일참조 수정 중 오류: #{e.message}")
+        end
+
+        # Pods 프로젝트 내 빌드 단계 항목들(file_ref 포함)도 동일 규칙으로 정규화
+        begin
+          wrong_root_prefix = '/Users/runner/work/PickPlay/PickPlay/'
+          wrong_ios_prefix = '/Users/runner/work/ios/'
+          wrong_node_modules_prefixes = [
+            '/Users/runner/work/node_modules/',
+            '/Users/runner/work/PickPlay/node_modules/'
+          ]
+          phases_fixed = 0
+          pods_project.targets.each do |t|
+            t.build_phases.each do |phase|
+              next unless phase.respond_to?(:files)
+              phase.files.each do |bf|
+                next unless bf.respond_to?(:file_ref) && bf.file_ref && bf.file_ref.path
+                p = bf.file_ref.path.to_s
+                if p.start_with?(wrong_root_prefix + 'Target Support Files/')
+                  relative_path = p.sub(wrong_root_prefix, '') # 'Target Support Files/...'
+                  bf.file_ref.path = File.join('$(PODS_ROOT)', relative_path)
+                  begin
+                    bf.file_ref.source_tree = 'PODS_ROOT'
+                  rescue
+                  end
+                  phases_fixed += 1
+                elsif p.start_with?(wrong_ios_prefix + 'Pods/')
+                  relative_path = p.sub(wrong_ios_prefix, '') # 'Pods/...'
+                  bf.file_ref.path = File.join('$(PODS_ROOT)', relative_path.sub(%r{\APods/}, ''))
+                  begin
+                    bf.file_ref.source_tree = 'PODS_ROOT'
+                  rescue
+                  end
+                  phases_fixed += 1
+                else
+                  wrong_node_modules_prefixes.each do |nm_prefix|
+                    if p.start_with?(nm_prefix)
+                      relative_nm = p.sub(nm_prefix, '')
+                      bf.file_ref.path = File.join('$(PROJECT_DIR)', 'node_modules', relative_nm)
+                      begin
+                        bf.file_ref.source_tree = 'SOURCE_ROOT'
+                      rescue
+                      end
+                      phases_fixed += 1
+                      break
+                    end
+                  end
+                end
+              end
+            end
+          end
+          if phases_fixed > 0
+            UI.success("  ✅ Pods 빌드단계 파일참조 총 #{phases_fixed}건 정규화")
+          end
+        rescue => e
+          UI.important("  ⚠️  Pods 빌드단계 파일참조 정규화 중 오류: #{e.message}")
         end
 
         # (정석) 우회/심볼릭링크 사용 없이 CocoaPods 표준 구조 유지
