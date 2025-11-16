@@ -787,6 +787,16 @@ platform :ios do
                   UI.message("     이전: #{current_path}")
                   UI.message("     수정: #{new_path}")
                 end
+              # /Users/runner/work/PickPlay/PickPlay/Target Support Files/ 경로가 포함된 경우 수정
+              elsif !current_path.empty? && current_path.include?('/Users/runner/work/PickPlay/PickPlay/Target Support Files/') && !current_path.include?('$(PODS_ROOT)')
+                new_path = current_path.sub('/Users/runner/work/PickPlay/PickPlay/Target Support Files/', '$(PODS_ROOT)/Target Support Files/')
+                config.build_settings[header_path_key] = new_path
+                header_fixed_count += 1
+                if header_fixed_count <= 5
+                  UI.message("  ✅ [#{header_fixed_count}] #{target.name}.#{config.name}: #{header_path_key} (TSF) 수정")
+                  UI.message("     이전: #{current_path}")
+                  UI.message("     수정: #{new_path}")
+                end
               end
             end
           end
