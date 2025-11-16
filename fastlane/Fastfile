@@ -792,201 +792,8 @@ platform :ios do
           end
         end
 
-        # 모든 타겟의 Target Support Files 심볼릭 링크 생성
-        # CocoaPods가 프로젝트 루트에서 Target Support Files를 찾으려고 하는 버그 해결
-        pods_target_support_base = File.join(IOS_DIR, 'Pods', 'Target Support Files')
-        project_root_target_support_base = File.join(project_root, 'Target Support Files')
-        wrong_pods_target_support_base = File.join(File.dirname(project_root), 'Pods', 'Target Support Files')  # /Users/runner/work/PickPlay/Pods/Target Support Files
-        
-        if Dir.exist?(pods_target_support_base)
-          UI.message("  🔍 모든 타겟의 Target Support Files 심볼릭 링크 생성 중...")
-          
-          # 1. 프로젝트 루트에 Target Support Files 디렉토리 생성
-          FileUtils.mkdir_p(project_root_target_support_base) unless Dir.exist?(project_root_target_support_base)
-          
-          # 2. /Users/runner/work/PickPlay/Pods/ 디렉토리 생성 및 Target Support Files 심볼릭 링크
-          wrong_pods_base = File.join(File.dirname(project_root), 'Pods')
-          correct_pods_base = File.join(IOS_DIR, 'Pods')
-          if Dir.exist?(correct_pods_base) && !File.symlink?(wrong_pods_base) && !File.exist?(wrong_pods_base)
-            begin
-              FileUtils.mkdir_p(File.dirname(wrong_pods_base))
-              FileUtils.ln_sf(File.expand_path(correct_pods_base), wrong_pods_base)
-              UI.success("  ✅ Pods 디렉토리 심볼릭 링크 생성: #{wrong_pods_base} -> #{correct_pods_base}")
-              header_fixed_count += 1
-            rescue => e
-              UI.important("  ⚠️  Pods 디렉토리 심볼릭 링크 생성 실패: #{e.message}")
-            end
-          end
-          
-          # 3. 모든 타겟 디렉토리에 대해 심볼릭 링크 생성
-          Dir.entries(pods_target_support_base).each do |entry|
-            next if entry.start_with?('.')
-            
-            target_dir = File.join(pods_target_support_base, entry)
-            next unless Dir.exist?(target_dir)
-            
-            # 프로젝트 루트에 심볼릭 링크
-            project_root_target_dir = File.join(project_root_target_support_base, entry)
-            if !Dir.exist?(project_root_target_dir) || (!File.symlink?(project_root_target_dir) && project_root_target_dir != target_dir)
-              begin
-                FileUtils.rm_rf(project_root_target_dir) if File.exist?(project_root_target_dir)
-                absolute_target_path = File.expand_path(target_dir)
-                FileUtils.ln_sf(absolute_target_path, project_root_target_dir)
-                header_fixed_count += 1
-                if header_fixed_count <= 10
-                  UI.message("  ✅ 심볼릭 링크 [#{header_fixed_count}]: #{entry}")
-                end
-              rescue => e
-                UI.important("  ⚠️  심볼릭 링크 생성 실패 (#{entry}): #{e.message}")
-              end
-            end
-          end
-          
-          if header_fixed_count > 10
-            UI.success("  ✅ 총 #{header_fixed_count}개의 Target Support Files 심볼릭 링크 생성 완료")
-          elsif header_fixed_count > 0
-            UI.success("  ✅ #{header_fixed_count}개의 Target Support Files 심볼릭 링크 생성 완료")
-          end
-        else
-          UI.important("  ⚠️  Target Support Files 디렉토리를 찾을 수 없습니다: #{pods_target_support_base}")
-        end
-        
-        # node_modules 경로 문제도 해결
-        # CocoaPods가 /Users/runner/work/node_modules/...를 찾으려고 하는 경우
-        # 올바른 경로로 심볼릭 링크 생성
-        # /Users/runner/work/PickPlay/node_modules와 /Users/runner/work/node_modules 모두 생성
-        correct_node_modules = File.join(project_root, 'node_modules')
-        
-        # /Users/runner/work/PickPlay/node_modules 심볼릭 링크
-        wrong_node_modules_pickplay = File.join(File.dirname(project_root), 'node_modules')
-        if Dir.exist?(correct_node_modules) && !File.symlink?(wrong_node_modules_pickplay)
-          begin
-            FileUtils.rm_rf(wrong_node_modules_pickplay) if File.exist?(wrong_node_modules_pickplay)
-            FileUtils.mkdir_p(File.dirname(wrong_node_modules_pickplay))
-            FileUtils.ln_sf(File.expand_path(correct_node_modules), wrong_node_modules_pickplay)
-            UI.success("  ✅ node_modules 심볼릭 링크 [1] 생성: #{wrong_node_modules_pickplay} -> #{correct_node_modules}")
-            header_fixed_count += 1
-          rescue => e
-            UI.important("  ⚠️  node_modules 심볼릭 링크 [1] 생성 실패: #{e.message}")
-          end
-        end
-        
-        # /Users/runner/work/node_modules 심볼릭 링크 (더 상위 레벨)
-        wrong_node_modules_work = File.join(File.dirname(File.dirname(project_root)), 'node_modules')
-        if Dir.exist?(correct_node_modules) && !File.symlink?(wrong_node_modules_work)
-          begin
-            FileUtils.rm_rf(wrong_node_modules_work) if File.exist?(wrong_node_modules_work)
-            FileUtils.mkdir_p(File.dirname(wrong_node_modules_work))
-            FileUtils.ln_sf(File.expand_path(correct_node_modules), wrong_node_modules_work)
-            UI.success("  ✅ node_modules 심볼릭 링크 [2] 생성: #{wrong_node_modules_work} -> #{correct_node_modules}")
-            header_fixed_count += 1
-          rescue => e
-            UI.important("  ⚠️  node_modules 심볼릭 링크 [2] 생성 실패: #{e.message}")
-          end
-        end
-        
-        # ios 디렉토리 경로 문제도 해결
-        # CocoaPods가 /Users/runner/work/ios/...를 찾으려고 하는 경우
-        # /Users/runner/work/PickPlay/ios와 /Users/runner/work/ios 모두 생성
-        correct_ios_dir = IOS_DIR
-        
-        # /Users/runner/work/PickPlay/ios 심볼릭 링크
-        wrong_ios_dir_pickplay = File.join(File.dirname(project_root), 'ios')
-        if Dir.exist?(correct_ios_dir) && !File.symlink?(wrong_ios_dir_pickplay)
-          begin
-            FileUtils.rm_rf(wrong_ios_dir_pickplay) if File.exist?(wrong_ios_dir_pickplay)
-            FileUtils.mkdir_p(File.dirname(wrong_ios_dir_pickplay))
-            FileUtils.ln_sf(File.expand_path(correct_ios_dir), wrong_ios_dir_pickplay)
-            UI.success("  ✅ ios 디렉토리 심볼릭 링크 [1] 생성: #{wrong_ios_dir_pickplay} -> #{correct_ios_dir}")
-            header_fixed_count += 1
-          rescue => e
-            UI.important("  ⚠️  ios 디렉토리 심볼릭 링크 [1] 생성 실패: #{e.message}")
-          end
-        end
-        
-        # /Users/runner/work/ios 심볼릭 링크 (더 상위 레벨)
-        wrong_ios_dir_work = File.join(File.dirname(File.dirname(project_root)), 'ios')
-        if Dir.exist?(correct_ios_dir) && !File.symlink?(wrong_ios_dir_work)
-          begin
-            FileUtils.rm_rf(wrong_ios_dir_work) if File.exist?(wrong_ios_dir_work)
-            FileUtils.mkdir_p(File.dirname(wrong_ios_dir_work))
-            FileUtils.ln_sf(File.expand_path(correct_ios_dir), wrong_ios_dir_work)
-            UI.success("  ✅ ios 디렉토리 심볼릭 링크 [2] 생성: #{wrong_ios_dir_work} -> #{correct_ios_dir}")
-            header_fixed_count += 1
-          rescue => e
-            UI.important("  ⚠️  ios 디렉토리 심볼릭 링크 [2] 생성 실패: #{e.message}")
-          end
-        end
-
-        # build 디렉토리 경로 문제 해결
-        # React Native Codegen이 /Users/runner/work/PickPlay/build/generated/ios/...를 찾으려고 하는 경우
-        # 실제 파일은 /Users/runner/work/PickPlay/PickPlay/ios/build/generated/ios/...에 있음
-        correct_build_dir = File.join(IOS_DIR, 'build')
-        wrong_build_dir_pickplay = File.join(File.dirname(project_root), 'build')  # /Users/runner/work/PickPlay/build
-        
-        if Dir.exist?(correct_build_dir) && !File.symlink?(wrong_build_dir_pickplay) && !File.exist?(wrong_build_dir_pickplay)
-          begin
-            FileUtils.mkdir_p(File.dirname(wrong_build_dir_pickplay))
-            FileUtils.ln_sf(File.expand_path(correct_build_dir), wrong_build_dir_pickplay)
-            UI.success("  ✅ build 디렉토리 심볼릭 링크 생성: #{wrong_build_dir_pickplay} -> #{correct_build_dir}")
-            header_fixed_count += 1
-          rescue => e
-            UI.important("  ⚠️  build 디렉토리 심볼릭 링크 생성 실패: #{e.message}")
-          end
-        end
-
-        # pickplay 디렉토리 경로 문제 해결
-        # Xcode가 /Users/runner/work/PickPlay/PickPlay/pickplay/...를 찾으려고 하는 경우
-        # 실제 파일은 /Users/runner/work/PickPlay/PickPlay/ios/pickplay/...에 있음
-        correct_pickplay_dir = File.join(IOS_DIR, 'pickplay')
-        wrong_pickplay_dir = File.join(project_root, 'pickplay')  # /Users/runner/work/PickPlay/PickPlay/pickplay
-        
-        if Dir.exist?(correct_pickplay_dir) && !File.symlink?(wrong_pickplay_dir) && !File.exist?(wrong_pickplay_dir)
-          begin
-            FileUtils.mkdir_p(File.dirname(wrong_pickplay_dir))
-            FileUtils.ln_sf(File.expand_path(correct_pickplay_dir), wrong_pickplay_dir)
-            UI.success("  ✅ pickplay 디렉토리 심볼릭 링크 생성: #{wrong_pickplay_dir} -> #{correct_pickplay_dir}")
-            header_fixed_count += 1
-          rescue => e
-            UI.important("  ⚠️  pickplay 디렉토리 심볼릭 링크 생성 실패: #{e.message}")
-          end
-        end
-        
-        # Pods 디렉토리 내 pod들이 프로젝트 루트에서 찾으려고 하는 경우
-        # 예: /Users/runner/work/PickPlay/PickPlay/nanopb -> ios/Pods/nanopb
-        pods_dir = File.join(IOS_DIR, 'Pods')
-        if Dir.exist?(pods_dir)
-          # Pods 디렉토리 내 모든 pod 디렉토리 확인
-          Dir.entries(pods_dir).each do |entry|
-            next if entry.start_with?('.')
-            next if entry == 'Headers'
-            next if entry == 'Target Support Files'
-            next if entry == 'Local Podspecs'
-            next if entry == 'Manifest.lock'
-            next if entry.include?('.framework')
-            next if entry.include?('.a')
-            
-            pod_dir_in_pods = File.join(pods_dir, entry)
-            next unless Dir.exist?(pod_dir_in_pods)
-            
-            # 프로젝트 루트에 pod 디렉토리 심볼릭 링크 생성
-            pod_dir_in_project_root = File.join(project_root, entry)
-            if !File.symlink?(pod_dir_in_project_root) && !File.exist?(pod_dir_in_project_root)
-              begin
-                FileUtils.ln_sf(File.expand_path(pod_dir_in_pods), pod_dir_in_project_root)
-                header_fixed_count += 1
-                if header_fixed_count <= 155  # 처음 몇 개만 로그 출력
-                  UI.success("  ✅ Pod 심볼릭 링크 생성: #{entry}")
-                end
-              rescue => e
-                UI.important("  ⚠️  Pod 심볼릭 링크 생성 실패 (#{entry}): #{e.message}")
-              end
-            end
-          end
-          if header_fixed_count > 155
-            UI.success("  ✅ 추가 Pod 심볼릭 링크 생성 완료")
-          end
-        end
+        # (정석) 우회/심볼릭링크 사용 없이 CocoaPods 표준 구조 유지
+        # 추가 심볼릭 링크 생성 로직 제거
         
         pods_project.save
         total_fixed = fixed_count + header_fixed_count
@@ -995,98 +802,7 @@ platform :ios do
           UI.success("✅ [빌드 수정] 헤더 경로 수정 완료 (수정: #{header_fixed_count}개)")
         end
 
-        # 메인 프로젝트(pickplay.xcodeproj)의 파일 참조 경로 수정
-        # Xcode가 /Users/runner/work/PickPlay/PickPlay/pickplay/...를 찾지만
-        # 실제 파일은 /Users/runner/work/PickPlay/PickPlay/ios/pickplay/...에 있음
-        UI.message("  🔍 메인 프로젝트 파일 참조 경로 수정 중...")
-        begin
-          main_project = Xcodeproj::Project.open(XCODEPROJ)
-          main_project_fixed_count = 0
-          
-          main_project.targets.each do |target|
-            target.build_phases.each do |phase|
-              # Copy Files 빌드 단계 확인
-              if phase.is_a?(Xcodeproj::Project::Object::PBXCopyFilesBuildPhase)
-                phase.files.each do |file|
-                  next unless file.file_ref
-                  
-                  file_path = file.file_ref.path.to_s
-                  if file_path.include?('/Users/runner/work/PickPlay/PickPlay/pickplay/') && !file_path.include?('/ios/')
-                    # 잘못된 경로를 올바른 경로로 수정
-                    new_path = file_path.sub('/Users/runner/work/PickPlay/PickPlay/pickplay/', 'pickplay/')
-                    file.file_ref.path = new_path
-                    main_project_fixed_count += 1
-                    if main_project_fixed_count <= 5
-                      UI.message("  ✅ 파일 참조 경로 수정 [#{main_project_fixed_count}]: #{file_path} -> #{new_path}")
-                    end
-                  end
-                end
-              end
-              
-              # Copy Headers 빌드 단계 확인
-              if phase.is_a?(Xcodeproj::Project::Object::PBXHeadersBuildPhase)
-                phase.files.each do |file|
-                  next unless file.file_ref
-                  
-                  file_path = file.file_ref.path.to_s
-                  if file_path.include?('/Users/runner/work/PickPlay/PickPlay/pickplay/') && !file_path.include?('/ios/')
-                    new_path = file_path.sub('/Users/runner/work/PickPlay/PickPlay/pickplay/', 'pickplay/')
-                    file.file_ref.path = new_path
-                    main_project_fixed_count += 1
-                    if main_project_fixed_count <= 5
-                      UI.message("  ✅ 헤더 참조 경로 수정 [#{main_project_fixed_count}]: #{file_path} -> #{new_path}")
-                    end
-                  end
-                end
-              end
-              
-              # Copy Bundle Resources 빌드 단계 확인
-              if phase.is_a?(Xcodeproj::Project::Object::PBXResourcesBuildPhase)
-                phase.files.each do |file|
-                  next unless file.file_ref
-                  
-                  file_path = file.file_ref.path.to_s
-                  if file_path.include?('/Users/runner/work/PickPlay/PickPlay/pickplay/') && !file_path.include?('/ios/')
-                    new_path = file_path.sub('/Users/runner/work/PickPlay/PickPlay/pickplay/', 'pickplay/')
-                    file.file_ref.path = new_path
-                    main_project_fixed_count += 1
-                    if main_project_fixed_count <= 5
-                      UI.message("  ✅ 리소스 참조 경로 수정 [#{main_project_fixed_count}]: #{file_path} -> #{new_path}")
-                    end
-                  end
-                end
-              end
-            end
-            
-            # 빌드 설정에서 잘못된 절대 경로 수정
-            target.build_configurations.each do |config|
-              # INFOPLIST_FILE 등의 경로 확인
-              ['INFOPLIST_FILE', 'ASSETCATALOG_COMPILER_APPICON_NAME'].each do |key|
-                current_path = config.build_settings[key].to_s
-                if !current_path.empty? && current_path.include?('/Users/runner/work/PickPlay/PickPlay/pickplay/') && !current_path.include?('/ios/')
-                  new_path = current_path.sub('/Users/runner/work/PickPlay/PickPlay/pickplay/', 'pickplay/')
-                  config.build_settings[key] = new_path
-                  main_project_fixed_count += 1
-                  if main_project_fixed_count <= 5
-                    UI.message("  ✅ 빌드 설정 경로 수정 [#{main_project_fixed_count}]: #{key} = #{new_path}")
-                  end
-                end
-              end
-            end
-          end
-          
-          main_project.save
-          if main_project_fixed_count > 5
-            UI.success("  ✅ 총 #{main_project_fixed_count}개의 메인 프로젝트 파일 참조 경로를 수정했습니다 (처음 5개만 표시)")
-          elsif main_project_fixed_count > 0
-            UI.success("  ✅ 총 #{main_project_fixed_count}개의 메인 프로젝트 파일 참조 경로를 수정했습니다")
-          else
-            UI.message("  ✅ 메인 프로젝트 파일 참조 경로 확인 완료 (수정 불필요)")
-          end
-        rescue => e
-          UI.important("  ⚠️  메인 프로젝트 파일 참조 경로 수정 실패: #{e.class}: #{e.message}")
-          UI.important("     (계속 진행합니다...)")
-        end
+        # (정석) 메인 프로젝트 경로 우회 수정 제거
         
         UI.message("  → 다음 단계: 빌드 성공 → Archive → IPA 생성")
       else
@@ -1140,6 +856,33 @@ platform :ios do
       UI.important("⚠️ xcodeproj gem 없음 - xcargs로 대체")
     rescue => e
       UI.important("⚠️ 프로젝트 파일 수정 실패 (xcargs로 대체): #{e.message}")
+    end
+
+    # (정석) CocoaPods 표준 구조 사용: PODS_ROOT 고정 및 ExpoModulesProvider.swift 참조 표준화
+    begin
+      require 'xcodeproj'
+      project = Xcodeproj::Project.open(XCODEPROJ)
+      app_target = project.targets.find { |t| t.name == SCHEME }
+      if app_target
+        # 1) PODS_ROOT를 $(PROJECT_DIR)/ios/Pods 로 고정
+        app_target.build_configurations.each do |config|
+          config.build_settings['PODS_ROOT'] = '$(PROJECT_DIR)/ios/Pods'
+        end
+
+        # 2) ExpoModulesProvider.swift를 $(PODS_ROOT) 기준으로 참조
+        desired_path = '$(PODS_ROOT)/Target Support Files/Pods-pickplay/ExpoModulesProvider.swift'
+        source_phase = app_target.source_build_phase
+        unless source_phase.files.any? { |bf| bf.file_ref && bf.file_ref.path == desired_path }
+          group = project.main_group.find_subpath('Pods/Target Support Files/Pods-pickplay', true)
+          file_ref = group.files.find { |f| f.path == desired_path }
+          file_ref ||= group.new_reference(desired_path)
+          app_target.add_file_references([file_ref]) if file_ref
+        end
+      end
+      project.save
+      UI.success("✅ PODS_ROOT 고정 및 ExpoModulesProvider.swift 참조 표준화 완료")
+    rescue => e
+      UI.important("⚠️ PODS_ROOT/ExpoModulesProvider 설정 중 오류: #{e.message}")
     end
 
     # Dev Client 빌드 (Debug, Internal Distribution)
