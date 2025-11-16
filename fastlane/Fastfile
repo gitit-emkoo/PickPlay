@@ -944,6 +944,29 @@ platform :ios do
                   headers_dst_fixed += 1
                 end
               end
+              # 2) umbrella.h를 TSF로 복사하려는 잘못된 항목 제거 (Copy Files 오염 방지)
+              if phase.is_a?(Xcodeproj::Project::Object::PBXCopyFilesBuildPhase)
+                to_remove = []
+                phase.files.each do |bf|
+                  next unless bf.respond_to?(:file_ref) && bf.file_ref && bf.file_ref.path
+                  p = bf.file_ref.path.to_s
+                  if p.end_with?('-umbrella.h') && p.include?('Target Support Files')
+                    to_remove << bf
+                  end
+                end
+                to_remove.each do |bf|
+                  begin
+                    phase.remove_file_reference(bf.file_ref)
+                  rescue
+                    # fallback: objects 직접 삭제
+                    begin
+                      pods_project.objects.delete(bf)
+                    rescue
+                    end
+                  end
+                end
+                headers_dst_fixed += to_remove.size if to_remove.size > 0
+              end
               phase.files.each do |bf|
                 next unless bf.respond_to?(:file_ref) && bf.file_ref && bf.file_ref.path
                 path_str = bf.file_ref.path.to_s
