@@ -841,9 +841,9 @@ platform :ios do
             else
               wrong_node_modules_prefixes.each do |nm_prefix|
                 if file_ref.path.start_with?(nm_prefix)
-                  # $(SRCROOT)/../node_modules 로 정규화
+                  # $(SRCROOT)/../../node_modules 로 정규화 (Pods 타깃의 SRCROOT가 ios/이므로 한 단계 더 상향)
                   relative_nm = file_ref.path.sub(nm_prefix, '')
-                  file_ref.path = File.join('$(SRCROOT)', '..', 'node_modules', relative_nm)
+                  file_ref.path = File.join('$(SRCROOT)', '..', '..', 'node_modules', relative_nm)
                   begin
                     file_ref.source_tree = 'SOURCE_ROOT'
                   rescue
@@ -1164,7 +1164,7 @@ platform :ios do
                 wrong_node_modules_prefixes.each do |nm_prefix|
                   if p.start_with?(nm_prefix)
                     rel_nm = p.sub(nm_prefix, '')
-                    bf.file_ref.path = File.join('$(SRCROOT)', '..', 'node_modules', rel_nm)
+                    bf.file_ref.path = File.join('$(SRCROOT)', '..', '..', 'node_modules', rel_nm)
                     begin
                       bf.file_ref.source_tree = 'SOURCE_ROOT'
                     rescue
@@ -1253,9 +1253,9 @@ platform :ios do
           wv_target = pods_project.targets.find { |t| t.name == 'react-native-webview' }
           if wv_target
             desired_umbrella = '$(PODS_ROOT)/Target Support Files/react-native-webview/react-native-webview-umbrella.h'
-            desired_module_h = '$(SRCROOT)/../node_modules/react-native-webview/apple/RNCWebViewModule.h'
-            desired_manager_h = '$(SRCROOT)/../node_modules/react-native-webview/apple/RNCWebViewManager.h'
-            desired_impl_h = '$(SRCROOT)/../node_modules/react-native-webview/apple/RNCWebViewImpl.h'
+            desired_module_h = '$(SRCROOT)/../../node_modules/react-native-webview/apple/RNCWebViewModule.h'
+            desired_manager_h = '$(SRCROOT)/../../node_modules/react-native-webview/apple/RNCWebViewManager.h'
+            desired_impl_h = '$(SRCROOT)/../../node_modules/react-native-webview/apple/RNCWebViewImpl.h'
             wv_target.build_phases.each do |phase|
               next unless phase.respond_to?(:files)
               phase.files.each do |bf|
