@@ -935,20 +935,23 @@ platform :ios do
                 path_str = bf.file_ref.path.to_s
                 # Target Support Files 안의 umbrella.h를 절대경로로 가리키면 $(PODS_ROOT) 기준으로 정규화
                 if path_str.include?('Target Support Files') && path_str.end_with?('-umbrella.h') && !path_str.start_with?('$(PODS_ROOT)')
-                  new_path = path_str.dup
-                  if new_path.start_with?(wrong_root_prefix)
-                    new_path = File.join('$(PODS_ROOT)', new_path.sub(wrong_root_prefix, '').sub(%r{\ATarget Support Files/}, 'Target Support Files/'))
-                  elsif new_path.start_with?(wrong_ios_prefix + 'Pods/')
-                    new_path = File.join('$(PODS_ROOT)', new_path.sub(wrong_ios_prefix + 'Pods/', ''))
+                  new_path = nil
+                  if path_str.start_with?(wrong_root_prefix)
+                    new_path = File.join('$(PODS_ROOT)', path_str.sub(wrong_root_prefix, '').sub(%r{\ATarget Support Files/}, 'Target Support Files/'))
+                  elsif path_str.start_with?(wrong_ios_prefix + 'Pods/')
+                    new_path = File.join('$(PODS_ROOT)', path_str.sub(wrong_ios_prefix + 'Pods/', ''))
+                  else
+                    # 상대경로('Target Support Files/...') 형태도 $(PODS_ROOT) 기준으로 고정
+                    # 혹시 'Pods/Target Support Files/...' 형태면 'Pods/' 제거 후 부착
+                    relative = path_str.sub(%r{\APods/}, '')
+                    new_path = File.join('$(PODS_ROOT)', relative)
                   end
-                  if new_path != path_str
-                    bf.file_ref.path = new_path
-                    begin
-                      bf.file_ref.source_tree = 'PODS_ROOT'
-                    rescue
-                    end
-                    umbrella_fixed += 1
+                  bf.file_ref.path = new_path
+                  begin
+                    bf.file_ref.source_tree = 'PODS_ROOT'
+                  rescue
                   end
+                  umbrella_fixed += 1
                 end
               end
             end
