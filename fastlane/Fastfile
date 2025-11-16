@@ -1003,6 +1003,53 @@ platform :ios do
           UI.important("  ⚠️  umbrella.h 참조 교정 중 오류: #{e.message}")
         end
         
+        # 3) Pods-pickplay 타겟의 헤더 출력 폴더를 강제로 표준 경로로 설정
+        begin
+          target_override_fixed = 0
+          pods_project.targets.each do |t|
+            next unless t.name == 'Pods-pickplay'
+            t.build_configurations.each do |config|
+              begin
+                config.build_settings['PUBLIC_HEADERS_FOLDER_PATH']  = '$(TARGET_BUILD_DIR)/$(WRAPPER_NAME)/Headers'
+                config.build_settings['PRIVATE_HEADERS_FOLDER_PATH'] = '$(TARGET_BUILD_DIR)/$(WRAPPER_NAME)/PrivateHeaders'
+                target_override_fixed += 1
+              rescue
+              end
+            end
+          end
+          if target_override_fixed > 0
+            UI.success("  ✅ Pods-pickplay 헤더 출력 폴더 표준화: #{target_override_fixed}건")
+          end
+        rescue => e
+          UI.important("  ⚠️  Pods-pickplay 헤더 출력 폴더 표준화 중 오류: #{e.message}")
+        end
+        
+        # 4) 모든 Pod 타겟에서 'Target Support Files'로 향하는 헤더 출력 빌드세팅을 일괄 교정
+        begin
+          header_settings_fixed = 0
+          pods_project.targets.each do |t|
+            t.build_configurations.each do |config|
+              ['PUBLIC_HEADERS_FOLDER_PATH', 'PRIVATE_HEADERS_FOLDER_PATH'].each do |key|
+                val = config.build_settings[key].to_s
+                next if val.empty?
+                if val.include?('Target Support Files')
+                  if key == 'PUBLIC_HEADERS_FOLDER_PATH'
+                    config.build_settings[key] = '$(TARGET_BUILD_DIR)/$(WRAPPER_NAME)/Headers'
+                  else
+                    config.build_settings[key] = '$(TARGET_BUILD_DIR)/$(WRAPPER_NAME)/PrivateHeaders'
+                  end
+                  header_settings_fixed += 1
+                end
+              end
+            end
+          end
+          if header_settings_fixed > 0
+            UI.success("  ✅ 헤더 출력 빌드세팅 정규화: #{header_settings_fixed}건")
+          end
+        rescue => e
+          UI.important("  ⚠️  헤더 출력 빌드세팅 정규화 중 오류: #{e.message}")
+        end
+        
         pods_project.save
         total_fixed = fixed_count + header_fixed_count
         UI.success("✅ [빌드 수정] Module map 경로 수정 완료 (수정: #{fixed_count}개, 이미 올바름: #{skipped_count}개)")
