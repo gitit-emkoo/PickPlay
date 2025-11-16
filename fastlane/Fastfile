@@ -922,6 +922,44 @@ platform :ios do
         # (정석) 우회/심볼릭링크 사용 없이 CocoaPods 표준 구조 유지
         # 추가 심볼릭 링크 생성 로직 제거
         
+        # umbrella.h 소스 참조가 절대경로(루트)로 고정된 경우 $(PODS_ROOT) 기준으로 교정
+        begin
+          umbrella_fixed = 0
+          wrong_root_prefix = '/Users/runner/work/PickPlay/PickPlay/'
+          wrong_ios_prefix  = '/Users/runner/work/ios/'
+          pods_project.targets.each do |t|
+            t.build_phases.each do |phase|
+              next unless phase.respond_to?(:files)
+              phase.files.each do |bf|
+                next unless bf.respond_to?(:file_ref) && bf.file_ref && bf.file_ref.path
+                path_str = bf.file_ref.path.to_s
+                # Target Support Files 안의 umbrella.h를 절대경로로 가리키면 $(PODS_ROOT) 기준으로 정규화
+                if path_str.include?('Target Support Files') && path_str.end_with?('-umbrella.h') && !path_str.start_with?('$(PODS_ROOT)')
+                  new_path = path_str.dup
+                  if new_path.start_with?(wrong_root_prefix)
+                    new_path = File.join('$(PODS_ROOT)', new_path.sub(wrong_root_prefix, '').sub(%r{\ATarget Support Files/}, 'Target Support Files/'))
+                  elsif new_path.start_with?(wrong_ios_prefix + 'Pods/')
+                    new_path = File.join('$(PODS_ROOT)', new_path.sub(wrong_ios_prefix + 'Pods/', ''))
+                  end
+                  if new_path != path_str
+                    bf.file_ref.path = new_path
+                    begin
+                      bf.file_ref.source_tree = 'PODS_ROOT'
+                    rescue
+                    end
+                    umbrella_fixed += 1
+                  end
+                end
+              end
+            end
+          end
+          if umbrella_fixed > 0
+            UI.success("  ✅ umbrella.h 참조 교정: #{umbrella_fixed}건")
+          end
+        rescue => e
+          UI.important("  ⚠️  umbrella.h 참조 교정 중 오류: #{e.message}")
+        end
+        
         pods_project.save
         total_fixed = fixed_count + header_fixed_count
         UI.success("✅ [빌드 수정] Module map 경로 수정 완료 (수정: #{fixed_count}개, 이미 올바름: #{skipped_count}개)")
