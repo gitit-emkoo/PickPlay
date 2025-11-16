@@ -841,9 +841,9 @@ platform :ios do
             else
               wrong_node_modules_prefixes.each do |nm_prefix|
                 if file_ref.path.start_with?(nm_prefix)
-                  # $(PROJECT_DIR)/node_modules 로 정규화
+                  # $(SRCROOT)/../node_modules 로 정규화
                   relative_nm = file_ref.path.sub(nm_prefix, '')
-                  file_ref.path = File.join('$(PROJECT_DIR)', 'node_modules', relative_nm)
+                  file_ref.path = File.join('$(SRCROOT)', '..', 'node_modules', relative_nm)
                   begin
                     file_ref.source_tree = 'SOURCE_ROOT'
                   rescue
@@ -899,7 +899,7 @@ platform :ios do
                   wrong_node_modules_prefixes.each do |nm_prefix|
                     if p.start_with?(nm_prefix)
                       relative_nm = p.sub(nm_prefix, '')
-                      bf.file_ref.path = File.join('$(PROJECT_DIR)', 'node_modules', relative_nm)
+                      bf.file_ref.path = File.join('$(SRCROOT)', '..', 'node_modules', relative_nm)
                       begin
                         bf.file_ref.source_tree = 'SOURCE_ROOT'
                       rescue
@@ -1164,7 +1164,7 @@ platform :ios do
                 wrong_node_modules_prefixes.each do |nm_prefix|
                   if p.start_with?(nm_prefix)
                     rel_nm = p.sub(nm_prefix, '')
-                    bf.file_ref.path = File.join('$(PROJECT_DIR)', 'node_modules', rel_nm)
+                    bf.file_ref.path = File.join('$(SRCROOT)', '..', 'node_modules', rel_nm)
                     begin
                       bf.file_ref.source_tree = 'SOURCE_ROOT'
                     rescue
@@ -1253,9 +1253,9 @@ platform :ios do
           wv_target = pods_project.targets.find { |t| t.name == 'react-native-webview' }
           if wv_target
             desired_umbrella = '$(PODS_ROOT)/Target Support Files/react-native-webview/react-native-webview-umbrella.h'
-            desired_module_h = '$(PROJECT_DIR)/node_modules/react-native-webview/apple/RNCWebViewModule.h'
-            desired_manager_h = '$(PROJECT_DIR)/node_modules/react-native-webview/apple/RNCWebViewManager.h'
-            desired_impl_h = '$(PROJECT_DIR)/node_modules/react-native-webview/apple/RNCWebViewImpl.h'
+            desired_module_h = '$(SRCROOT)/../node_modules/react-native-webview/apple/RNCWebViewModule.h'
+            desired_manager_h = '$(SRCROOT)/../node_modules/react-native-webview/apple/RNCWebViewManager.h'
+            desired_impl_h = '$(SRCROOT)/../node_modules/react-native-webview/apple/RNCWebViewImpl.h'
             wv_target.build_phases.each do |phase|
               next unless phase.respond_to?(:files)
               phase.files.each do |bf|
@@ -1395,11 +1395,7 @@ platform :ios do
     project_root = File.expand_path('..', __dir__)
     output_directory = project_root
     
-    # react-native-google-mobile-ads의 ios_config.sh가 app.json을 찾을 수 있도록
-    # PROJECT_DIR 환경 변수를 프로젝트 루트로 설정
-    # ios_config.sh는 PROJECT_DIR에서 시작해서 상위 디렉토리를 검색하므로
-    # PROJECT_DIR을 프로젝트 루트로 설정하면 app.json을 찾을 수 있습니다
-    ENV['PROJECT_DIR'] = project_root
+    # 참고: PROJECT_DIR는 Xcode가 설정하므로 환경변수로 덮어쓰지 않습니다
     
     # Archive와 IPA Export를 한 번에 수행
     # 만약 Archive는 성공하지만 IPA Export에서 실패한다면,
@@ -1418,7 +1414,6 @@ platform :ios do
         "CODE_SIGN_IDENTITY=\"Apple Development\"",
         "PRODUCT_BUNDLE_IDENTIFIER=#{BUNDLE_ID}",
         "pickplay.PROVISIONING_PROFILE_SPECIFIER=#{profile_uuid}",
-        "PROJECT_DIR=#{project_root}",  # 빌드 스크립트에서 사용할 수 있도록 설정
       ].compact.join(" "),
       export_options: {
         method: "development",
