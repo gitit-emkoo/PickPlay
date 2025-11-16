@@ -1363,18 +1363,13 @@ platform :ios do
       UI.important("⚠️ 프로젝트 파일 수정 실패 (xcargs로 대체): #{e.message}")
     end
 
-    # (정석) CocoaPods 표준 구조 사용: PODS_ROOT 고정 및 ExpoModulesProvider.swift 참조 표준화
+    # (정석) CocoaPods 표준 구조 사용: ExpoModulesProvider.swift 참조 표준화
     begin
       require 'xcodeproj'
       project = Xcodeproj::Project.open(XCODEPROJ)
       app_target = project.targets.find { |t| t.name == SCHEME }
       if app_target
-        # 1) PODS_ROOT를 $(PROJECT_DIR)/ios/Pods 로 고정
-        app_target.build_configurations.each do |config|
-          config.build_settings['PODS_ROOT'] = '$(PROJECT_DIR)/ios/Pods'
-        end
-
-        # 2) ExpoModulesProvider.swift를 $(PODS_ROOT) 기준으로 참조
+        # ExpoModulesProvider.swift를 $(PODS_ROOT) 기준으로 참조 (PODS_ROOT는 CocoaPods가 xcconfig로 설정)
         desired_path = '$(PODS_ROOT)/Target Support Files/Pods-pickplay/ExpoModulesProvider.swift'
         source_phase = app_target.source_build_phase
         unless source_phase.files.any? { |bf| bf.file_ref && bf.file_ref.path == desired_path }
@@ -1385,9 +1380,9 @@ platform :ios do
         end
       end
       project.save
-      UI.success("✅ PODS_ROOT 고정 및 ExpoModulesProvider.swift 참조 표준화 완료")
+      UI.success("✅ ExpoModulesProvider.swift 참조 표준화 완료")
     rescue => e
-      UI.important("⚠️ PODS_ROOT/ExpoModulesProvider 설정 중 오류: #{e.message}")
+      UI.important("⚠️ ExpoModulesProvider 설정 중 오류: #{e.message}")
     end
 
     # Dev Client 빌드 (Debug, Internal Distribution)
