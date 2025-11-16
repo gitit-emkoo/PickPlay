@@ -1186,6 +1186,67 @@ platform :ios do
           UI.important("  ⚠️  전역 umbrella/node_modules 보정 중 오류: #{e.message}")
         end
         
+        # 7) 'Target Support Files' 및 node_modules 그룹의 그룹 경로/소스 트리 보정
+        begin
+          groups_fixed = 0
+          pods_project.groups.each do |grp|
+            next unless grp.respond_to?(:path)
+            gp = grp.path
+            next unless gp.is_a?(String)
+            new_gp = gp.dup
+            updated = false
+            # Target Support Files 그룹을 PODS_ROOT 기준 상대경로로 고정
+            if new_gp.include?('Target Support Files')
+              # 절대 경로나 '.../Pods/' 접두어 제거
+              if new_gp.start_with?('/Users/')
+                idx = new_gp.index('Target Support Files/')
+                new_gp = new_gp[idx..-1] if idx
+                updated = true
+              end
+              if new_gp.start_with?('Pods/')
+                new_gp = new_gp.sub(%r{\APods/}, '')
+                updated = true
+              end
+              # 혹시 여전히 중간 경로가 있으면 'Target Support Files/...' 부터로 절단
+              unless new_gp.start_with?('Target Support Files/')
+                if (idx2 = new_gp.index('Target Support Files/'))
+                  new_gp = new_gp[idx2..-1]
+                  updated = true
+                end
+              end
+              if updated
+                grp.path = new_gp
+              end
+              begin
+                if grp.responds_to?(:source_tree)
+                  grp.source_tree = 'PODS_ROOT'
+                else
+                  # Some group-like may not expose source_tree setter; ignore
+                end
+              rescue
+              end
+              groups++;
+            end
+            # node_modules 그룹은 프로젝트 루트 기준으로
+            if new_gp.include?('/node_modules/')
+              idxnm = new_url = nil
+              idxnm = new_gp.index('node_modules')
+              if idxnm
+                new_url = new_gp[idxnm..-1]
+                grp.path = new_url
+                begin
+                  grp.source_tree = 'SOURCE_ROOT'
+                rescue
+                end
+                groups_fixed += 1
+              end
+            end
+          end
+          UI.success("  ✅ 그룹 경로/sourceTree 보정: #{groups_fixed}건")
+        rescue => e
+          UI.important("  ⚠️  그룹 보정 단계 오류: #{e.message}")
+        end
+        
         pods_project.save
         total_fixed = fixed_count + header_fixed_count
         UI.success("✅ [빌드 수정] Module map 경로 수정 완료 (수정: #{fixed_count}개, 이미 올바름: #{skipped_count}개)")
@@ -1339,5 +1400,46 @@ platform :ios do
     UI.success("✅ Dev Client 빌드 성공")
     UI.message("📱 빌드된 IPA 파일을 다운로드하여 설치하세요.")
     UI.message("📱 설치 후 'expo start --dev-client'로 Metro 서버를 실행하세요.")
+  end
+end
+
+# 제출용(Release, App Store / TestFlight) 빌드 및 업로드
+platform :ios do
+  desc "Release(App Store) 빌드 후 TestFlight 업로드"
+  lane :beta do
+    # App Store(배포용) 인증서/프로파일 동기화
+    match(
+      type: "appstore"
+    )
+
+    # Release 구성으로 아카이브 및 app-store 익스포트
+    project_root = File.expand_path('..', __dir__)
+    build_app(
+      workspace:     WORKSPACE,
+      scheme:        SCHEME,
+      configuration: "Release",
+      clean:         true,
+      skip_codesigning: false,
+      export_method: "app-store",
+      output_directory: project_root,
+      xcargs: [
+        "DEVELOPMENT_TEAM=#{TEAM_ID}",
+        "CODE_SIGN_STYLE=Manual",
+        "PRODUCT_BUNDLE_IDENTIFIER=#{BUNDLE_ID}"
+      ].compact.join(" "),
+      export_options: {
+        method: "app-store",
+        provisioningProfiles: {
+          BUNDLE_ID => "match AppStore #{BUNDLE_ID}"
+        }
+      }
+    )
+
+    # TestFlight 업로드
+    upload_to_app_store(
+      skip_screenshots: true,
+      skip_metadata:    true,
+      submit_for_review: false
+    )
   end
 end
