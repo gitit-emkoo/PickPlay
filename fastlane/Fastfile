@@ -792,6 +792,35 @@ platform :ios do
           end
         end
 
+        # Pods 프로젝트 내 파일 참조가 루트 절대경로를 가리키는 경우 정정
+        # 예: /Users/runner/work/PickPlay/PickPlay/Target Support Files/... -> $(PODS_ROOT)/Target Support Files/...
+        begin
+          wrong_root_prefix = '/Users/runner/work/PickPlay/PickPlay/'
+          pods_fixed_files = 0
+          pods_project.files.each do |file_ref|
+            next if file_ref.path.to_s.empty?
+            if file_ref.path.start_with?(wrong_root_prefix + 'Target Support Files/')
+              relative_path = file_ref.path.sub(wrong_root_prefix, '') # 'Target Support Files/...'
+              file_ref.path = File.join('$(PODS_ROOT)', relative_path)
+              # 가능하면 PODS_ROOT 기준으로 해석되도록 source_tree를 '<group>' 대신 'PODS_ROOT'로
+              begin
+                file_ref.source_tree = 'PODS_ROOT'
+              rescue
+                # 호환성 위해 실패해도 무시
+              end
+              pods_fixed_files += 1
+              if pods_fixed_files <= 5
+                UI.message("  ✅ Pods 파일참조 수정 [#{pods_fixed_files}]: #{relative_path}")
+              end
+            end
+          end
+          if pods_fixed_files > 5
+            UI.success("  ✅ Pods 파일참조 총 #{pods_fixed_files}건 수정 (처음 5개만 로그)")
+          end
+        rescue => e
+          UI.important("  ⚠️  Pods 파일참조 수정 중 오류: #{e.message}")
+        end
+
         # (정석) 우회/심볼릭링크 사용 없이 CocoaPods 표준 구조 유지
         # 추가 심볼릭 링크 생성 로직 제거
         
