@@ -1247,6 +1247,43 @@ platform :ios do
           UI.important("  ⚠️  그룹 보정 단계 오류: #{e.message}")
         end
         
+        # 7-ADD) react-native-webview 전용 헤더 경로/소스 트리 강제 보정
+        begin
+          wv_fixed = 0
+          wv_target = pods_project.targets.find { |t| t.name == 'react-native-webview' }
+          if wv_target
+            desired_umbrella = '$(PODS_ROOT)/Target Support Files/react-native-webview/react-native-webview-umbrella.h'
+            desired_module_h = '$(PROJECT_DIR)/node_modules/react-native-webview/apple/RNCWebViewModule.h'
+            wv_target.build_phases.each do |phase|
+              next unless phase.respond_to?(:files)
+              phase.files.each do |bf|
+                next unless bf.file_ref && bf.file_ref.path
+                p = bf.file_ref.path.to_s
+                if p.end_with?('react-native-webview-umbrella.h') && p != desired_umbrella
+                  bf.file_ref.path = desired_umbrella
+                  begin
+                    bf.file_ref.source_tree = 'PODS_ROOT'
+                  rescue
+                  end
+                  wv_fixed += 1
+                elsif p.end_with?('RNCWebViewModule.h') && p != desired_module_h
+                  bf.file_ref.path = desired_module_h
+                  begin
+                    bf.file_ref.source_tree = 'SOURCE_ROOT'
+                  rescue
+                  end
+                  wv_fixed += 1
+                end
+              end
+            end
+          end
+          if wv_fixed > 0
+            UI.success("  ✅ react-native-webview 헤더 경로 표준화: #{wv_fixed}건")
+          end
+        rescue => e
+          UI.important("  ⚠️  react-native-webview 헤더 경로 보정 중 오류: #{e.message}")
+        end
+        
         pods_project.save
         total_fixed = fixed_count + header_fixed_count
         UI.success("✅ [빌드 수정] Module map 경로 수정 완료 (수정: #{fixed_count}개, 이미 올바름: #{skipped_count}개)")
