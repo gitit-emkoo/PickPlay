@@ -1254,6 +1254,8 @@ platform :ios do
           if wv_target
             desired_umbrella = '$(PODS_ROOT)/Target Support Files/react-native-webview/react-native-webview-umbrella.h'
             desired_module_h = '$(PROJECT_DIR)/node_modules/react-native-webview/apple/RNCWebViewModule.h'
+            desired_manager_h = '$(PROJECT_DIR)/node_modules/react-native-webview/apple/RNCWebViewManager.h'
+            desired_impl_h = '$(PROJECT_DIR)/node_modules/react-native-webview/apple/RNCWebViewImpl.h'
             wv_target.build_phases.each do |phase|
               next unless phase.respond_to?(:files)
               phase.files.each do |bf|
@@ -1268,6 +1270,20 @@ platform :ios do
                   wv_fixed += 1
                 elsif p.end_with?('RNCWebViewModule.h') && p != desired_module_h
                   bf.file_ref.path = desired_module_h
+                  begin
+                    bf.file_ref.source_tree = 'SOURCE_ROOT'
+                  rescue
+                  end
+                  wv_fixed += 1
+                elsif p.end_with?('RNCWebViewManager.h') && p != desired_manager_h
+                  bf.file_ref.path = desired_manager_h
+                  begin
+                    bf.file_ref.source_tree = 'SOURCE_ROOT'
+                  rescue
+                  end
+                  wv_fixed += 1
+                elsif p.end_with?('RNCWebViewImpl.h') && p != desired_impl_h
+                  bf.file_ref.path = desired_impl_h
                   begin
                     bf.file_ref.source_tree = 'SOURCE_ROOT'
                   rescue
