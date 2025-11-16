@@ -1050,6 +1050,59 @@ platform :ios do
           UI.important("  ⚠️  헤더 출력 빌드세팅 정규화 중 오류: #{e.message}")
         end
         
+        # 5) Pods-pickplay 헤더 단계에서 umbrella.h 항목을 강제로 재참조(안전망)
+        begin
+          enforced = 0
+          pods_target = pods_project.targets.find { |t| t.name == 'Pods-pickplay' }
+          if pods_target
+            # 올바른 파일 참조 준비
+            desired_rel = 'Target Support Files/Pods-pickplay/Pods-pickplay-umbrella.h'
+            desired_path = File.join('$(PODS_ROOT)', desired_rel)
+            tsf_group = pods_project.main_group.find_subpath('Target Support Files/Pods-pickplay', true)
+            file_ref = tsf_group.files.find { |f| f.path.to_s == desired_path }
+            file_ref ||= tsf_group.new_reference(desired_path)
+            begin
+              file_ref.source_tree = 'PODS_ROOT'
+            rescue
+            end
+
+            # Headers 단계 찾기
+            headers_phase = pods_target.build_phases.find { |ph| ph.is_a?(Xcodeproj::Project::Object::PBXHeadersBuildPhase) }
+            if headers_phase
+              # 기존 잘못된 umbrella.h 항목 제거
+              to_remove = []
+              headers_phase.files.each do |bf|
+                next unless bf.file_ref && bf.file_ref.path
+                p = bf.file_ref.path.to_s
+                if p.end_with?('Pods-pickplay-umbrella.h') && !p.start_with?('$(PODS_ROOT)')
+                  to_remove << bf
+                end
+              end
+              to_remove.each do |bf|
+                begin
+                  headers_phase.remove_file_reference(bf.file_ref)
+                rescue
+                  begin
+                    pods_project.objects.delete(bf)
+                  rescue
+                  end
+                end
+              end
+
+              # 올바른 참조가 없으면 추가
+              unless headers_phase.files.any? { |bf| bf.file_ref && bf.file_ref.path.to_s == desired_path }
+                headers_phase.add_file_reference(file_ref, true)
+                enforced += 1
+              end
+            end
+          end
+          if enforced > 0
+            UI.success("  ✅ Pods-pickplay umbrella.h 강제 재참조: #{enforced}건")
+          end
+        rescue => e
+          UI.important("  ⚠️  Pods-pickplay umbrella 재참조 보강 중 오류: #{e.message}")
+        end
+        
         pods_project.save
         total_fixed = fixed_count + header_fixed_count
         UI.success("✅ [빌드 수정] Module map 경로 수정 완료 (수정: #{fixed_count}개, 이미 올바름: #{skipped_count}개)")
