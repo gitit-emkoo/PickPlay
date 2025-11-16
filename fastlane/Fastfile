@@ -1218,14 +1218,14 @@ platform :ios do
                 grp.path = new_gp
               end
               begin
-                if grp.responds_to?(:source_tree)
+                if grp.respond_to?(:source_tree)
                   grp.source_tree = 'PODS_ROOT'
                 else
                   # Some group-like may not expose source_tree setter; ignore
                 end
               rescue
               end
-              groups++;
+              groups_fixed += 1
             end
             # node_modules 그룹은 프로젝트 루트 기준으로
             if new_gp.include?('/node_modules/')
