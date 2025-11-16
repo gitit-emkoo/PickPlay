@@ -1392,6 +1392,20 @@ platform :ios do
     
     # 참고: PROJECT_DIR는 Xcode가 설정하므로 환경변수로 덮어쓰지 않습니다
     
+    # 빌드 직전 app.json을 ios 디렉터리로 동기화하여 스크립트들이 올바른 키를 읽도록 보장
+    begin
+      src_appjson = File.join(REPO_ROOT, 'app.json')
+      dst_appjson = File.join(IOS_DIR, 'app.json')
+      if File.exist?(src_appjson)
+        FileUtils.cp(src_appjson, dst_appjson)
+        UI.message("✅ app.json 동기화 완료: #{dst_appjson}")
+      else
+        UI.important("⚠️ 루트 app.json을 찾지 못했습니다: #{src_appjson}")
+      end
+    rescue => e
+      UI.important("⚠️ app.json 동기화 실패: #{e.message}")
+    end
+    
     # Archive와 IPA Export를 한 번에 수행
     # 만약 Archive는 성공하지만 IPA Export에서 실패한다면,
     # skip_package_ipa: true로 설정하여 Archive만 수행할 수 있습니다
