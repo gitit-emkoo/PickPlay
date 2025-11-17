@@ -1454,46 +1454,11 @@ platform :ios do
           app_target.add_file_references([file_ref]) if file_ref
         end
         
-        # react-native-google-mobile-ads의 ios_config.sh 스크립트가 app.json을 찾을 수 있도록
-        # 실제 스크립트 소스 확인: ios_config.sh는 PROJECT_DIR 환경 변수를 사용하여
-        # 상위 디렉토리로 올라가며 최대 2번 app.json을 검색합니다 (라인 47, 87-110)
-        # 해결책: PROJECT_DIR을 프로젝트 루트로 명시적으로 설정
-        UI.message("🔍 [RNGoogleMobileAds] 빌드 스크립트 PROJECT_DIR 설정 중...")
-        script_phases_fixed = 0
-        app_target.build_phases.each do |phase|
-          next unless phase.is_a?(Xcodeproj::Project::Object::PBXShellScriptBuildPhase)
-          next unless phase.name && phase.name.include?('RNGoogleMobileAds')
-          
-          # ios_config.sh 스크립트 분석 결과:
-          # - _CURRENT_SEARCH_DIR=${PROJECT_DIR} (라인 47)
-          # - PROJECT_DIR이 비어있으면 $(pwd) 사용 (라인 83-85)
-          # - 상위 디렉토리로 올라가며 최대 2번 검색 (라인 87-110)
-          # - find "$_CURRENT_SEARCH_DIR" -maxdepth 2 ... 로 app.json 검색 (라인 96)
-          # 따라서 PROJECT_DIR을 프로젝트 루트로 설정해야 합니다
-          
-          if phase.shell_script
-            original_script = phase.shell_script
-            
-            # PROJECT_DIR 환경 변수가 이미 설정되어 있는지 확인
-            # 스크립트 시작 부분에 PROJECT_DIR을 프로젝트 루트로 설정
-            # $(SRCROOT)는 ios/ 디렉토리를 가리키므로, $(SRCROOT)/.. 는 프로젝트 루트
-            unless original_script.include?('PROJECT_DIR="$(SRCROOT)/.."') || original_script.include?("PROJECT_DIR='$(SRCROOT)/..'")
-              # PROJECT_DIR을 프로젝트 루트로 명시적으로 설정
-              project_dir_export = "export PROJECT_DIR=\"$(SRCROOT)/..\"\n"
-              phase.shell_script = "#{project_dir_export}#{original_script}"
-              script_phases_fixed += 1
-              UI.message("  ✅ [RNGoogleMobileAds] PROJECT_DIR 환경 변수 설정: $(SRCROOT)/..")
-            else
-              UI.message("  ℹ️ [RNGoogleMobileAds] PROJECT_DIR이 이미 설정되었습니다")
-            end
-          end
-        end
-        
-        if script_phases_fixed > 0
-          UI.success("✅ [RNGoogleMobileAds] 빌드 스크립트 PROJECT_DIR 설정 완료: #{script_phases_fixed}건")
-        else
-          UI.message("ℹ️ [RNGoogleMobileAds] 빌드 스크립트 PROJECT_DIR 설정 불필요 (이미 설정됨 또는 스크립트 없음)")
-        end
+        # react-native-google-mobile-ads의 ios_config.sh는 기본적으로 PROJECT_DIR(=ios 디렉터리)에서
+        # app.json을 탐색하며, 상위 디렉터리로 최대 2번만 올라갑니다.
+        # PROJECT_DIR을 임의로 덮어쓰면 탐색 범위가 잘못 지정되어 app.json을 찾지 못하므로
+        # Xcode가 제공하는 기본 PROJECT_DIR 값을 그대로 사용합니다.
+        UI.message("ℹ️ [RNGoogleMobileAds] PROJECT_DIR는 Xcode 기본값을 사용합니다 (별도 수정 없음)")
       end
       project.save
       UI.success("✅ ExpoModulesProvider.swift 참조 표준화 완료")
