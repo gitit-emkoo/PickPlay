@@ -63,5 +63,8 @@ module.exports = {
       ],
       './plugins/with-admob-test-device'
     ]
+  },
+  'react-native-google-mobile-ads': {
+    ios_app_id: 'ca-app-pub-3940256099942544~1458002511'
   }
 };
