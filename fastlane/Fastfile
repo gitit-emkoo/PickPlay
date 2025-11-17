@@ -1393,17 +1393,50 @@ platform :ios do
     # 참고: PROJECT_DIR는 Xcode가 설정하므로 환경변수로 덮어쓰지 않습니다
     
     # 빌드 직전 app.json을 ios 디렉터리로 동기화하여 스크립트들이 올바른 키를 읽도록 보장
+    # react-native-google-mobile-ads의 ios_config.sh는 프로젝트 루트의 app.json을 읽습니다
     begin
       src_appjson = File.join(REPO_ROOT, 'app.json')
       dst_appjson = File.join(IOS_DIR, 'app.json')
-      if File.exist?(src_appjson)
-        FileUtils.cp(src_appjson, dst_appjson)
-        UI.message("✅ app.json 동기화 완료: #{dst_appjson}")
-      else
-        UI.important("⚠️ 루트 app.json을 찾지 못했습니다: #{src_appjson}")
+      
+      UI.message("🔍 app.json 동기화 시작...")
+      UI.message("  소스: #{src_appjson}")
+      UI.message("  대상: #{dst_appjson}")
+      
+      unless File.exist?(src_appjson)
+        UI.user_error!("❌ 루트 app.json을 찾을 수 없습니다: #{src_appjson}")
       end
+      
+      # app.json 내용 검증
+      require 'json'
+      app_json_content = JSON.parse(File.read(src_appjson))
+      
+      # ios_app_id 확인 (두 가지 위치 모두 확인)
+      ios_app_id_found = false
+      if app_json_content.dig('react-native-google-mobile-ads', 'ios_app_id')
+        ios_app_id_found = true
+        UI.success("  ✅ 루트 레벨에서 ios_app_id 발견: #{app_json_content['react-native-google-mobile-ads']['ios_app_id']}")
+      elsif app_json_content.dig('extra', 'react-native-google-mobile-ads', 'ios_app_id')
+        ios_app_id_found = true
+        UI.success("  ✅ extra.react-native-google-mobile-ads에서 ios_app_id 발견: #{app_json_content['extra']['react-native-google-mobile-ads']['ios_app_id']}")
+      else
+        UI.user_error!("❌ app.json에서 ios_app_id를 찾을 수 없습니다. react-native-google-mobile-ads.ios_app_id 또는 extra.react-native-google-mobile-ads.ios_app_id가 필요합니다.")
+      end
+      
+      # app.json 복사
+      FileUtils.mkdir_p(File.dirname(dst_appjson))
+      FileUtils.cp(src_appjson, dst_appjson)
+      
+      # 복사 확인
+      unless File.exist?(dst_appjson)
+        UI.user_error!("❌ app.json 복사 실패: #{dst_appjson}")
+      end
+      
+      UI.success("✅ app.json 동기화 완료: #{dst_appjson}")
+      UI.message("  파일 크기: #{File.size(dst_appjson)} bytes")
+    rescue JSON::ParserError => e
+      UI.user_error!("❌ app.json 파싱 실패: #{e.message}")
     rescue => e
-      UI.important("⚠️ app.json 동기화 실패: #{e.message}")
+      UI.user_error!("❌ app.json 동기화 실패: #{e.message}\n  스택: #{e.backtrace.first(3).join("\n  ")}")
     end
     
     # Archive와 IPA Export를 한 번에 수행
