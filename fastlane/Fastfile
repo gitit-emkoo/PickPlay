@@ -624,19 +624,26 @@ platform :ios do
     # Pods 재설치
     sh("cd #{IOS_DIR} && pod install")
     
-    # app.json을 프로젝트 루트와 ios 디렉터리에 모두 확인/복사
+    # ============================================
+    # app.json 확인 및 동기화 (중요!)
     # react-native-google-mobile-ads의 ios_config.sh는 프로젝트 루트의 app.json을 읽습니다
+    # ============================================
+    UI.important("=" * 60)
+    UI.important("🔍 [app.json 동기화] 시작")
+    UI.important("=" * 60)
+    
     begin
       src_appjson = File.join(REPO_ROOT, 'app.json')
       dst_appjson_ios = File.join(IOS_DIR, 'app.json')
       
-      UI.message("🔍 app.json 확인 및 동기화 시작...")
-      UI.message("  소스 (프로젝트 루트): #{src_appjson}")
-      UI.message("  대상 (ios 디렉터리): #{dst_appjson_ios}")
+      UI.message("📁 소스 경로 (프로젝트 루트): #{src_appjson}")
+      UI.message("📁 대상 경로 (ios 디렉터리): #{dst_appjson_ios}")
       
       unless File.exist?(src_appjson)
-        UI.user_error!("❌ 루트 app.json을 찾을 수 없습니다: #{src_appjson}")
+        UI.user_error!("❌ [app.json 동기화 실패] 루트 app.json을 찾을 수 없습니다: #{src_appjson}")
       end
+      
+      UI.success("✅ [app.json 동기화] 소스 파일 존재 확인: #{src_appjson}")
       
       # app.json 내용 검증
       require 'json'
@@ -646,12 +653,12 @@ platform :ios do
       ios_app_id_value = nil
       if app_json_content.dig('react-native-google-mobile-ads', 'ios_app_id')
         ios_app_id_value = app_json_content['react-native-google-mobile-ads']['ios_app_id']
-        UI.success("  ✅ 루트 레벨에서 ios_app_id 발견: #{ios_app_id_value}")
+        UI.success("✅ [app.json 동기화] 루트 레벨에서 ios_app_id 발견: #{ios_app_id_value}")
       elsif app_json_content.dig('extra', 'react-native-google-mobile-ads', 'ios_app_id')
         ios_app_id_value = app_json_content['extra']['react-native-google-mobile-ads']['ios_app_id']
-        UI.success("  ✅ extra.react-native-google-mobile-ads에서 ios_app_id 발견: #{ios_app_id_value}")
+        UI.success("✅ [app.json 동기화] extra.react-native-google-mobile-ads에서 ios_app_id 발견: #{ios_app_id_value}")
       else
-        UI.user_error!("❌ app.json에서 ios_app_id를 찾을 수 없습니다. react-native-google-mobile-ads.ios_app_id 또는 extra.react-native-google-mobile-ads.ios_app_id가 필요합니다.")
+        UI.user_error!("❌ [app.json 동기화 실패] app.json에서 ios_app_id를 찾을 수 없습니다. react-native-google-mobile-ads.ios_app_id 또는 extra.react-native-google-mobile-ads.ios_app_id가 필요합니다.")
       end
       
       # ios/app.json으로 복사
@@ -660,16 +667,36 @@ platform :ios do
       
       # 복사 확인
       unless File.exist?(dst_appjson_ios)
-        UI.user_error!("❌ app.json 복사 실패: #{dst_appjson_ios}")
+        UI.user_error!("❌ [app.json 동기화 실패] app.json 복사 실패: #{dst_appjson_ios}")
       end
       
-      UI.success("✅ app.json 동기화 완료: #{dst_appjson_ios}")
-      UI.message("  파일 크기: #{File.size(dst_appjson_ios)} bytes")
-      UI.message("  ios_app_id: #{ios_app_id_value}")
+      UI.success("✅ [app.json 동기화] 복사 완료: #{dst_appjson_ios}")
+      UI.message("📊 파일 크기: #{File.size(dst_appjson_ios)} bytes")
+      UI.message("🔑 ios_app_id: #{ios_app_id_value}")
+      
+      # 프로젝트 루트의 app.json도 확인 (react-native-google-mobile-ads의 ios_config.sh가 여기서 읽을 수 있음)
+      UI.message("🔍 [app.json 동기화] 프로젝트 루트 app.json 확인 중...")
+      unless File.exist?(src_appjson)
+        UI.user_error!("❌ [app.json 동기화 실패] 프로젝트 루트 app.json이 없습니다: #{src_appjson}")
+      end
+      
+      # 프로젝트 루트의 app.json 내용도 검증
+      root_app_json_content = JSON.parse(File.read(src_appjson))
+      root_ios_app_id = root_app_json_content.dig('react-native-google-mobile-ads', 'ios_app_id') || 
+                        root_app_json_content.dig('extra', 'react-native-google-mobile-ads', 'ios_app_id')
+      
+      if root_ios_app_id
+        UI.success("✅ [app.json 동기화] 프로젝트 루트 app.json에 ios_app_id 확인: #{root_ios_app_id}")
+      else
+        UI.important("⚠️ [app.json 동기화] 프로젝트 루트 app.json에 ios_app_id가 없습니다. 이는 문제가 될 수 있습니다.")
+      end
+      UI.important("=" * 60)
+      UI.important("✅ [app.json 동기화] 완료")
+      UI.important("=" * 60)
     rescue JSON::ParserError => e
-      UI.user_error!("❌ app.json 파싱 실패: #{e.message}")
+      UI.user_error!("❌ [app.json 동기화 실패] app.json 파싱 실패: #{e.message}")
     rescue => e
-      UI.user_error!("❌ app.json 동기화 실패: #{e.message}\n  스택: #{e.backtrace.first(3).join("\n  ")}")
+      UI.user_error!("❌ [app.json 동기화 실패] #{e.message}\n  스택: #{e.backtrace.first(3).join("\n  ")}")
     end
 
     # Module map 경로 수정 (절대 경로 -> $(PODS_ROOT) 상대 경로)
