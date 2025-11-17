@@ -1455,30 +1455,44 @@ platform :ios do
         end
         
         # react-native-google-mobile-ads의 ios_config.sh 스크립트가 app.json을 찾을 수 있도록
-        # 스크립트의 작업 디렉토리를 프로젝트 루트로 설정
-        UI.message("🔍 [RNGoogleMobileAds] 빌드 스크립트 작업 디렉토리 설정 중...")
+        # 실제 스크립트 소스 확인: ios_config.sh는 PROJECT_DIR 환경 변수를 사용하여
+        # 상위 디렉토리로 올라가며 최대 2번 app.json을 검색합니다 (라인 47, 87-110)
+        # 해결책: PROJECT_DIR을 프로젝트 루트로 명시적으로 설정
+        UI.message("🔍 [RNGoogleMobileAds] 빌드 스크립트 PROJECT_DIR 설정 중...")
         script_phases_fixed = 0
         app_target.build_phases.each do |phase|
           next unless phase.is_a?(Xcodeproj::Project::Object::PBXShellScriptBuildPhase)
           next unless phase.name && phase.name.include?('RNGoogleMobileAds')
           
-          # 스크립트의 작업 디렉토리를 프로젝트 루트로 설정
-          # $(SRCROOT)는 ios/ 디렉토리를 가리키므로, $(SRCROOT)/.. 는 프로젝트 루트를 가리킵니다
-          phase.shell_path = '/bin/sh'
-          # 기존 스크립트 내용을 유지하면서 작업 디렉토리만 변경
+          # ios_config.sh 스크립트 분석 결과:
+          # - _CURRENT_SEARCH_DIR=${PROJECT_DIR} (라인 47)
+          # - PROJECT_DIR이 비어있으면 $(pwd) 사용 (라인 83-85)
+          # - 상위 디렉토리로 올라가며 최대 2번 검색 (라인 87-110)
+          # - find "$_CURRENT_SEARCH_DIR" -maxdepth 2 ... 로 app.json 검색 (라인 96)
+          # 따라서 PROJECT_DIR을 프로젝트 루트로 설정해야 합니다
+          
           if phase.shell_script
-            # 스크립트 시작 부분에 cd 명령 추가 (이미 있다면 건너뜀)
-            unless phase.shell_script.include?('cd "$(SRCROOT)/.."') || phase.shell_script.include?('cd "${SRCROOT}/.."')
-              phase.shell_script = "cd \"$(SRCROOT)/..\"\n#{phase.shell_script}"
+            original_script = phase.shell_script
+            
+            # PROJECT_DIR 환경 변수가 이미 설정되어 있는지 확인
+            # 스크립트 시작 부분에 PROJECT_DIR을 프로젝트 루트로 설정
+            # $(SRCROOT)는 ios/ 디렉토리를 가리키므로, $(SRCROOT)/.. 는 프로젝트 루트
+            unless original_script.include?('PROJECT_DIR="$(SRCROOT)/.."') || original_script.include?("PROJECT_DIR='$(SRCROOT)/..'")
+              # PROJECT_DIR을 프로젝트 루트로 명시적으로 설정
+              project_dir_export = "export PROJECT_DIR=\"$(SRCROOT)/..\"\n"
+              phase.shell_script = "#{project_dir_export}#{original_script}"
               script_phases_fixed += 1
+              UI.message("  ✅ [RNGoogleMobileAds] PROJECT_DIR 환경 변수 설정: $(SRCROOT)/..")
+            else
+              UI.message("  ℹ️ [RNGoogleMobileAds] PROJECT_DIR이 이미 설정되었습니다")
             end
           end
         end
         
         if script_phases_fixed > 0
-          UI.success("✅ [RNGoogleMobileAds] 빌드 스크립트 작업 디렉토리 설정 완료: #{script_phases_fixed}건")
+          UI.success("✅ [RNGoogleMobileAds] 빌드 스크립트 PROJECT_DIR 설정 완료: #{script_phases_fixed}건")
         else
-          UI.message("ℹ️ [RNGoogleMobileAds] 빌드 스크립트 작업 디렉토리 설정 불필요 (이미 설정됨 또는 스크립트 없음)")
+          UI.message("ℹ️ [RNGoogleMobileAds] 빌드 스크립트 PROJECT_DIR 설정 불필요 (이미 설정됨 또는 스크립트 없음)")
         end
       end
       project.save
