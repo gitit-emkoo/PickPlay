@@ -1453,6 +1453,33 @@ platform :ios do
           file_ref ||= group.new_reference(desired_path)
           app_target.add_file_references([file_ref]) if file_ref
         end
+        
+        # react-native-google-mobile-ads의 ios_config.sh 스크립트가 app.json을 찾을 수 있도록
+        # 스크립트의 작업 디렉토리를 프로젝트 루트로 설정
+        UI.message("🔍 [RNGoogleMobileAds] 빌드 스크립트 작업 디렉토리 설정 중...")
+        script_phases_fixed = 0
+        app_target.build_phases.each do |phase|
+          next unless phase.is_a?(Xcodeproj::Project::Object::PBXShellScriptBuildPhase)
+          next unless phase.name && phase.name.include?('RNGoogleMobileAds')
+          
+          # 스크립트의 작업 디렉토리를 프로젝트 루트로 설정
+          # $(SRCROOT)는 ios/ 디렉토리를 가리키므로, $(SRCROOT)/.. 는 프로젝트 루트를 가리킵니다
+          phase.shell_path = '/bin/sh'
+          # 기존 스크립트 내용을 유지하면서 작업 디렉토리만 변경
+          if phase.shell_script
+            # 스크립트 시작 부분에 cd 명령 추가 (이미 있다면 건너뜀)
+            unless phase.shell_script.include?('cd "$(SRCROOT)/.."') || phase.shell_script.include?('cd "${SRCROOT}/.."')
+              phase.shell_script = "cd \"$(SRCROOT)/..\"\n#{phase.shell_script}"
+              script_phases_fixed += 1
+            end
+          end
+        end
+        
+        if script_phases_fixed > 0
+          UI.success("✅ [RNGoogleMobileAds] 빌드 스크립트 작업 디렉토리 설정 완료: #{script_phases_fixed}건")
+        else
+          UI.message("ℹ️ [RNGoogleMobileAds] 빌드 스크립트 작업 디렉토리 설정 불필요 (이미 설정됨 또는 스크립트 없음)")
+        end
       end
       project.save
       UI.success("✅ ExpoModulesProvider.swift 참조 표준화 완료")
