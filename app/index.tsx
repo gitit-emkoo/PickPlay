@@ -1,20 +1,20 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Alert, ScrollView, Text, TouchableOpacity, View, StyleSheet, Image, Share } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { loadData, ensureUser, getTodayQuestionForUser, saveAnswerAndProcessLogic, aggregate, getTodayAnswer, rewardWithMajority } from './services/store';
-import { Question, UserData } from './types';
-import { watchAuth } from './services/firebase';
+import { loadData, ensureUser, getTodayQuestionForUser, saveAnswerAndProcessLogic, aggregate, getTodayAnswer, rewardWithMajority } from '../src/services/store';
+import { Question, UserData } from '../src/types';
+import { watchAuth } from '../src/services/firebase';
 import LoadingScreen from './components/LoadingScreen';
 import ErrorScreen from './components/ErrorScreen';
 import SplashScreen from './splash';
 import TutorialScreen from './components/TutorialScreen';
 import UserHeader from './components/UserHeader';
 import AnimaCodeRevealModal from './components/AnimaCodeRevealModal';
-import colors from './styles/colors';
+import colors from '../src/styles/colors';
 import * as WebBrowser from 'expo-web-browser';
 import LottieView from 'lottie-react-native';
 import BannerAdComponent from './components/BannerAdComponent';
-import { createRewardedInterstitial, attachRewardedInterstitial } from './services/ads';
+import { createRewardedInterstitial, attachRewardedInterstitial } from '../src/services/ads';
 
 export default function App() {
   // 화면 흐름 상태
@@ -65,14 +65,31 @@ export default function App() {
 
   // 튜토리얼 완료
   const handleTutorialFinish = async () => {
+    try {
       await AsyncStorage.setItem('hasSeenTutorial', 'true');
       setShowTutorial(false);
+    } catch (error) {
+      console.error('[App] 튜토리얼 완료 처리 실패:', error);
+      // 에러가 발생해도 튜토리얼은 닫기
+      setShowTutorial(false);
+    }
   };
 
   useEffect(() => {
     loadData();
-    const unsub = watchAuth(setUser);
-    return unsub;
+    // watchAuth가 실패해도 앱이 계속 실행되도록 에러 처리
+    try {
+      const unsub = watchAuth((user) => {
+        console.log('[App] watchAuth 콜백 호출:', user ? `사용자 있음 (${user.uid})` : '사용자 없음');
+        setUser(user);
+      });
+      return unsub;
+    } catch (error) {
+      console.error('[App] watchAuth 초기화 실패:', error);
+      // 에러가 발생해도 앱이 계속 실행되도록 null 설정
+      setUser(null);
+      return () => {};
+    }
   }, []);
 
   // 광고 초기화 및 이벤트 리스너 설정
@@ -110,36 +127,64 @@ export default function App() {
     const init = async () => {
       if (!user) return;
       setLoading(true);
-      const data = await ensureUser(user.uid);
-      setUserData(data);
-      
-      const q = getTodayQuestionForUser(data);
-      setQuestion(q);
+      try {
+        const data = await ensureUser(user.uid);
+        setUserData(data);
+        
+        const q = getTodayQuestionForUser(data);
+        setQuestion(q);
 
-      if (q) {
-        // 오늘 답변 기록을 가져와 UI 상태 설정
-        const todayAnswer = await getTodayAnswer(user.uid, q.question_id);
-        if (todayAnswer) {
-          setUserChoice(todayAnswer.selected_option_index);
-          // 보상 수령 완료 상태 반영 (버튼 숨기기)
-          if (todayAnswer.rewarded) {
-            setRewardCompleted(true);
-            // 보상 완료 배너 복원 (배수에 따른 색상 적용)
-            const multiplier = data.streakCount >= 31 ? 3 : data.streakCount >= 11 ? 2 : 1;
-            setLastRewardMultiplier(multiplier);
-            setMsg('보상완료💎');
-          } else {
+        if (q) {
+          try {
+            // 오늘 답변 기록을 가져와 UI 상태 설정
+            const todayAnswer = await getTodayAnswer(user.uid, q.question_id);
+            if (todayAnswer) {
+              setUserChoice(todayAnswer.selected_option_index);
+              // 보상 수령 완료 상태 반영 (버튼 숨기기)
+              if (todayAnswer.rewarded) {
+                setRewardCompleted(true);
+                // 보상 완료 배너 복원 (배수에 따른 색상 적용)
+                const multiplier = data.streakCount >= 31 ? 3 : data.streakCount >= 11 ? 2 : 1;
+                setLastRewardMultiplier(multiplier);
+                setMsg('보상완료💎');
+              } else {
+                setRewardCompleted(false);
+              }
+            } else {
+              setUserChoice(null);
+              setRewardCompleted(false);
+            }
+          } catch (error: any) {
+            console.warn('[App] getTodayAnswer 실패:', error?.message || error);
+            setUserChoice(null);
             setRewardCompleted(false);
+          }
+          
+          try {
+            const result = await aggregate(q.question_id);
+            setAgg(result);
+          } catch (error: any) {
+            console.warn('[App] aggregate 실패:', error?.message || error);
+            // 기본값 유지
           }
         } else {
           setUserChoice(null);
-          setRewardCompleted(false);
         }
-        
-        const result = await aggregate(q.question_id);
-        setAgg(result);
-      } else {
-        setUserChoice(null);
+      } catch (error: any) {
+        const errorMessage = error?.message || String(error);
+        if (errorMessage.includes("No Firebase App '[DEFAULT]'")) {
+          console.warn('[App] Firebase 초기화 대기 중, 잠시 후 재시도...');
+          // Firebase 초기화 대기 후 재시도
+          setTimeout(() => {
+            if (user) {
+              init();
+            }
+          }, 1000);
+          return; // setLoading(false) 호출 전에 return
+        } else {
+          console.error('[App] 초기화 실패:', error);
+          // 에러가 발생해도 앱이 계속 실행되도록
+        }
       }
       setLoading(false);
     };
@@ -379,6 +424,7 @@ export default function App() {
         </View>
 
           {/* 질문 카드 */}
+          {question ? (
           <View style={{ backgroundColor: colors.surface, borderRadius: 20, padding: 24, marginBottom: 24, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 4 }}>
             <Text style={{ fontSize: 20, fontWeight: '700', color: colors.primary, textAlign: 'center', lineHeight: 28, marginBottom: 24 }}>
               Q. 나의 <Text style={{ color: colors.accent }}>{(question as any).text ?? (question as any).question_text} 취향은?</Text>

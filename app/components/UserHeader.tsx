@@ -1,9 +1,9 @@
 import LottieView from 'lottie-react-native';
 import React, { useState } from 'react';
 import { Modal, Text, TouchableOpacity, View } from 'react-native';
-import colors from '../styles/colors';
+import colors from '../../src/styles/colors';
 import CharacterCard from './CharacterCard';
-import { UserData } from '../types';
+import { UserData } from '../../src/types';
 
 interface UserHeaderProps {
   userData: {

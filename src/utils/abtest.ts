@@ -4,3 +4,4 @@ export function pickSlot(uid = '') {
   for (let i = 0; i < uid.length; i++) sum += uid.charCodeAt(i); 
   return sum % 2 === 0 ? 'A' : 'B'; 
 }
+

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Text, View } from 'react-native';
-import colors from '../styles/colors';
+import colors from '../../src/styles/colors';
 
 interface ErrorScreenProps {
   title?: string;

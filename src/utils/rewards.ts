@@ -42,8 +42,3 @@ export function isMajorityChoice(myChoice: number, count0: number, count1: numbe
   return myChoice === majorityIndex;
 }
 
-
-
-
-
-

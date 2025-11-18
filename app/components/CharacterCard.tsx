@@ -2,8 +2,8 @@ import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, Image, ActivityIndicator, TouchableOpacity, Animated } from 'react-native';
 import LottieView from 'lottie-react-native';
 import LinearGradient from 'react-native-linear-gradient';
-import { UserData } from '../types'; // Character 타입도 필요할 수 있음
-import colors from '../styles/colors';
+import { UserData } from '../../src/types'; // Character 타입도 필요할 수 있음
+import colors from '../../src/styles/colors';
 
 interface CharacterCardProps {
   userData: UserData | null;

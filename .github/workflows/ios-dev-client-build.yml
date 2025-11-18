@@ -2,16 +2,16 @@ name: iOS Dev Client Build
 
 on:
   workflow_dispatch:
-  # Dev client 빌드는 수동 실행 권장 (workflow_dispatch 사용)
-  # 필요시 아래 주석 해제하여 자동 실행 가능
-  # push:
-  #   branches: [main]
-  #   paths:
-  #     - 'pickplay/app/**'
-  #     - 'pickplay/app.config.js'
-  #     - 'pickplay/package.json'
-  #     - 'pickplay/ios/**'
-  #     - '.github/workflows/ios-dev-client-build.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'pickplay/app/**'
+      - 'pickplay/app.config.js'
+      - 'pickplay/app.json'
+      - 'pickplay/package.json'
+      - 'pickplay/fastlane/**'
+      - 'pickplay/GoogleService-Info.plist'
+      - '.github/workflows/ios-dev-client-build.yml'
 
 jobs:
   ios-dev-client:
@@ -109,17 +109,14 @@ jobs:
             @react-native-community/cli-platform-ios \
             expo-modules-autolinking
 
-      # Expo prebuild 필요 시만 실행
-      - name: Ensure iOS native project (conditional Expo prebuild)
+      # Expo prebuild 실행 (app.json의 googleServicesFile 설정 적용)
+      - name: Ensure iOS native project (Expo prebuild with clean)
         run: |
           cd "$PROJ_DIR"
-          if [ -z "$(ls -1 ios/*.xcodeproj 2>/dev/null)" ]; then
-            echo "🛠  No .xcodeproj found — running Expo prebuild (iOS only)..."
-            npx expo prebuild --platform ios --no-install --clean
-            git checkout -- ios/Podfile || true # ✅ Podfile 되살리기
-          else
-            echo "✅ .xcodeproj found; skipping prebuild."
-          fi
+          echo "🛠  Running Expo prebuild to apply app.json changes (including googleServicesFile)..."
+          npx expo prebuild --platform ios --no-install --clean
+          git checkout -- ios/Podfile || true # ✅ Podfile 되살리기
+          echo "✅ Expo prebuild 완료 - GoogleService-Info.plist가 ios/에 포함되었는지 확인하세요"
 
       - name: Debug iOS folder
         run: |

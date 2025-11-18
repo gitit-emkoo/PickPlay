@@ -2,6 +2,7 @@ module.exports = {
   expo: {
     name: 'pickplay',
     slug: 'pickplay',
+    scheme: 'pickplay',
     version: '1.2.0',
     extra: {
       eas: {
@@ -25,6 +26,7 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.pickplay.kwcc',
+      googleServicesFile: './GoogleService-Info.plist',
       infoPlist: {
         // TODO: 실배포 시 실제 AdMob 앱 ID(아래 주석)로 교체하세요.
         // 'ca-app-pub-2555567440328829~5483134579'

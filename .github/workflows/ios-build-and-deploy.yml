@@ -195,7 +195,7 @@ jobs:
                 fs.writeFileSync('app.json', JSON.stringify(appJson, null, 2));
                 console.log('✅ app.json 재생성 완료');
               "
-            fi
+          fi
           fi
           # 여러 위치에 복사
           cp app.json ios/app.json 2>/dev/null || true

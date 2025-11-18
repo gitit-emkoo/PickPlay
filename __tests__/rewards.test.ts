@@ -3,7 +3,7 @@ import {
   getBasePoints,
   calculateTotalPoints,
   isMajorityChoice,
-} from '../app/utils/rewards';
+} from '../src/utils/rewards';
 
 describe('Rewards Logic Tests', () => {
   

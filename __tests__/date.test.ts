@@ -1,4 +1,4 @@
-import { currentDateKey, dayIndex } from '../app/utils/date';
+import { currentDateKey, dayIndex } from '../src/utils/date';
 
 describe('Date Utility Tests', () => {
   

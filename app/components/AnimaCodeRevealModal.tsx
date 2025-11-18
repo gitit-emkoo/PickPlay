@@ -1,7 +1,7 @@
 import React from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import LottieView from 'lottie-react-native';
-import colors from '../styles/colors';
+import colors from '../../src/styles/colors';
 import CharacterCard from './CharacterCard';
 import { UserData } from '@/src/types';
 
