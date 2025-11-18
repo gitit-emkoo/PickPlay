@@ -1,4 +1,4 @@
-const { withDangerousMod, IOSConfig } = require('@expo/config-plugins');
+const { withDangerousMod, withXcodeProject, IOSConfig } = require('@expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
 
@@ -7,7 +7,7 @@ const path = require('path');
  * React Native Firebase가 이 파일을 읽어서 초기화합니다
  */
 const withGoogleServicesFile = (config) => {
-  return withDangerousMod(config, [
+  config = withDangerousMod(config, [
     'ios',
     async (config) => {
       const projectRoot = config.modRequest.projectRoot;
@@ -47,15 +47,20 @@ const withGoogleServicesFile = (config) => {
         throw error;
       }
 
-      // Xcode 프로젝트에 파일 등록 (빌드 산출물에 포함)
-      IOSConfig.Google.setGoogleServicesFile(config, {
-        projectRoot,
-        applePlatform: 'ios',
-      });
-
       return config;
     },
   ]);
+
+  // Xcode 프로젝트에 GoogleService-Info.plist를 추가
+  config = withXcodeProject(config, (config) => {
+    IOSConfig.Google.setGoogleServicesFile(config, {
+      projectRoot: config.modRequest.projectRoot,
+      applePlatform: 'ios',
+    });
+    return config;
+  });
+
+  return config;
 };
 
 module.exports = withGoogleServicesFile;
