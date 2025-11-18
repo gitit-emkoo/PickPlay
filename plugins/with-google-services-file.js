@@ -46,7 +46,13 @@ const withGoogleServicesFile = (config) => {
         console.error(`❌ GoogleService-Info.plist 파일 복사 실패: ${error.message}`);
         throw error;
       }
-      
+
+      // Xcode 프로젝트에 파일 등록 (빌드 산출물에 포함)
+      IOSConfig.Google.setGoogleServicesFile(config, {
+        projectRoot,
+        applePlatform: 'ios',
+      });
+
       return config;
     },
   ]);
