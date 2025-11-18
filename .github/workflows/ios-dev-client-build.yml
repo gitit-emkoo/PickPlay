@@ -137,6 +137,14 @@ jobs:
           pod cache clean --all
           echo "✅ CocoaPods cache cleaned."
 
+      - name: Ensure CocoaPods Specs repo (fallback)
+        run: |
+          cd "$PROJ_DIR"
+          echo "🔧 Ensuring CocoaPods Specs repo available..."
+          pod repo add-cdn trunk https://cdn.cocoapods.org/ 2>/dev/null || true
+          pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
+          pod repo list
+
       - name: Install CocoaPods
         run: |
           cd "$PROJ_DIR/ios"
