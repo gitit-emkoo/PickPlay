@@ -63,6 +63,7 @@ module.exports = {
           }
         }
       ],
+      './plugins/with-google-services-file',
       './plugins/with-admob-test-device'
     ]
   },

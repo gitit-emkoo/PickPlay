@@ -457,6 +457,7 @@ export default function App() {
             </TouchableOpacity>
           </View>
         </View>
+          ) : null}
 
           {/* 정보 카드 */}
           <View style={{ backgroundColor: 'transparent', paddingVertical: 20, paddingHorizontal: 15, marginBottom: 24, borderRadius: 16, borderWidth: 2, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }}>
