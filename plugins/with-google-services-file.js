@@ -1,66 +1,11 @@
-const { withDangerousMod, withXcodeProject, IOSConfig } = require('@expo/config-plugins');
-const fs = require('fs');
-const path = require('path');
+const { IOSConfig } = require('@expo/config-plugins');
 
 /**
- * GoogleService-Info.plist 파일을 ios/ 디렉토리로 복사하는 Config Plugin
- * React Native Firebase가 이 파일을 읽어서 초기화합니다
+ * Expo가 제공하는 withGoogleServicesFile 유틸을 그대로 사용합니다.
+ * app.json의 ios.googleServicesFile 값을 읽어 자동으로 복사 및 Xcode 등록을 수행합니다.
  */
 const withGoogleServicesFile = (config) => {
-  config = withDangerousMod(config, [
-    'ios',
-    async (config) => {
-      const projectRoot = config.modRequest.projectRoot;
-      const iosDir = path.join(projectRoot, 'ios');
-      
-      // app.json 또는 app.config.js에서 googleServicesFile 경로 가져오기
-      const googleServicesFile = config.ios?.googleServicesFile;
-      
-      if (!googleServicesFile) {
-        console.warn('⚠️ googleServicesFile이 app.json에 설정되지 않았습니다.');
-        return config;
-      }
-      
-      // 소스 파일 경로 (프로젝트 루트 기준)
-      const sourcePath = path.resolve(projectRoot, googleServicesFile.replace('./', ''));
-      
-      // 대상 파일 경로 (ios/ 디렉토리)
-      const targetPath = path.join(iosDir, 'GoogleService-Info.plist');
-      
-      // 소스 파일이 존재하는지 확인
-      if (!fs.existsSync(sourcePath)) {
-        console.error(`❌ GoogleService-Info.plist 파일을 찾을 수 없습니다: ${sourcePath}`);
-        return config;
-      }
-      
-      // ios/ 디렉토리가 없으면 생성
-      if (!fs.existsSync(iosDir)) {
-        fs.mkdirSync(iosDir, { recursive: true });
-      }
-      
-      // 파일 복사
-      try {
-        fs.copyFileSync(sourcePath, targetPath);
-        console.log(`✅ GoogleService-Info.plist 파일을 복사했습니다: ${targetPath}`);
-      } catch (error) {
-        console.error(`❌ GoogleService-Info.plist 파일 복사 실패: ${error.message}`);
-        throw error;
-      }
-
-      return config;
-    },
-  ]);
-
-  // Xcode 프로젝트에 GoogleService-Info.plist를 추가
-  config = withXcodeProject(config, (config) => {
-    IOSConfig.Google.setGoogleServicesFile(config, {
-      projectRoot: config.modRequest.projectRoot,
-      applePlatform: 'ios',
-    });
-    return config;
-  });
-
-  return config;
+  return IOSConfig.Google.withGoogleServicesFile(config);
 };
 
 module.exports = withGoogleServicesFile;
