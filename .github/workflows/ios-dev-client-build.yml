@@ -141,14 +141,26 @@ jobs:
         run: |
           cd "$PROJ_DIR"
           echo "🔧 Ensuring CocoaPods Specs repo available..."
+          # 기존 trunk 레포 제거 (있으면)
+          pod repo remove trunk 2>/dev/null || true
+          # CDN 레포 추가 시도 (실패해도 계속)
           pod repo add-cdn trunk https://cdn.cocoapods.org/ 2>/dev/null || true
-          pod repo add trunk https://github.com/CocoaPods/Specs.git 2>/dev/null || true
+          # GitHub Specs 레포로 trunk 추가 (CDN 실패 시 fallback)
+          pod repo add trunk https://github.com/CocoaPods/Specs.git || true
+          echo "✅ CocoaPods Specs repo 준비 완료"
           pod repo list
 
       - name: Install CocoaPods
         run: |
           cd "$PROJ_DIR/ios"
-          pod install --repo-update
+          # trunk 레포가 제대로 설정되었는지 확인
+          if ! pod repo list | grep -q "trunk"; then
+            echo "❌ trunk 레포가 없습니다. GitHub Specs 레포로 추가 중..."
+            pod repo remove trunk 2>/dev/null || true
+            pod repo add trunk https://github.com/CocoaPods/Specs.git
+          fi
+          # repo-update 없이 설치 (이미 레포 준비 완료)
+          pod install
 
       - name: Verify React Native Codegen files
         run: |
