@@ -23,41 +23,103 @@ const initializeFirebaseIfNeeded = async () => {
   if (firebaseInitialized) return true;
   
   try {
+    console.log('[Firebase Init] 🔍 Firebase 초기화 상태 확인 시작...');
+    console.log('[Firebase Init] 📋 React Native Firebase는 네이티브에서 GoogleService-Info.plist를 자동으로 읽어서 초기화합니다.');
+    console.log('[Firebase Init] 📋 파일이 앱 번들에 포함되지 않으면 네이티브 초기화가 실패합니다.');
+    
     // 이미 초기화되었는지 확인
-    const apps = getApps();
-    if (apps.length > 0) {
-      console.log('[Firebase Init] ✅ Firebase 앱이 이미 초기화되어 있습니다.');
-      firebaseInitialized = true;
-      return true;
+    try {
+      const apps = getApps();
+      if (apps.length > 0) {
+        console.log('[Firebase Init] ✅ Firebase 앱이 이미 초기화되어 있습니다. (앱 수:', apps.length, ')');
+        apps.forEach((app, idx) => {
+          console.log(`[Firebase Init]   앱 ${idx + 1}: ${app.name}`);
+        });
+        firebaseInitialized = true;
+        return true;
+      } else {
+        console.log('[Firebase Init] ⚠️ Firebase 앱이 초기화되지 않음 (앱 수: 0)');
+      }
+    } catch (getAppsError: any) {
+      console.log('[Firebase Init] ⚠️ getApps() 호출 실패:', getAppsError?.message || getAppsError);
+      console.log('[Firebase Init] 💡 이것은 네이티브 모듈이 아직 준비되지 않았거나 GoogleService-Info.plist가 번들에 없을 수 있습니다.');
     }
     
     // React Native Firebase는 네이티브에서 자동 초기화되므로
     // 네이티브 모듈이 초기화될 때까지 대기 (최대 10초)
-    console.log('[Firebase Init] ⏳ Firebase 네이티브 초기화 대기 중...');
+    console.log('[Firebase Init] ⏳ Firebase 네이티브 초기화 대기 중... (최대 10초)');
     
     for (let i = 0; i < 50; i++) {
       try {
         const apps = getApps();
         if (apps.length > 0) {
-          console.log('[Firebase Init] ✅ Firebase 초기화 완료!');
+          console.log('[Firebase Init] ✅ Firebase 네이티브 초기화 완료! (앱 수:', apps.length, ')');
+          apps.forEach((app, idx) => {
+            console.log(`[Firebase Init]   앱 ${idx + 1}: ${app.name}`);
+          });
           firebaseInitialized = true;
           return true;
         }
-      } catch (e) {
-        // 계속 시도
+      } catch (e: any) {
+        if (i % 10 === 0) {
+          console.log(`[Firebase Init] ⏳ 네이티브 초기화 대기 중... (${i * 200}ms 경과, ${e?.message || '앱 없음'})`);
+        }
       }
       await new Promise(resolve => setTimeout(resolve, 200));
     }
     
+    console.log('[Firebase Init] ❌ 네이티브 초기화 실패 (10초 대기 후에도 앱이 등록되지 않음)');
+    
     // 네이티브 초기화가 실패한 경우, JavaScript 레벨에서 명시적 초기화 시도
-    // React Native Firebase는 GoogleService-Info.plist를 자동으로 읽어서 초기화합니다
-    console.warn('[Firebase Init] ⚠️ Firebase 네이티브 초기화 실패, JavaScript 레벨에서 초기화 시도...');
+    // React Native Firebase는 네이티브에서 자동으로 GoogleService-Info.plist를 읽어야 하는데,
+    // 파일이 앱 번들에 포함되지 않으면 네이티브 초기화가 실패합니다
+    // 이 경우 JavaScript 레벨에서 명시적으로 설정 객체를 제공해야 합니다
+    console.warn('[Firebase Init] ⚠️ Firebase 네이티브 초기화 실패');
+    console.warn('[Firebase Init] 💡 원인: GoogleService-Info.plist가 앱 번들에 포함되지 않았을 가능성이 높습니다');
+    console.warn('[Firebase Init] 💡 해결: 빌드 로그에서 파일 포함 여부 확인 필요');
+    console.warn('[Firebase Init] 🔧 JavaScript 레벨에서 명시적 초기화 시도...');
     try {
-      // initializeApp()은 인자 없이 호출하면 GoogleService-Info.plist를 읽어서 자동 초기화합니다
-      const app = initializeApp();
-      console.log('[Firebase Init] ✅ JavaScript 레벨에서 Firebase 초기화 성공!');
-      firebaseInitialized = true;
-      return true;
+      // 플랫폼별 Firebase 설정으로 명시적 초기화
+      // React Native Firebase는 네이티브에서 GoogleService-Info.plist (iOS) 또는 google-services.json (Android)를 자동으로 읽어야 하는데,
+      // 파일이 번들에 없으면 실패합니다. 이 경우 명시적으로 설정 객체를 제공해야 합니다.
+      const firebaseConfig = Platform.select({
+        ios: {
+          // iOS용 Firebase 설정 (GoogleService-Info.plist에서 추출)
+          apiKey: 'AIzaSyAfKqr2opuHza9hkXFmofPGg4t_HVOmcpk',
+          projectId: 'today-balance-fa0a5',
+          storageBucket: 'today-balance-fa0a5.firebasestorage.app',
+          messagingSenderId: '981215713715',
+          appId: '1:981215713715:ios:9c812d5a30fea59b9c53c6',
+        },
+        android: {
+          // Android용 Firebase 설정 (google-services.json에서 추출)
+          apiKey: 'AIzaSyDAyQGN1q5K9GhoNdDmNt65PH37dVL-5xA',
+          projectId: 'today-balance-fa0a5',
+          storageBucket: 'today-balance-fa0a5.firebasestorage.app',
+          messagingSenderId: '981215713715',
+          appId: '1:981215713715:android:820a3f60db5067369c53c6',
+        },
+        default: {},
+      });
+      
+      // 이미 초기화된 앱이 있는지 다시 확인
+      const existingApps = getApps();
+      if (existingApps.length === 0) {
+        const app = initializeApp(firebaseConfig);
+        console.log('[Firebase Init] ✅ JavaScript 레벨에서 Firebase 초기화 성공!', app.name);
+      } else {
+        console.log('[Firebase Init] ✅ Firebase 앱이 이미 초기화되어 있습니다.', existingApps[0].name);
+      }
+      
+      // 초기화 확인
+      const appsAfterInit = getApps();
+      if (appsAfterInit.length > 0) {
+        console.log('[Firebase Init] ✅ Firebase 초기화 완료 확인됨 (앱 수:', appsAfterInit.length, ')');
+        firebaseInitialized = true;
+        return true;
+      } else {
+        throw new Error('Firebase 초기화 후에도 앱이 등록되지 않음');
+      }
     } catch (initError: any) {
       console.error('[Firebase Init] ❌ JavaScript 레벨 초기화도 실패:', initError?.message || initError);
       console.error('[Firebase Init] 💡 GoogleService-Info.plist가 네이티브 빌드에 포함되었는지 확인하세요.');
