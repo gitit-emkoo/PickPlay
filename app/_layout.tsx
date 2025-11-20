@@ -105,20 +105,59 @@ const initializeFirebaseIfNeeded = async () => {
       // 이미 초기화된 앱이 있는지 다시 확인
       const existingApps = getApps();
       if (existingApps.length === 0) {
+        console.log('[Firebase Init] initializeApp() 호출 중...');
         const app = initializeApp(firebaseConfig);
-        console.log('[Firebase Init] ✅ JavaScript 레벨에서 Firebase 초기화 성공!', app.name);
+        
+        if (!app) {
+          console.error('[Firebase Init] ❌ initializeApp()이 undefined를 반환했습니다.');
+          console.error('[Firebase Init] 💡 이것은 네이티브 모듈이 GoogleService-Info.plist를 찾지 못했다는 의미일 수 있습니다.');
+          throw new Error('initializeApp()이 undefined를 반환함 - 네이티브 모듈 초기화 실패 가능');
+        }
+        
+        console.log('[Firebase Init] initializeApp() 반환값:', {
+          name: app?.name,
+          options: app?.options,
+          app: app ? '존재함' : 'undefined'
+        });
+        
+        // 앱이 반환되었더라도 네이티브 모듈이 제대로 초기화되었는지 확인
+        // React Native Firebase는 네이티브에서 자동으로 초기화되므로,
+        // JavaScript 레벨에서 initializeApp()을 호출해도 네이티브 초기화가 필요합니다
+        await new Promise(resolve => setTimeout(resolve, 500)); // 네이티브 모듈이 준비될 때까지 대기
       } else {
         console.log('[Firebase Init] ✅ Firebase 앱이 이미 초기화되어 있습니다.', existingApps[0].name);
       }
       
-      // 초기화 확인
-      const appsAfterInit = getApps();
+      // 초기화 확인 (여러 번 시도)
+      let appsAfterInit = getApps();
+      if (appsAfterInit.length === 0) {
+        // 네이티브 모듈이 준비될 때까지 최대 2초 대기
+        for (let i = 0; i < 10; i++) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+          appsAfterInit = getApps();
+          if (appsAfterInit.length > 0) {
+            break;
+          }
+          console.log(`[Firebase Init] 앱 등록 대기 중... (${i + 1}/10)`);
+        }
+      }
+      
       if (appsAfterInit.length > 0) {
         console.log('[Firebase Init] ✅ Firebase 초기화 완료 확인됨 (앱 수:', appsAfterInit.length, ')');
+        appsAfterInit.forEach((app, idx) => {
+          console.log(`[Firebase Init]   앱 ${idx + 1}: ${app.name}`);
+        });
         firebaseInitialized = true;
         return true;
       } else {
-        throw new Error('Firebase 초기화 후에도 앱이 등록되지 않음');
+        console.error('[Firebase Init] ❌ Firebase 초기화 후에도 앱이 등록되지 않음');
+        console.error('[Firebase Init] 💡 React Native Firebase는 네이티브에서 GoogleService-Info.plist를 자동으로 읽어야 합니다.');
+        console.error('[Firebase Init] 💡 파일이 앱 번들에 포함되지 않으면 네이티브 초기화가 실패합니다.');
+        console.error('[Firebase Init] 💡 다음을 확인하세요:');
+        console.error('[Firebase Init]   1. IPA 파일에 GoogleService-Info.plist가 포함되어 있는지');
+        console.error('[Firebase Init]   2. Xcode 프로젝트의 "Copy Bundle Resources"에 파일이 있는지');
+        console.error('[Firebase Init]   3. 네이티브 빌드가 최신 버전인지');
+        throw new Error('Firebase 초기화 후에도 앱이 등록되지 않음 - GoogleService-Info.plist가 번들에 포함되지 않았을 가능성');
       }
     } catch (initError: any) {
       console.error('[Firebase Init] ❌ JavaScript 레벨 초기화도 실패:', initError?.message || initError);
