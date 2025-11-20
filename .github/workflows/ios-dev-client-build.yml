@@ -313,19 +313,45 @@ jobs:
           
       # IPA 파일에서 GoogleService-Info.plist 포함 여부 확인
       - name: Verify GoogleService-Info.plist in IPA
-        if: success() && steps.find_ipa.outputs.ipa_path != ''
+        if: success()
         run: |
           cd "$PROJ_DIR"
-          IPA_PATH="${{ steps.find_ipa.outputs.ipa_path }}"
           echo "🔍 IPA 파일에서 GoogleService-Info.plist 확인 중..."
+          
+          # IPA 파일 경로 확인
+          IPA_PATH="${{ steps.find_ipa.outputs.ipa_path }}"
+          if [ -z "$IPA_PATH" ]; then
+            echo "⚠️ steps.find_ipa.outputs.ipa_path가 비어있음, 직접 검색 시도..."
+            IPA_PATH=$(find . -name "*.ipa" -type f 2>/dev/null | head -1)
+            if [ -z "$IPA_PATH" ]; then
+              IPA_PATH=$(find .. -name "*.ipa" -type f 2>/dev/null | head -1)
+            fi
+          fi
+          
+          if [ -z "$IPA_PATH" ]; then
+            echo "❌ IPA 파일을 찾을 수 없습니다."
+            exit 1
+          fi
+          
           echo "IPA 경로: $IPA_PATH"
+          
+          # IPA 파일 존재 확인
+          if [ ! -f "$IPA_PATH" ]; then
+            echo "❌ IPA 파일이 존재하지 않습니다: $IPA_PATH"
+            exit 1
+          fi
           
           # 임시 디렉토리 생성
           EXTRACT_DIR=$(mktemp -d)
           echo "임시 디렉토리: $EXTRACT_DIR"
           
           # IPA 압축 해제
-          unzip -q "$IPA_PATH" -d "$EXTRACT_DIR" || echo "⚠️ IPA 압축 해제 실패"
+          echo "IPA 압축 해제 중..."
+          unzip -q "$IPA_PATH" -d "$EXTRACT_DIR" || {
+            echo "⚠️ IPA 압축 해제 실패"
+            rm -rf "$EXTRACT_DIR"
+            exit 1
+          }
           
           # GoogleService-Info.plist 검색
           if [ -d "$EXTRACT_DIR/Payload/pickplay.app" ]; then
@@ -334,19 +360,31 @@ jobs:
               echo "✅ GoogleService-Info.plist가 IPA 번들에 포함되어 있음!"
               echo "파일 크기: $(stat -f%z "$EXTRACT_DIR/Payload/pickplay.app/GoogleService-Info.plist" 2>/dev/null || stat -c%s "$EXTRACT_DIR/Payload/pickplay.app/GoogleService-Info.plist" 2>/dev/null) bytes"
               echo "Bundle ID: $(grep -A1 '<key>BUNDLE_ID</key>' "$EXTRACT_DIR/Payload/pickplay.app/GoogleService-Info.plist" | grep '<string>' | sed 's/.*<string>\(.*\)<\/string>.*/\1/')"
+              echo "Project ID: $(grep -A1 '<key>PROJECT_ID</key>' "$EXTRACT_DIR/Payload/pickplay.app/GoogleService-Info.plist" | grep '<string>' | sed 's/.*<string>\(.*\)<\/string>.*/\1/')"
             else
               echo "❌ GoogleService-Info.plist가 IPA 번들에 포함되지 않음!"
               echo "앱 번들 내용:"
-              ls -la "$EXTRACT_DIR/Payload/pickplay.app" | head -20
+              ls -la "$EXTRACT_DIR/Payload/pickplay.app" | head -30
+              echo ""
+              echo "앱 번들에서 plist 파일 검색:"
+              find "$EXTRACT_DIR/Payload/pickplay.app" -name "*.plist" -type f | head -10
+              rm -rf "$EXTRACT_DIR"
+              exit 1
             fi
           else
             echo "⚠️ Payload/pickplay.app 디렉토리를 찾을 수 없음"
             echo "압축 해제된 내용:"
             ls -la "$EXTRACT_DIR" || true
+            echo ""
+            echo "Payload 디렉토리 검색:"
+            find "$EXTRACT_DIR" -type d -name "Payload" || echo "Payload 디렉토리 없음"
+            rm -rf "$EXTRACT_DIR"
+            exit 1
           fi
           
           # 임시 디렉토리 정리
           rm -rf "$EXTRACT_DIR"
+          echo "✅ IPA 파일 검증 완료"
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
