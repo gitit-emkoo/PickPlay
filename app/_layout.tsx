@@ -31,12 +31,10 @@ const initializeFirebaseIfNeeded = async () => {
       return true;
     }
     
-    // GoogleService-Info.plist에서 정보를 읽어서 초기화 시도
-    // 하지만 React Native Firebase는 네이티브에서 자동 초기화되므로
-    // 여기서는 단순히 대기만 합니다.
+    // React Native Firebase는 네이티브에서 자동 초기화되므로
+    // 네이티브 모듈이 초기화될 때까지 대기 (최대 10초)
     console.log('[Firebase Init] ⏳ Firebase 네이티브 초기화 대기 중...');
     
-    // 네이티브 모듈이 초기화될 때까지 대기 (최대 10초)
     for (let i = 0; i < 50; i++) {
       try {
         const apps = getApps();
@@ -51,10 +49,23 @@ const initializeFirebaseIfNeeded = async () => {
       await new Promise(resolve => setTimeout(resolve, 200));
     }
     
-    console.warn('[Firebase Init] ⚠️ Firebase 자동 초기화 실패, 네이티브 빌드 확인 필요');
-    return false;
-  } catch (error) {
-    console.error('[Firebase Init] ❌ Firebase 초기화 에러:', error);
+    // 네이티브 초기화가 실패한 경우, JavaScript 레벨에서 명시적 초기화 시도
+    // React Native Firebase는 GoogleService-Info.plist를 자동으로 읽어서 초기화합니다
+    console.warn('[Firebase Init] ⚠️ Firebase 네이티브 초기화 실패, JavaScript 레벨에서 초기화 시도...');
+    try {
+      // initializeApp()은 인자 없이 호출하면 GoogleService-Info.plist를 읽어서 자동 초기화합니다
+      const app = initializeApp();
+      console.log('[Firebase Init] ✅ JavaScript 레벨에서 Firebase 초기화 성공!');
+      firebaseInitialized = true;
+      return true;
+    } catch (initError: any) {
+      console.error('[Firebase Init] ❌ JavaScript 레벨 초기화도 실패:', initError?.message || initError);
+      console.error('[Firebase Init] 💡 GoogleService-Info.plist가 네이티브 빌드에 포함되었는지 확인하세요.');
+      console.error('[Firebase Init] 💡 React Native Firebase 네이티브 모듈이 제대로 링크되었는지 확인하세요.');
+      return false;
+    }
+  } catch (error: any) {
+    console.error('[Firebase Init] ❌ Firebase 초기화 에러:', error?.message || error);
     return false;
   }
 };

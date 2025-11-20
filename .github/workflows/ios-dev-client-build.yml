@@ -118,6 +118,36 @@ jobs:
           git checkout -- ios/Podfile || true # ✅ Podfile 되살리기
           echo "✅ Expo prebuild 완료 - GoogleService-Info.plist가 ios/에 포함되었는지 확인하세요"
 
+      - name: Verify GoogleService-Info.plist location
+        run: |
+          cd "$PROJ_DIR"
+          echo "🔍 GoogleService-Info.plist 위치 확인 중..."
+          echo "현재 디렉토리: $(pwd)"
+          echo ""
+          echo "=== 프로젝트 루트에서 검색 ==="
+          if [ -f "GoogleService-Info.plist" ]; then
+            echo "✅ 프로젝트 루트에 GoogleService-Info.plist 발견"
+            echo "파일 크기: $(stat -f%z GoogleService-Info.plist 2>/dev/null || stat -c%s GoogleService-Info.plist 2>/dev/null) bytes"
+            echo "Bundle ID: $(grep -A1 '<key>BUNDLE_ID</key>' GoogleService-Info.plist | grep '<string>' | sed 's/.*<string>\(.*\)<\/string>.*/\1/')"
+          else
+            echo "❌ 프로젝트 루트에 GoogleService-Info.plist 없음"
+          fi
+          echo ""
+          echo "=== ios 디렉토리에서 검색 ==="
+          find ios -name "GoogleService-Info.plist" -type f 2>/dev/null || echo "ios 디렉토리에 없음"
+          echo ""
+          echo "=== expo prebuild 후 예상 위치 확인 ==="
+          if [ -f "ios/pickplay/GoogleService-Info.plist" ]; then
+            echo "✅ ios/pickplay/GoogleService-Info.plist 발견 (올바른 위치)"
+            echo "파일 크기: $(stat -f%z ios/pickplay/GoogleService-Info.plist 2>/dev/null || stat -c%s ios/pickplay/GoogleService-Info.plist 2>/dev/null) bytes"
+            echo "Bundle ID: $(grep -A1 '<key>BUNDLE_ID</key>' ios/pickplay/GoogleService-Info.plist | grep '<string>' | sed 's/.*<string>\(.*\)<\/string>.*/\1/')"
+            echo "Project ID: $(grep -A1 '<key>PROJECT_ID</key>' ios/pickplay/GoogleService-Info.plist | grep '<string>' | sed 's/.*<string>\(.*\)<\/string>.*/\1/')"
+          else
+            echo "❌ ios/pickplay/GoogleService-Info.plist 없음 (Config Plugin 확인 필요)"
+            echo "디렉토리 구조:"
+            ls -la ios/pickplay/ 2>/dev/null || echo "ios/pickplay 디렉토리 없음"
+          fi
+
       - name: Debug iOS folder
         run: |
           cd "$PROJ_DIR/ios"
@@ -281,6 +311,43 @@ jobs:
             echo "ipa_filename=$(basename "$IPA_PATH")" >> $GITHUB_OUTPUT
           fi
           
+      # IPA 파일에서 GoogleService-Info.plist 포함 여부 확인
+      - name: Verify GoogleService-Info.plist in IPA
+        if: success() && steps.find_ipa.outputs.ipa_path != ''
+        run: |
+          cd "$PROJ_DIR"
+          IPA_PATH="${{ steps.find_ipa.outputs.ipa_path }}"
+          echo "🔍 IPA 파일에서 GoogleService-Info.plist 확인 중..."
+          echo "IPA 경로: $IPA_PATH"
+          
+          # 임시 디렉토리 생성
+          EXTRACT_DIR=$(mktemp -d)
+          echo "임시 디렉토리: $EXTRACT_DIR"
+          
+          # IPA 압축 해제
+          unzip -q "$IPA_PATH" -d "$EXTRACT_DIR" || echo "⚠️ IPA 압축 해제 실패"
+          
+          # GoogleService-Info.plist 검색
+          if [ -d "$EXTRACT_DIR/Payload/pickplay.app" ]; then
+            echo "✅ Payload/pickplay.app 디렉토리 발견"
+            if [ -f "$EXTRACT_DIR/Payload/pickplay.app/GoogleService-Info.plist" ]; then
+              echo "✅ GoogleService-Info.plist가 IPA 번들에 포함되어 있음!"
+              echo "파일 크기: $(stat -f%z "$EXTRACT_DIR/Payload/pickplay.app/GoogleService-Info.plist" 2>/dev/null || stat -c%s "$EXTRACT_DIR/Payload/pickplay.app/GoogleService-Info.plist" 2>/dev/null) bytes"
+              echo "Bundle ID: $(grep -A1 '<key>BUNDLE_ID</key>' "$EXTRACT_DIR/Payload/pickplay.app/GoogleService-Info.plist" | grep '<string>' | sed 's/.*<string>\(.*\)<\/string>.*/\1/')"
+            else
+              echo "❌ GoogleService-Info.plist가 IPA 번들에 포함되지 않음!"
+              echo "앱 번들 내용:"
+              ls -la "$EXTRACT_DIR/Payload/pickplay.app" | head -20
+            fi
+          else
+            echo "⚠️ Payload/pickplay.app 디렉토리를 찾을 수 없음"
+            echo "압축 해제된 내용:"
+            ls -la "$EXTRACT_DIR" || true
+          fi
+          
+          # 임시 디렉토리 정리
+          rm -rf "$EXTRACT_DIR"
+
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:

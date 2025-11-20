@@ -42,6 +42,10 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
+# Markdown files (documentation)
+*.md
+!README.md
+
 app-example
 firebase-service-account.json
 google-service-account.json
