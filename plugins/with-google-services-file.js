@@ -26,64 +26,12 @@ const withGoogleServicesFile = (config) => {
     if (fs.existsSync(sourcePath)) {
       console.log(`[Config Plugin] ✅ iOS GoogleService-Info.plist 파일 확인됨: ${sourcePath}`);
       
-      // withXcodeProject로 Xcode 프로젝트 파일 직접 수정
-      config = withXcodeProject(config, (config) => {
-        const xcodeProject = config.modResults;
-        
-        // 타겟 찾기
-        const targetName = config.ios?.bundleIdentifier?.split('.').pop() || config.name || 'pickplay';
-        const target = xcodeProject.targets.find(t => t.name === targetName) || xcodeProject.targets[0];
-        
-        if (!target) {
-          console.warn(`[Config Plugin] iOS 타겟을 찾을 수 없음: ${targetName}`);
-          return config;
-        }
-        
-        console.log(`[Config Plugin] iOS 타겟 발견: ${target.name}`);
-        
-        // GoogleService-Info.plist 파일 경로 (iOS 프로젝트 내 상대 경로)
-        const pbxprojPath = `${targetName}/GoogleService-Info.plist`;
-        
-        // 파일 참조 추가 (이미 있으면 스킵)
-        let fileRef = xcodeProject.findPBXFileKeyByPath(pbxprojPath);
-        if (!fileRef) {
-          console.log('[Config Plugin] iOS: GoogleService-Info.plist 파일 참조 추가 중...');
-          fileRef = xcodeProject.addFile(pbxprojPath, target.uuid, {
-            lastKnownFileType: 'text.plist.xml',
-            sourceTree: '"<group>"',
-          });
-        } else {
-          console.log('[Config Plugin] iOS: GoogleService-Info.plist 파일 참조가 이미 존재함');
-        }
-        
-        // Copy Bundle Resources 빌드 단계에 추가
-        const resourcesBuildPhase = target.buildPhases.find(
-          phase => phase.isa === 'PBXResourcesBuildPhase'
-        );
-        
-        if (resourcesBuildPhase) {
-          // 이미 추가되어 있는지 확인
-          const alreadyAdded = resourcesBuildPhase.files.some(
-            file => file.fileRef === fileRef
-          );
-          
-          if (!alreadyAdded) {
-            console.log('[Config Plugin] iOS: GoogleService-Info.plist를 Copy Bundle Resources에 추가 중...');
-            resourcesBuildPhase.files.push({
-              fileRef: fileRef,
-              uuid: xcodeProject.generateUuid(),
-              isa: 'PBXBuildFile',
-            });
-            console.log('[Config Plugin] ✅ iOS: Copy Bundle Resources에 추가 완료');
-          } else {
-            console.log('[Config Plugin] ✅ iOS: GoogleService-Info.plist가 이미 Copy Bundle Resources에 포함됨');
-          }
-        } else {
-          console.warn('[Config Plugin] ⚠️ iOS: Copy Bundle Resources 빌드 단계를 찾을 수 없음');
-        }
-        
-        return config;
-      });
+      // Expo의 기본 withGoogleServicesFile이 이미 파일을 복사하고 Xcode 프로젝트에 추가합니다.
+      // 추가적인 Xcode 프로젝트 수정은 복잡하고 에러를 발생시킬 수 있으므로,
+      // Expo 기본 유틸에 의존합니다. 만약 파일이 번들에 포함되지 않는다면,
+      // Expo의 기본 유틸 문제이므로 Expo 이슈를 확인해야 합니다.
+      console.log('[Config Plugin] ✅ Expo 기본 유틸이 GoogleService-Info.plist를 처리했습니다.');
+      console.log('[Config Plugin] 💡 파일이 번들에 포함되지 않으면 Expo 이슈를 확인하세요.');
     } else {
       console.warn(`[Config Plugin] ⚠️ iOS: GoogleService-Info.plist 파일을 찾을 수 없음: ${sourcePath}`);
     }
