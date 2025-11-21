@@ -83,7 +83,7 @@ export default function App() {
         console.log('[App] watchAuth 콜백 호출:', user ? `사용자 있음 (${user.uid})` : '사용자 없음');
         setUser(user);
       });
-      return unsub;
+    return unsub;
     } catch (error) {
       console.error('[App] watchAuth 초기화 실패:', error);
       // 에러가 발생해도 앱이 계속 실행되도록 null 설정
@@ -128,47 +128,47 @@ export default function App() {
       if (!user) return;
       setLoading(true);
       try {
-        const data = await ensureUser(user.uid);
-        setUserData(data);
-        
-        const q = getTodayQuestionForUser(data);
-        setQuestion(q);
+      const data = await ensureUser(user.uid);
+      setUserData(data);
+      
+      const q = getTodayQuestionForUser(data);
+      setQuestion(q);
 
-        if (q) {
+      if (q) {
           try {
-            // 오늘 답변 기록을 가져와 UI 상태 설정
-            const todayAnswer = await getTodayAnswer(user.uid, q.question_id);
-            if (todayAnswer) {
-              setUserChoice(todayAnswer.selected_option_index);
-              // 보상 수령 완료 상태 반영 (버튼 숨기기)
-              if (todayAnswer.rewarded) {
-                setRewardCompleted(true);
-                // 보상 완료 배너 복원 (배수에 따른 색상 적용)
-                const multiplier = data.streakCount >= 31 ? 3 : data.streakCount >= 11 ? 2 : 1;
-                setLastRewardMultiplier(multiplier);
-                setMsg('보상완료💎');
-              } else {
-                setRewardCompleted(false);
-              }
-            } else {
+        // 오늘 답변 기록을 가져와 UI 상태 설정
+        const todayAnswer = await getTodayAnswer(user.uid, q.question_id);
+        if (todayAnswer) {
+          setUserChoice(todayAnswer.selected_option_index);
+          // 보상 수령 완료 상태 반영 (버튼 숨기기)
+          if (todayAnswer.rewarded) {
+            setRewardCompleted(true);
+            // 보상 완료 배너 복원 (배수에 따른 색상 적용)
+            const multiplier = data.streakCount >= 31 ? 3 : data.streakCount >= 11 ? 2 : 1;
+            setLastRewardMultiplier(multiplier);
+            setMsg('보상완료💎');
+          } else {
+            setRewardCompleted(false);
+          }
+        } else {
               setUserChoice(null);
               setRewardCompleted(false);
             }
           } catch (error: any) {
             console.warn('[App] getTodayAnswer 실패:', error?.message || error);
-            setUserChoice(null);
-            setRewardCompleted(false);
-          }
-          
+          setUserChoice(null);
+          setRewardCompleted(false);
+        }
+        
           try {
-            const result = await aggregate(q.question_id);
-            setAgg(result);
+        const result = await aggregate(q.question_id);
+        setAgg(result);
           } catch (error: any) {
             console.warn('[App] aggregate 실패:', error?.message || error);
             // 기본값 유지
           }
-        } else {
-          setUserChoice(null);
+      } else {
+        setUserChoice(null);
         }
       } catch (error: any) {
         const errorMessage = error?.message || String(error);

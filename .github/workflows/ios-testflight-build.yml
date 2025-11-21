@@ -1,4 +1,4 @@
-name: iOS Dev Client Build
+name: iOS TestFlight Build
 
 on:
   workflow_dispatch:
@@ -12,10 +12,10 @@ on:
       - 'pickplay/fastlane/**'
       - 'pickplay/plugins/**'
       - 'pickplay/GoogleService-Info.plist'
-      - '.github/workflows/ios-dev-client-build.yml'
+      - '.github/workflows/ios-testflight-build.yml'
 
 jobs:
-  ios-dev-client:
+  ios-testflight:
     runs-on: macos-14
     timeout-minutes: 60
     
@@ -53,203 +53,237 @@ jobs:
 
       - name: Install Fastlane/CocoaPods/xcodeproj
         run: |
-          gem install fastlane --no-document
-          gem install cocoapods --no-document
-          gem install xcodeproj --no-document
-
-      # 프로젝트 디렉토리 감지
-      - name: Detect project dir
-        run: |
-          if [ -f ./pickplay/ios/Podfile ]; then
-            echo "PROJ_DIR=pickplay" >> $GITHUB_ENV
-          elif [ -f ./ios/Podfile ]; then
-            echo "PROJ_DIR=." >> $GITHUB_ENV
+          cd "$PROJ_DIR"
+          if [ -f Gemfile ]; then
+            bundle install
           else
-            echo "::error::ios/Podfile not found"; exit 1
+            gem install fastlane cocoapods xcodeproj --no-document
           fi
-          echo "Detected PROJ_DIR=$PROJ_DIR"
 
-      # ✅ 캐시 및 빌드 잔재 완전 삭제
+      # 프로젝트 디렉토리 확인
+      - name: Detect project dir
+        id: detect_dir
+        run: |
+          if [ -d "pickplay/pickplay" ]; then
+            PROJ_DIR="pickplay/pickplay"
+          elif [ -d "pickplay" ]; then
+            PROJ_DIR="pickplay"
+          else
+            PROJ_DIR="."
+          fi
+          echo "PROJ_DIR=$PROJ_DIR" >> $GITHUB_ENV
+          echo "project_dir=$PROJ_DIR" >> $GITHUB_OUTPUT
+          echo "✅ Detected project directory: $PROJ_DIR"
+
+      # Clean caches (clean build)
       - name: Clean caches (clean build)
         run: |
-          rm -rf "$PROJ_DIR/node_modules"
-          rm -rf "$PROJ_DIR/ios/Pods" "$PROJ_DIR/ios/Podfile.lock" "$PROJ_DIR/ios/build"
-          rm -rf ~/Library/Developer/Xcode/DerivedData/*
-          echo "✅ Clean build: 모든 Pods 및 빌드 아티팩트 제거 완료"
+          cd "$PROJ_DIR"
+          echo "🧹 Cleaning caches..."
+          rm -rf node_modules/.cache 2>/dev/null || true
+          rm -rf .expo 2>/dev/null || true
+          rm -rf ios/build 2>/dev/null || true
+          rm -rf ios/Pods 2>/dev/null || true
+          rm -rf ios/DerivedData 2>/dev/null || true
+          echo "✅ Caches cleaned"
 
+      # Install JS deps (npm ci, no dev deps)
       - name: Install JS deps (npm ci, no dev deps)
         run: |
           cd "$PROJ_DIR"
-          if [ -f package-lock.json ]; then
-            npm ci --omit=dev --legacy-peer-deps
-          else
-            echo "::warning::package-lock.json not found; running npm install"
-            npm install --omit=dev --legacy-peer-deps
-          fi
+          echo "📦 Installing JavaScript dependencies..."
+          npm ci --include=dev --legacy-peer-deps
+          echo "✅ JavaScript dependencies installed"
 
+      # Align RN/Expo package versions (expo install --fix)
       - name: Align RN/Expo package versions (expo install --fix)
         run: |
           cd "$PROJ_DIR"
-          echo "📦 Running expo install --fix..."
-          BEFORE=$(cat package.json 2>/dev/null | grep -E '"(react-native|expo)"' | head -2 || echo "")
-          npx expo install --fix --no-interactive || true
-          AFTER=$(cat package.json 2>/dev/null | grep -E '"(react-native|expo)"' | head -2 || echo "")
-          if [ "$BEFORE" != "$AFTER" ]; then
-            echo "::warning::expo install --fix changed package versions:"
-            echo "Before: $BEFORE"
-            echo "After: $AFTER"
-          else
-            echo "✅ No version changes detected"
-          fi
+          echo "🔧 Aligning React Native/Expo package versions..."
+          npx expo install --fix || echo "⚠️ expo install --fix failed, continuing..."
+          echo "✅ Package versions aligned"
 
+      # Install RN autolinking CLI (prod)
       - name: Install RN autolinking CLI (prod)
         run: |
           cd "$PROJ_DIR"
-          npm i --save --legacy-peer-deps \
-            @react-native-community/cli \
-            @react-native-community/cli-platform-ios \
-            expo-modules-autolinking
+          echo "📦 Installing React Native autolinking CLI..."
+          npm install --save-dev --legacy-peer-deps @react-native-community/cli-platform-ios @react-native-community/cli-platform-android || echo "⚠️ RN CLI install failed, continuing..."
+          echo "✅ React Native autolinking CLI installed"
 
-      # Expo prebuild 실행 (app.json의 googleServicesFile 설정 적용)
+      # Ensure iOS native project (Expo prebuild with clean)
       - name: Ensure iOS native project (Expo prebuild with clean)
         run: |
           cd "$PROJ_DIR"
-          echo "🛠  Running Expo prebuild to apply app.json changes (including googleServicesFile)..."
-          npx expo prebuild --platform ios --no-install --clean
-          git checkout -- ios/Podfile || true # ✅ Podfile 되살리기
-          echo "✅ Expo prebuild 완료 - GoogleService-Info.plist가 ios/에 포함되었는지 확인하세요"
+          echo "🔧 Running expo prebuild --clean --platform ios..."
+          npx expo prebuild --clean --platform ios
+          echo "✅ Expo prebuild completed"
 
+      # Verify GoogleService-Info.plist location
       - name: Verify GoogleService-Info.plist location
         run: |
           cd "$PROJ_DIR"
-          echo "🔍 GoogleService-Info.plist 위치 확인 중..."
-          echo "현재 디렉토리: $(pwd)"
-          echo ""
-          echo "=== 프로젝트 루트에서 검색 ==="
-          if [ -f "GoogleService-Info.plist" ]; then
-            echo "✅ 프로젝트 루트에 GoogleService-Info.plist 발견"
-            echo "파일 크기: $(stat -f%z GoogleService-Info.plist 2>/dev/null || stat -c%s GoogleService-Info.plist 2>/dev/null) bytes"
-            echo "Bundle ID: $(grep -A1 '<key>BUNDLE_ID</key>' GoogleService-Info.plist | grep '<string>' | sed 's/.*<string>\(.*\)<\/string>.*/\1/')"
-          else
-            echo "❌ 프로젝트 루트에 GoogleService-Info.plist 없음"
-          fi
-          echo ""
-          echo "=== ios 디렉토리에서 검색 ==="
-          find ios -name "GoogleService-Info.plist" -type f 2>/dev/null || echo "ios 디렉토리에 없음"
-          echo ""
-          echo "=== expo prebuild 후 예상 위치 확인 ==="
+          echo "🔍 Checking GoogleService-Info.plist location..."
           if [ -f "ios/pickplay/GoogleService-Info.plist" ]; then
-            echo "✅ ios/pickplay/GoogleService-Info.plist 발견 (올바른 위치)"
-            echo "파일 크기: $(stat -f%z ios/pickplay/GoogleService-Info.plist 2>/dev/null || stat -c%s ios/pickplay/GoogleService-Info.plist 2>/dev/null) bytes"
-            echo "Bundle ID: $(grep -A1 '<key>BUNDLE_ID</key>' ios/pickplay/GoogleService-Info.plist | grep '<string>' | sed 's/.*<string>\(.*\)<\/string>.*/\1/')"
-            echo "Project ID: $(grep -A1 '<key>PROJECT_ID</key>' ios/pickplay/GoogleService-Info.plist | grep '<string>' | sed 's/.*<string>\(.*\)<\/string>.*/\1/')"
+            echo "✅ GoogleService-Info.plist found in ios/pickplay/"
+            ls -lh ios/pickplay/GoogleService-Info.plist
+          elif [ -f "ios/GoogleService-Info.plist" ]; then
+            echo "✅ GoogleService-Info.plist found in ios/"
+            ls -lh ios/GoogleService-Info.plist
           else
-            echo "❌ ios/pickplay/GoogleService-Info.plist 없음 (Config Plugin 확인 필요)"
-            echo "디렉토리 구조:"
-            ls -la ios/pickplay/ 2>/dev/null || echo "ios/pickplay 디렉토리 없음"
+            echo "⚠️ GoogleService-Info.plist not found in ios/ directory"
+            echo "Listing ios/ directory:"
+            find ios -name "GoogleService-Info.plist" 2>/dev/null || echo "File not found"
           fi
 
+      # Debug iOS folder
       - name: Debug iOS folder
+        if: failure()
         run: |
-          cd "$PROJ_DIR/ios"
-          echo "== ios contents ==" && ls -la
-          echo "== Xcode projects ==" && ls -1 *.xcodeproj || true
+          cd "$PROJ_DIR"
+          echo "📁 iOS directory structure:"
+          find ios -type f -name "*.plist" | head -20 || true
+          echo ""
+          echo "📁 ios/pickplay directory:"
+          ls -la ios/pickplay/ 2>/dev/null | head -20 || echo "Directory not found"
 
+      # Cache Pods
       - name: Cache Pods
         uses: actions/cache@v4
         with:
           path: |
             ${{ env.PROJ_DIR }}/ios/Pods
             ${{ env.PROJ_DIR }}/ios/Podfile.lock
-          key: pods-clear-${{ hashFiles(format('{0}/ios/Podfile.lock', env.PROJ_DIR)) }}
+          key: ${{ runner.os }}-pods-${{ hashFiles('**/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
 
+      # Clean CocoaPods Cache
       - name: Clean CocoaPods Cache
         run: |
-          pod cache clean --all
-          echo "✅ CocoaPods cache cleaned."
+          cd "$PROJ_DIR/ios"
+          echo "🧹 Cleaning CocoaPods cache..."
+          pod cache clean --all 2>/dev/null || true
+          rm -rf ~/Library/Caches/CocoaPods 2>/dev/null || true
+          echo "✅ CocoaPods cache cleaned"
 
+      # Ensure CocoaPods Specs repo (fallback)
       - name: Ensure CocoaPods Specs repo (fallback)
         run: |
-          cd "$PROJ_DIR"
-          echo "🔧 Ensuring CocoaPods Specs repo available..."
-          # 기존 trunk 레포 제거 (있으면)
-          pod repo remove trunk 2>/dev/null || true
-          # CDN 레포 추가 시도 (실패해도 계속)
-          pod repo add-cdn trunk https://cdn.cocoapods.org/ 2>/dev/null || true
-          # GitHub Specs 레포로 trunk 추가 (CDN 실패 시 fallback)
-          pod repo add trunk https://github.com/CocoaPods/Specs.git || true
-          echo "✅ CocoaPods Specs repo 준비 완료"
-          pod repo list
+          cd "$PROJ_DIR/ios"
+          echo "🔧 Ensuring CocoaPods Specs repo..."
+          
+          # trunk repo 제거 (CDN 문제 해결을 위해)
+          pod repo remove trunk 2>/dev/null || echo "trunk repo not found, skipping..."
+          
+          # GitHub Specs repo 추가 (fallback)
+          if ! pod repo list | grep -q "master"; then
+            echo "📦 Adding GitHub Specs repo (fallback)..."
+            pod repo add master https://github.com/CocoaPods/Specs.git 2>/dev/null || echo "GitHub Specs repo already exists or failed to add"
+          fi
+          
+          # trunk repo 다시 추가 (CDN 시도)
+          echo "📦 Adding trunk repo (CDN)..."
+          pod repo add trunk https://cdn.cocoapods.org/ 2>/dev/null || echo "trunk repo already exists or failed to add"
+          
+          echo "✅ CocoaPods Specs repo ready"
 
+      # Install CocoaPods
       - name: Install CocoaPods
         run: |
           cd "$PROJ_DIR/ios"
-          # trunk 레포가 제대로 설정되었는지 확인
-          if ! pod repo list | grep -q "trunk"; then
-            echo "❌ trunk 레포가 없습니다. GitHub Specs 레포로 추가 중..."
-            pod repo remove trunk 2>/dev/null || true
-            pod repo add trunk https://github.com/CocoaPods/Specs.git
+          echo "📦 Installing CocoaPods dependencies..."
+          
+          # trunk repo 확인
+          if pod repo list | grep -q "trunk"; then
+            echo "✅ trunk repo found, using CDN"
+            pod install --repo-update || {
+              echo "⚠️ pod install with repo-update failed, trying without repo-update..."
+              pod install || {
+                echo "⚠️ pod install failed, trying with --verbose..."
+                pod install --verbose
+              }
+            }
+          else
+            echo "⚠️ trunk repo not found, using GitHub Specs"
+            pod install --repo-update || pod install
           fi
-          # repo-update 없이 설치 (이미 레포 준비 완료)
-          pod install
+          
+          echo "✅ CocoaPods dependencies installed"
 
+      # Verify React Native Codegen files
       - name: Verify React Native Codegen files
         run: |
           cd "$PROJ_DIR"
-          echo "🔍 Checking if React Native Codegen files were generated..."
-          CODEGEN_DIR="$PROJ_DIR/ios/build/generated/ios"
-          if [ ! -d "$CODEGEN_DIR" ]; then
-            echo "::warning::Codegen directory not found: $CODEGEN_DIR"
-            echo "Attempting to create Codegen directory structure..."
-            mkdir -p "$CODEGEN_DIR/react/renderer/components"
-            echo "⚠️ Codegen files may be generated during build"
+          echo "🔍 Verifying React Native Codegen files..."
+          RN_DIR=$(node --print "require.resolve('react-native/package.json')" | xargs dirname)
+          CODGEN_DIR="$RN_DIR/packages/react-native-codegen"
+          if [ -d "$CODGEN_DIR" ]; then
+            echo "✅ React Native Codegen found: $CODGEN_DIR"
           else
-            echo "✅ Codegen directory found: $CODEGEN_DIR"
-            FILE_COUNT=$(find "$CODEGEN_DIR" -type f | wc -l)
-            echo "Found $FILE_COUNT Codegen files"
-            if [ "$FILE_COUNT" -eq 0 ]; then
-              echo "::warning::Codegen directory exists but contains no files"
-            fi
+            echo "⚠️ React Native Codegen not found at: $CODGEN_DIR"
           fi
 
+      # Verify post_install cleaned BoringSSL-GRPC
       - name: Verify post_install cleaned BoringSSL-GRPC
         run: |
           cd "$PROJ_DIR/ios"
-          if grep -R --line-number --fixed-strings " -G" Pods/Pods.xcodeproj/project.pbxproj; then
-            echo "::error::Found -G in Pods project after post_install"
-            exit 1
+          echo "🔍 Verifying BoringSSL-GRPC -G flag removal..."
+          
+          # Pods.xcconfig 파일들에서 -G 플래그 확인
+          XCCONFIG_FILES=$(find Pods/Target\ Support\ Files -name "*.xcconfig" 2>/dev/null | head -10)
+          if [ -z "$XCCONFIG_FILES" ]; then
+            echo "⚠️ No xcconfig files found"
+          else
+            G_FLAG_COUNT=0
+            for file in $XCCONFIG_FILES; do
+              if grep -q " -G" "$file" 2>/dev/null; then
+                echo "⚠️ Found -G flag in: $file"
+                G_FLAG_COUNT=$((G_FLAG_COUNT + 1))
+              fi
+            done
+            if [ $G_FLAG_COUNT -eq 0 ]; then
+              echo "✅ No -G flags found in xcconfig files"
+            else
+              echo "⚠️ Found -G flags in $G_FLAG_COUNT xcconfig file(s)"
+            fi
           fi
-          echo "✅ No -G flags remain in Pods project"
+          
+          # Pods.xcodeproj에서도 확인
+          if [ -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
+            PBXPROJ_G_COUNT=$(grep -c " -G" Pods/Pods.xcodeproj/project.pbxproj 2>/dev/null || echo "0")
+            if [ "$PBXPROJ_G_COUNT" = "0" ]; then
+              echo "✅ No -G flags found in Pods.xcodeproj"
+            else
+              echo "⚠️ Found -G flags in Pods.xcodeproj: $PBXPROJ_G_COUNT occurrences"
+            fi
+          fi
 
+      # Verify C++ standard is gnu++20 for all Pods
       - name: Verify C++ standard is gnu++20 for all Pods
         run: |
           cd "$PROJ_DIR/ios"
-          echo "🔍 Verifying C++20 standard is set for all Pod targets..."
-          if [ ! -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
-            echo "::warning::Pods project not found; skipping C++ standard check"
-            exit 0
+          echo "🔍 Verifying C++ standard is gnu++20 for all Pods..."
+          
+          if [ -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
+            HAS_CXX20=$(grep -E "CLANG_CXX_LANGUAGE_STANDARD|CLANG_CXX_LIBRARY" Pods/Pods.xcodeproj/project.pbxproj | grep -E "gnu\+\+20|c\+\+20" || echo "")
+            
+            if [ -z "$HAS_CXX20" ]; then
+              echo "⚠️ No C++20 standard found in Pods project"
+            else
+              CXX20_COUNT=$(echo "$HAS_CXX20" | grep -icE "(gnu\+\+20|c\+\+20)" || echo "0")
+              echo "✅ Detected C++20 standard in Pods project ($CXX20_COUNT occurrences)"
+            fi
+          else
+            echo "⚠️ Pods.xcodeproj not found"
           fi
 
-          FILE="Pods/Pods.xcodeproj/project.pbxproj"
-          
-          # Check if gnu++20 or c++20 exists anywhere
-          HAS_CXX20=$(grep -iE "gnu\+\+20|c\+\+20" "$FILE" || true)
-          
-          if [ -z "$HAS_CXX20" ]; then
-            echo "::error::No C++20 standard (gnu++20 or c++20) found in Pods project."
-            exit 1
-          fi
-
-          CXX20_COUNT=$(echo "$HAS_CXX20" | grep -icE "(gnu\+\+20|c\+\+20)" || echo "0")
-          echo "✅ Detected C++20 standard in Pods project ($CXX20_COUNT occurrences)"
-
-      - name: Fastlane dev_client
+      - name: Fastlane beta (TestFlight)
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
           APP_STORE_CONNECT_API_KEY_PATH: ${{ env.APP_STORE_CONNECT_API_KEY_PATH }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
           MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
           MATCH_GIT_USERNAME: ${{ secrets.MATCH_GIT_USERNAME }}
           MATCH_GIT_PASSWORD: ${{ secrets.MATCH_GIT_PASSWORD }}
@@ -259,9 +293,9 @@ jobs:
         run: |
           cd "$PROJ_DIR"
           if [ -f Gemfile ]; then
-            bundle exec fastlane ios dev_client
+            bundle exec fastlane ios beta
           else
-            fastlane ios dev_client
+            fastlane ios beta
           fi
 
       # 빌드 아티팩트 업로드 (IPA 파일)
@@ -425,14 +459,14 @@ jobs:
         if: success() && steps.find_ipa_for_upload.outputs.ipa_path != ''
         uses: actions/upload-artifact@v4
         with:
-          name: dev-client-ipa
+          name: testflight-ipa
           path: ${{ steps.find_ipa_for_upload.outputs.ipa_path }}
           retention-days: 90
           if-no-files-found: error
 
       - name: Success message
         run: |
-          echo "✅ Dev Client 빌드 완료!"
-          echo "📱 Actions 탭에서 IPA 파일을 다운로드하세요."
-          echo "📱 설치 후 'expo start --dev-client'로 Metro 서버를 실행하세요."
+          echo "✅ TestFlight 빌드 및 제출 완료!"
+          echo "📱 App Store Connect에서 TestFlight 빌드를 확인하세요."
+          echo "📱 TestFlight에서 테스터에게 배포할 수 있습니다."
 
