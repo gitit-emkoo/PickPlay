@@ -310,7 +310,7 @@ jobs:
             echo "ipa_dir=$(dirname "$IPA_PATH")" >> $GITHUB_OUTPUT
             echo "ipa_filename=$(basename "$IPA_PATH")" >> $GITHUB_OUTPUT
           fi
-          
+
       # IPA 파일에서 GoogleService-Info.plist 포함 여부 확인
       - name: Verify GoogleService-Info.plist in IPA
         if: success()
