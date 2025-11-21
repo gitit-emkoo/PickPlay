@@ -386,14 +386,48 @@ jobs:
           rm -rf "$EXTRACT_DIR"
           echo "✅ IPA 파일 검증 완료"
 
+      - name: Find IPA for upload
+        id: find_ipa_for_upload
+        if: success()
+        run: |
+          cd "$PROJ_DIR"
+          echo "🔍 IPA 파일 검색 중 (업로드용)..."
+          
+          # IPA 파일 경로 확인
+          IPA_PATH="${{ steps.find_ipa.outputs.ipa_path }}"
+          if [ -z "$IPA_PATH" ]; then
+            echo "⚠️ steps.find_ipa.outputs.ipa_path가 비어있음, 직접 검색 시도..."
+            IPA_PATH=$(find . -name "*.ipa" -type f 2>/dev/null | head -1)
+            if [ -z "$IPA_PATH" ]; then
+              IPA_PATH=$(find .. -name "*.ipa" -type f 2>/dev/null | head -1)
+            fi
+          fi
+          
+          if [ -z "$IPA_PATH" ]; then
+            echo "❌ IPA 파일을 찾을 수 없습니다."
+            exit 1
+          fi
+          
+          echo "✅ IPA 파일 발견: $IPA_PATH"
+          echo "📦 IPA 파일 정보:"
+          ls -lh "$IPA_PATH"
+          
+          # 절대 경로로 변환
+          if [[ "$IPA_PATH" != /* ]]; then
+            IPA_PATH=$(realpath "$IPA_PATH" || echo "$(pwd)/$IPA_PATH")
+          fi
+          
+          echo "ipa_path=$IPA_PATH" >> $GITHUB_OUTPUT
+        continue-on-error: false
+
       - name: Upload IPA artifact
+        if: success() && steps.find_ipa_for_upload.outputs.ipa_path != ''
         uses: actions/upload-artifact@v4
         with:
           name: dev-client-ipa
-          path: ${{ steps.find_ipa.outputs.ipa_path }}
+          path: ${{ steps.find_ipa_for_upload.outputs.ipa_path }}
           retention-days: 90
           if-no-files-found: error
-        if: success() && steps.find_ipa.outputs.ipa_path != ''
 
       - name: Success message
         run: |
