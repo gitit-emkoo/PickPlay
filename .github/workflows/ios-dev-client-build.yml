@@ -10,6 +10,7 @@ on:
       - 'pickplay/app.json'
       - 'pickplay/package.json'
       - 'pickplay/fastlane/**'
+      - 'pickplay/plugins/**'
       - 'pickplay/GoogleService-Info.plist'
       - '.github/workflows/ios-dev-client-build.yml'
 
