@@ -22,8 +22,24 @@ const withGoogleServicesFile = (config) => {
     config = IOSConfig.Google.withGoogleServicesFile(config);
     
     // 2단계: AppDelegate에 Firebase 초기화 코드 추가
+    console.log('[Config Plugin] 🔧 AppDelegate 수정 시작...');
+    console.log('[Config Plugin] 💡 참고: AppDelegate 수정은 네이티브 프로젝트가 생성될 때만 적용됩니다.');
+    console.log('[Config Plugin] 💡 참고: expo start는 네이티브 프로젝트를 생성하지 않으므로 AppDelegate가 수정되지 않을 수 있습니다.');
     config = withAppDelegate(config, (config) => {
       const appDelegate = config.modResults;
+      
+      console.log('[Config Plugin] 🔍 withAppDelegate 콜백 실행됨');
+      console.log('[Config Plugin] 🔍 config.modResults 존재 여부:', !!appDelegate);
+      console.log('[Config Plugin] 🔍 appDelegate.contents 존재 여부:', !!(appDelegate?.contents));
+      
+      if (!appDelegate || !appDelegate.contents) {
+        console.warn('[Config Plugin] ⚠️ AppDelegate를 찾을 수 없거나 내용이 없습니다.');
+        console.warn('[Config Plugin] ⚠️ 이것은 네이티브 프로젝트가 생성되지 않았을 때 발생합니다.');
+        console.warn('[Config Plugin] ⚠️ 네이티브 빌드 시점(예: GitHub Actions)에 AppDelegate가 수정됩니다.');
+        return config;
+      }
+      
+      console.log('[Config Plugin] ✅ AppDelegate 파일 발견, 길이:', appDelegate.contents.length, 'chars');
       
       // 이미 Firebase 초기화 코드가 추가된 경우 건너뛰기
       if (appDelegate.contents.includes('[PickPlay][Firebase] Initialization')) {
@@ -106,8 +122,9 @@ const withGoogleServicesFile = (config) => {
       return config;
     });
     
-    // 파일 경로 확인
-    const sourcePath = path.resolve(config.modRequest.projectRoot, iosGoogleServicesFile.replace('./', ''));
+    // 파일 경로 확인 (config.modRequest가 없을 수도 있으므로 안전하게 처리)
+    const projectRoot = config.modRequest?.projectRoot || config._internal?.projectRoot || process.cwd();
+    const sourcePath = path.resolve(projectRoot, iosGoogleServicesFile.replace('./', ''));
     if (fs.existsSync(sourcePath)) {
       console.log(`[Config Plugin] ✅ iOS GoogleService-Info.plist 파일 확인됨: ${sourcePath}`);
     } else {

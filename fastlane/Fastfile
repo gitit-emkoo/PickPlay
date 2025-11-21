@@ -299,6 +299,32 @@ platform :ios do
     
     assert_push_in_profile!(pp_path)
 
+    # ============================================
+    # 네이티브 프로젝트 재생성 (중요!)
+    # expo prebuild를 실행하여 app.json의 플러그인 설정을 적용 (예: AppDelegate 수정)
+    # ============================================
+    UI.important("=" * 60)
+    UI.important("🔧 [네이티브 빌드 재생성] expo prebuild 실행")
+    UI.important("=" * 60)
+    
+    begin
+      # 프로젝트 루트로 이동하여 expo prebuild 실행
+      UI.message("📁 프로젝트 루트: #{REPO_ROOT}")
+      UI.message("🔧 expo prebuild --clean --platform ios 실행 중...")
+      
+      # expo prebuild 실행 (--clean으로 기존 네이티브 파일 제거 후 재생성)
+      # 이때 플러그인이 실행되어 AppDelegate가 수정됩니다
+      sh("cd #{REPO_ROOT} && npx expo prebuild --clean --platform ios")
+      
+      UI.success("✅ [네이티브 빌드 재생성] expo prebuild 완료")
+      UI.message("   → 플러그인이 실행되어 AppDelegate가 수정되었습니다")
+      UI.message("   → GoogleService-Info.plist가 ios/ 디렉토리에 포함되었는지 확인하세요")
+    rescue => e
+      UI.user_error!("❌ [네이티브 빌드 재생성 실패] expo prebuild 실행 실패: #{e.message}")
+    end
+    
+    UI.important("=" * 60)
+
     # Pods 재설치 (post_install 설정 적용)
     sh("cd #{IOS_DIR} && pod install")
     
