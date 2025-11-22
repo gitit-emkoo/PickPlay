@@ -481,6 +481,48 @@ platform :ios do
     export_profiles = {}
     export_profiles[BUNDLE_ID] = pp_name unless pp_name.empty?
     
+    # ============================================
+    # 빌드 번호 자동 증가 (TestFlight 업로드를 위해 필수)
+    # ============================================
+    UI.important("=" * 60)
+    UI.important("🔢 [빌드 번호 증가] increment_build_number 실행")
+    UI.important("=" * 60)
+    
+    begin
+      increment_build_number(
+        xcodeproj: XCODEPROJ,
+        build_number: :latest  # App Store Connect에서 최신 빌드 번호를 가져와서 +1
+      )
+      UI.success("✅ [빌드 번호 증가] 완료")
+    rescue => e
+      UI.important("⚠️ [빌드 번호 증가 실패] App Store Connect API 사용 실패: #{e.message}")
+      UI.important("   → Xcode 프로젝트에서 직접 빌드 번호 읽기 시도...")
+      
+      # App Store Connect API 실패 시 Xcode 프로젝트에서 직접 빌드 번호 읽어서 +1
+      begin
+        require 'xcodeproj'
+        project = Xcodeproj::Project.open(XCODEPROJ)
+        project.targets.each do |target|
+          next unless target.name == SCHEME
+          
+          target.build_configurations.each do |config|
+            next unless config.name == "Release"
+            
+            current_build = config.build_settings['CURRENT_PROJECT_VERSION'] || config.build_settings['MARKETING_VERSION'] || "1"
+            new_build = (current_build.to_i + 1).to_s
+            
+            config.build_settings['CURRENT_PROJECT_VERSION'] = new_build
+            UI.success("✅ [빌드 번호 증가] Xcode 프로젝트에서 직접 설정: #{current_build} → #{new_build}")
+          end
+        end
+        project.save
+      rescue => e2
+        UI.user_error!("❌ [빌드 번호 증가 실패] Xcode 프로젝트 직접 수정도 실패: #{e2.message}")
+      end
+    end
+    
+    UI.important("=" * 60)
+    
     # 메인 앱 타겟에만 프로비저닝 프로파일 적용 (Pods 제외)
     # 🔒 xcargs에 BoringSSL-GRPC의 플래그를 명시적으로 $(inherited)로 강제 설정하여 -G 제거
     build_app(
