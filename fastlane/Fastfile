@@ -566,7 +566,7 @@ platform :ios do
     new_build_number = (base_build_number + 1).to_s
     UI.success("📈 새 빌드 번호: #{new_build_number} (기준: #{base_build_number})")
     
-    # Xcode 프로젝트에 새 빌드 번호 설정
+    # Xcode 프로젝트에 새 빌드 번호 설정 (모든 Configuration에 설정)
     project.targets.each do |target|
       next unless target.name == SCHEME
       
@@ -576,12 +576,13 @@ platform :ios do
     end
     
     project.save
-    UI.success("✅ [빌드 번호 증가] 완료: #{current_build_number} → #{new_build_number}")
+    UI.success("✅ [빌드 번호 증가] 완료: #{current_build_number || 'nil'} → #{new_build_number}")
     
     UI.important("=" * 60)
     
     # 메인 앱 타겟에만 프로비저닝 프로파일 적용 (Pods 제외)
     # 🔒 xcargs에 BoringSSL-GRPC의 플래그를 명시적으로 $(inherited)로 강제 설정하여 -G 제거
+    # 빌드 번호를 xcargs에도 명시적으로 설정하여 확실히 적용
     build_app(
       workspace:     WORKSPACE,
       scheme:        SCHEME,
@@ -594,6 +595,7 @@ platform :ios do
         "CODE_SIGN_IDENTITY=\"Apple Distribution\"",
         "PRODUCT_BUNDLE_IDENTIFIER=#{BUNDLE_ID}",
         "pickplay.PROVISIONING_PROFILE_SPECIFIER=#{specifier}",  # 메인 앱 타겟만 지정
+        "CURRENT_PROJECT_VERSION=#{new_build_number}",  # 빌드 번호 명시적 설정
         "SWIFT_OPTIMIZATION_LEVEL=-O",
         # BoringSSL-GRPC 타겟의 플래그를 $(inherited)로 강제 설정하여 -G 제거
         "BoringSSL-GRPC.OTHER_CFLAGS=$(inherited)",
