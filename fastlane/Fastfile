@@ -485,41 +485,85 @@ platform :ios do
     # 빌드 번호 자동 증가 (TestFlight 업로드를 위해 필수)
     # ============================================
     UI.important("=" * 60)
-    UI.important("🔢 [빌드 번호 증가] increment_build_number 실행")
+    UI.important("🔢 [빌드 번호 증가] 빌드 번호 자동 증가 실행")
     UI.important("=" * 60)
     
-    begin
-      increment_build_number(
-        xcodeproj: XCODEPROJ,
-        build_number: :latest  # App Store Connect에서 최신 빌드 번호를 가져와서 +1
-      )
-      UI.success("✅ [빌드 번호 증가] 완료")
-    rescue => e
-      UI.important("⚠️ [빌드 번호 증가 실패] App Store Connect API 사용 실패: #{e.message}")
-      UI.important("   → Xcode 프로젝트에서 직접 빌드 번호 읽기 시도...")
+    require 'xcodeproj'
+    
+    # Xcode 프로젝트에서 현재 빌드 번호 읽기
+    project = Xcodeproj::Project.open(XCODEPROJ)
+    current_build_number = nil
+    
+    project.targets.each do |target|
+      next unless target.name == SCHEME
       
-      # App Store Connect API 실패 시 Xcode 프로젝트에서 직접 빌드 번호 읽어서 +1
-      begin
-        require 'xcodeproj'
-        project = Xcodeproj::Project.open(XCODEPROJ)
-        project.targets.each do |target|
-          next unless target.name == SCHEME
-          
-          target.build_configurations.each do |config|
-            next unless config.name == "Release"
-            
-            current_build = config.build_settings['CURRENT_PROJECT_VERSION'] || config.build_settings['MARKETING_VERSION'] || "1"
-            new_build = (current_build.to_i + 1).to_s
-            
-            config.build_settings['CURRENT_PROJECT_VERSION'] = new_build
-            UI.success("✅ [빌드 번호 증가] Xcode 프로젝트에서 직접 설정: #{current_build} → #{new_build}")
-          end
-        end
-        project.save
-      rescue => e2
-        UI.user_error!("❌ [빌드 번호 증가 실패] Xcode 프로젝트 직접 수정도 실패: #{e2.message}")
+      target.build_configurations.each do |config|
+        next unless config.name == "Release"
+        
+        current_build_number = config.build_settings['CURRENT_PROJECT_VERSION'] || "1"
+        UI.message("📋 현재 빌드 번호 (Xcode 프로젝트): #{current_build_number}")
       end
     end
+    
+    # App Store Connect API로 최신 빌드 번호 가져오기 시도
+    latest_build_number = nil
+    begin
+      require 'spaceship'
+      
+      # Fastlane의 app_store_connect_api_key를 사용하여 인증
+      key_id = ENV["APP_STORE_CONNECT_API_KEY_ID"]
+      key_path = ENV["APP_STORE_CONNECT_API_KEY_PATH"]
+      issuer_id = ENV["APP_STORE_CONNECT_API_ISSUER_ID"]
+      
+      if key_id && key_path && issuer_id && File.exist?(key_path)
+        Spaceship::ConnectAPI.login(key_id, key_path, issuer_id: issuer_id)
+        
+        app = Spaceship::ConnectAPI::App.find(BUNDLE_ID)
+        if app
+          # TestFlight에서 최신 빌드 번호 가져오기 (build_number 기준)
+          builds = Spaceship::ConnectAPI::Build.all(
+            app_id: app.id,
+            sort: "-version"
+          )
+          
+          if builds && builds.any?
+            latest_build = builds.first
+            # build_number 또는 version 사용
+            latest_build_number = (latest_build.build_number || latest_build.version).to_s
+            UI.success("✅ App Store Connect 최신 빌드 번호: #{latest_build_number}")
+          else
+            UI.message("ℹ️ TestFlight에 빌드가 없습니다. 첫 번째 빌드입니다.")
+          end
+        end
+      else
+        UI.message("ℹ️ App Store Connect API 키 정보가 없습니다. Xcode 프로젝트 빌드 번호를 사용합니다.")
+      end
+    rescue => e
+      UI.important("⚠️ App Store Connect API 조회 실패: #{e.message}")
+      UI.important("   → Xcode 프로젝트의 현재 빌드 번호를 기준으로 증가합니다.")
+    end
+    
+    # 최신 빌드 번호와 현재 빌드 번호 중 더 큰 값 사용
+    base_build_number = if latest_build_number && latest_build_number.to_i > current_build_number.to_i
+      latest_build_number.to_i
+    else
+      current_build_number.to_i
+    end
+    
+    new_build_number = (base_build_number + 1).to_s
+    UI.success("📈 새 빌드 번호: #{new_build_number} (기준: #{base_build_number})")
+    
+    # Xcode 프로젝트에 새 빌드 번호 설정
+    project.targets.each do |target|
+      next unless target.name == SCHEME
+      
+      target.build_configurations.each do |config|
+        config.build_settings['CURRENT_PROJECT_VERSION'] = new_build_number
+      end
+    end
+    
+    project.save
+    UI.success("✅ [빌드 번호 증가] 완료: #{current_build_number} → #{new_build_number}")
     
     UI.important("=" * 60)
     
