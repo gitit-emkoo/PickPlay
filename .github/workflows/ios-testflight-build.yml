@@ -5,13 +5,13 @@ on:
   push:
     branches: [main, release]
     paths:
-      - 'pickplay/app/**'
-      - 'pickplay/app.config.js'
-      - 'pickplay/app.json'
-      - 'pickplay/package.json'
-      - 'pickplay/fastlane/**'
-      - 'pickplay/plugins/**'
-      - 'pickplay/GoogleService-Info.plist'
+      - 'app/**'
+      - 'app.config.js'
+      - 'app.json'
+      - 'package.json'
+      - 'fastlane/**'
+      - 'plugins/**'
+      - 'GoogleService-Info.plist'
       - '.github/workflows/ios-testflight-build.yml'
 
 jobs:
