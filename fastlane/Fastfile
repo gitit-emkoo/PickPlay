@@ -335,8 +335,7 @@ platform :ios do
        "[ -f 'Pods/Pods.xcodeproj/project.pbxproj' ] && " +
        "perl -i -pe 's/\\s-G(?=\\s|$)/ /g' 'Pods/Pods.xcodeproj/project.pbxproj' 2>/dev/null || true")
 
-    # (선택) 빌드 번호 자동 증가
-    increment_build_number(xcodeproj: XCODEPROJ)
+    # 빌드 번호 자동 증가는 아래에서 처리 (TestFlight 최신 빌드 번호 고려)
 
     # Team ID 주입 (타겟 자동서명 사용 안 함)
     update_project_team(
