@@ -606,11 +606,22 @@ platform :ios do
       new_build_number = (base_build_number + 1).to_s
       UI.success("📈 새 빌드 번호: #{new_build_number} (기준: #{base_build_number})")
       
-      # 안전장치: 빌드 번호가 2 이하면 최소 3으로 설정 (TestFlight에 이미 2가 있으므로)
-      if new_build_number.to_i <= 2
-        UI.important("⚠️ 빌드 번호가 2 이하입니다. TestFlight에 이미 빌드 번호 2가 있으므로 최소 3으로 설정합니다.")
-        new_build_number = "3"
-        UI.success("📈 빌드 번호 조정: → #{new_build_number}")
+      # 안전장치: 최신 빌드 번호를 반영하여 확실하게 증가
+      if latest_build_number
+        # API 조회 성공: 최신 빌드 번호가 있으면 무조건 그것보다 1 크게 설정
+        if new_build_number.to_i <= latest_build_number.to_i
+          UI.important("⚠️ 계산된 빌드 번호(#{new_build_number})가 최신 빌드 번호(#{latest_build_number}) 이하입니다.")
+          new_build_number = (latest_build_number.to_i + 1).to_s
+          UI.success("📈 빌드 번호 조정: → #{new_build_number} (최신 빌드 번호 #{latest_build_number} + 1)")
+        end
+      else
+        # API 조회 실패: TestFlight에 이미 빌드가 있을 수 있으므로 안전하게 최소 3 또는 현재 + 1 중 큰 값
+        min_build = [3, (current_build_number.to_i rescue 1) + 1].max
+        if new_build_number.to_i < min_build
+          UI.important("⚠️ API 조회 실패 및 빌드 번호가 최소값(#{min_build}) 미만입니다. 최소값으로 설정합니다.")
+          new_build_number = min_build.to_s
+          UI.success("📈 빌드 번호 조정: → #{new_build_number}")
+        end
       end
       
       # Xcode 프로젝트에 새 빌드 번호 설정 (모든 Configuration에 설정)
