@@ -62,7 +62,8 @@
       }
     ],
     "./plugins/with-google-services-file",
-    "./plugins/with-admob-test-device"
+    "./plugins/with-admob-test-device",
+    "./plugins/with-tracking-transparency"
   ],
   "react-native-google-mobile-ads": {
     "ios_app_id": "ca-app-pub-3940256099942544~1458002511"
