@@ -481,163 +481,35 @@ platform :ios do
     export_profiles[BUNDLE_ID] = pp_name unless pp_name.empty?
     
     # ============================================
-    # 빌드 번호 자동 증가 (TestFlight 업로드를 위해 필수)
-    # expo prebuild 이후에 실행되어야 함 (expo prebuild가 빌드 번호를 덮어쓸 수 있음)
+    # 빌드 번호 고정 설정 (TestFlight 업로드를 위해 필수)
+    # TODO: 다음 빌드에서는 5로 변경 필요
     # ============================================
     UI.important("=" * 60)
-    UI.important("🔢 [빌드 번호 증가] 빌드 번호 자동 증가 실행")
+    UI.important("🔢 [빌드 번호 설정] 빌드 번호 고정: 4")
     UI.important("=" * 60)
-    UI.message("📁 Xcode 프로젝트 경로: #{XCODEPROJ}")
-    UI.message("📁 Xcode 프로젝트 존재 여부: #{File.exist?(XCODEPROJ) ? '✅ 존재' : '❌ 없음'}")
     
-    new_build_number = nil
-    current_build_number = nil
+    new_build_number = "4"
     
     begin
       require 'xcodeproj'
-      UI.message("✅ xcodeproj gem 로드 완료")
-      
-      # Xcode 프로젝트에서 현재 빌드 번호 읽기
       UI.message("📖 Xcode 프로젝트 파일 읽기 중...")
       project = Xcodeproj::Project.open(XCODEPROJ)
       UI.message("✅ Xcode 프로젝트 파일 읽기 완료")
       
-      project.targets.each do |target|
-        next unless target.name == SCHEME
-        UI.message("🎯 타겟 발견: #{target.name}")
-        
-        target.build_configurations.each do |config|
-          next unless config.name == "Release"
-          
-          current_build_number = config.build_settings['CURRENT_PROJECT_VERSION'] || "1"
-          UI.message("📋 현재 빌드 번호 (Xcode 프로젝트 - #{config.name}): #{current_build_number}")
-        end
-      end
-      
-      if current_build_number.nil?
-        UI.important("⚠️ Release Configuration에서 빌드 번호를 찾을 수 없습니다. 기본값 1 사용")
-        current_build_number = "1"
-      end
-      
-      # App Store Connect API로 최신 빌드 번호 가져오기 시도
-      latest_build_number = nil
-      begin
-        require 'spaceship'
-        UI.message("📡 App Store Connect API 조회 시도...")
-        
-        # Fastlane의 app_store_connect_api_key를 사용하여 인증
-        key_id = ENV["APP_STORE_CONNECT_API_KEY_ID"]
-        key_path = ENV["APP_STORE_CONNECT_API_KEY_PATH"]
-        issuer_id = ENV["APP_STORE_CONNECT_API_ISSUER_ID"]
-        
-        UI.message("🔑 API 키 정보:")
-        UI.message("   - Key ID: #{key_id ? '✅ 설정됨' : '❌ 없음'}")
-        UI.message("   - Key Path: #{key_path ? (File.exist?(key_path) ? '✅ 존재' : '❌ 없음') : '❌ 없음'}")
-        UI.message("   - Issuer ID: #{issuer_id ? '✅ 설정됨' : '❌ 없음'}")
-        
-        if key_id && key_path && issuer_id && File.exist?(key_path)
-          # Spaceship API 인증 (키워드 인자 방식)
-          Spaceship::ConnectAPI.login(
-            key_id: key_id,
-            key_filepath: key_path,
-            issuer_id: issuer_id
-          )
-          UI.message("✅ App Store Connect API 로그인 성공")
-          
-          app = Spaceship::ConnectAPI::App.find(BUNDLE_ID)
-          if app
-            UI.message("✅ 앱 발견: #{app.name} (ID: #{app.id})")
-            
-            # TestFlight에서 모든 빌드 가져오기
-            builds = Spaceship::ConnectAPI::Build.all(
-              app_id: app.id,
-              includes: "preReleaseVersion"
-            )
-            
-            UI.message("📦 TestFlight 빌드 수: #{builds ? builds.length : 0}")
-            
-            if builds && builds.any?
-              # 빌드 번호가 숫자이고 가장 큰 빌드 찾기 (모든 버전 포함)
-              valid_builds = builds.select do |build|
-                build_number_str = build.build_number.to_s
-                build_number_str.match?(/^\d+$/)  # 숫자인 빌드 번호만 선택
-              end
-              
-              UI.message("🔢 유효한 빌드 번호(숫자)를 가진 빌드 수: #{valid_builds.length}")
-              
-              if valid_builds.any?
-                # 빌드 번호가 가장 큰 빌드 찾기
-                latest_build = valid_builds.max_by do |build|
-                  build.build_number.to_s.to_i
-                end
-                
-                latest_build_number = latest_build.build_number.to_s
-                build_version = latest_build.pre_release_version&.version || "unknown"
-                UI.success("✅ App Store Connect 최신 빌드 번호: #{latest_build_number} (버전: #{build_version})")
-              else
-                UI.message("ℹ️ TestFlight에 유효한 빌드 번호(숫자)를 가진 빌드가 없습니다.")
-              end
-            else
-              UI.message("ℹ️ TestFlight에 빌드가 없습니다. 첫 번째 빌드입니다.")
-            end
-          else
-            UI.message("⚠️ 앱을 찾을 수 없습니다: #{BUNDLE_ID}")
-          end
-        else
-          UI.message("ℹ️ App Store Connect API 키 정보가 없습니다. Xcode 프로젝트 빌드 번호를 사용합니다.")
-        end
-      rescue => e
-        UI.important("⚠️ App Store Connect API 조회 실패: #{e.message}")
-        UI.important("   → Xcode 프로젝트의 현재 빌드 번호를 기준으로 증가합니다.")
-        UI.important("   → 스택 트레이스: #{e.backtrace.first(3).join("\n")}")
-      end
-      
-      # 최신 빌드 번호와 현재 빌드 번호 중 더 큰 값 사용
-      # API 조회 실패 시 최소 빌드 번호를 2로 설정 (TestFlight에 이미 2가 있으므로 최소 3 필요)
-      base_build_number = if latest_build_number && latest_build_number.to_i > (current_build_number.to_i rescue 0)
-        latest_build_number.to_i
-      elsif latest_build_number.nil? && (current_build_number.to_i rescue 0) < 2
-        # API 조회 실패했고 현재 빌드 번호가 2 미만이면 최소 2로 설정 (다음 빌드는 3)
-        2
-      else
-        (current_build_number.to_i rescue 1)
-      end
-      
-      new_build_number = (base_build_number + 1).to_s
-      UI.success("📈 새 빌드 번호: #{new_build_number} (기준: #{base_build_number})")
-      
-      # 안전장치: 최신 빌드 번호를 반영하여 확실하게 증가
-      if latest_build_number
-        # API 조회 성공: 최신 빌드 번호가 있으면 무조건 그것보다 1 크게 설정
-        if new_build_number.to_i <= latest_build_number.to_i
-          UI.important("⚠️ 계산된 빌드 번호(#{new_build_number})가 최신 빌드 번호(#{latest_build_number}) 이하입니다.")
-          new_build_number = (latest_build_number.to_i + 1).to_s
-          UI.success("📈 빌드 번호 조정: → #{new_build_number} (최신 빌드 번호 #{latest_build_number} + 1)")
-        end
-      else
-        # API 조회 실패: TestFlight에 이미 빌드가 있을 수 있으므로 안전하게 최소 3 또는 현재 + 1 중 큰 값
-        min_build = [3, (current_build_number.to_i rescue 1) + 1].max
-        if new_build_number.to_i < min_build
-          UI.important("⚠️ API 조회 실패 및 빌드 번호가 최소값(#{min_build}) 미만입니다. 최소값으로 설정합니다.")
-          new_build_number = min_build.to_s
-          UI.success("📈 빌드 번호 조정: → #{new_build_number}")
-        end
-      end
-      
-      # Xcode 프로젝트에 새 빌드 번호 설정 (모든 Configuration에 설정)
+      # Xcode 프로젝트에 빌드 번호 설정 (모든 Configuration에 설정)
       UI.message("💾 Xcode 프로젝트에 빌드 번호 저장 중...")
       project.targets.each do |target|
         next unless target.name == SCHEME
         
         target.build_configurations.each do |config|
-          old_value = config.build_settings['CURRENT_PROJECT_VERSION']
+          old_value = config.build_settings['CURRENT_PROJECT_VERSION'] || "1"
           config.build_settings['CURRENT_PROJECT_VERSION'] = new_build_number
-          UI.message("   → #{target.name} (#{config.name}): #{old_value || 'nil'} → #{new_build_number}")
+          UI.message("   → #{target.name} (#{config.name}): #{old_value} → #{new_build_number}")
         end
       end
       
       project.save
-      UI.success("✅ [빌드 번호 증가] 완료: #{current_build_number || 'nil'} → #{new_build_number}")
+      UI.success("✅ [빌드 번호 설정] 완료: → #{new_build_number}")
       
       # 저장 후 다시 읽어서 확인
       verify_project = Xcodeproj::Project.open(XCODEPROJ)
@@ -655,12 +527,7 @@ platform :ios do
       end
       
     rescue => e
-      UI.user_error!("❌ [빌드 번호 증가 실패] #{e.message}\n#{e.backtrace.first(10).join("\n")}")
-    end
-    
-    # 빌드 번호가 설정되지 않았으면 에러
-    if new_build_number.nil? || new_build_number.empty?
-      UI.user_error!("❌ [빌드 번호 증가 실패] 빌드 번호를 설정할 수 없습니다.")
+      UI.user_error!("❌ [빌드 번호 설정 실패] #{e.message}\n#{e.backtrace.first(10).join("\n")}")
     end
     
     UI.important("=" * 60)
