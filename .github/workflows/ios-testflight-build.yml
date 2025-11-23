@@ -147,14 +147,15 @@ jobs:
           echo "📁 ios/pickplay directory:"
           ls -la ios/pickplay/ 2>/dev/null | head -20 || echo "Directory not found"
 
-      # Cache Pods
+      # Cache Pods (Podfile.lock이 없을 수 있으므로 조건부로 실행)
       - name: Cache Pods
         uses: actions/cache@v4
+        continue-on-error: true
         with:
           path: |
             ${{ env.PROJ_DIR }}/ios/Pods
             ${{ env.PROJ_DIR }}/ios/Podfile.lock
-          key: ${{ runner.os }}-pods-${{ hashFiles('**/Podfile.lock') }}
+          key: ${{ runner.os }}-pods-${{ hashFiles(format('{0}/ios/Podfile.lock', env.PROJ_DIR)) }}
           restore-keys: |
             ${{ runner.os }}-pods-
 
