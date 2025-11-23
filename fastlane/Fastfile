@@ -656,6 +656,32 @@ platform :ios do
     UI.important("🎯 최종 빌드 번호: #{new_build_number}")
     UI.important("=" * 60)
     
+    # Info.plist 파일에 빌드 번호 직접 설정 (xcargs만으로는 부족할 수 있음)
+    begin
+      info_plist_paths = Dir.glob(File.join(IOS_DIR, "**", "Info.plist")).select do |path|
+        # 메인 앱 타겟의 Info.plist만 (Pods 제외)
+        !path.include?("Pods/") && !path.include?("DerivedData/")
+      end
+      
+      if info_plist_paths.any?
+        info_plist_paths.each do |info_plist_path|
+          UI.message("📝 Info.plist 파일에 빌드 번호 설정: #{File.basename(info_plist_path)}")
+          sh("/usr/libexec/PlistBuddy -c 'Set :CFBundleVersion #{new_build_number}' '#{info_plist_path}' 2>&1")
+          # 확인
+          verify_build = sh("/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' '#{info_plist_path}' 2>&1", log: false).strip
+          if verify_build == new_build_number
+            UI.success("✅ Info.plist 빌드 번호 설정 완료: #{verify_build}")
+          else
+            UI.important("⚠️ Info.plist 빌드 번호 불일치: 예상=#{new_build_number}, 실제=#{verify_build}")
+          end
+        end
+      else
+        UI.important("⚠️ Info.plist 파일을 찾을 수 없습니다. xcargs로만 설정합니다.")
+      end
+    rescue => e
+      UI.important("⚠️ Info.plist 수정 실패: #{e.message}. xcargs로만 설정합니다.")
+    end
+    
     # 메인 앱 타겟에만 프로비저닝 프로파일 적용 (Pods 제외)
     # 🔒 xcargs에 BoringSSL-GRPC의 플래그를 명시적으로 $(inherited)로 강제 설정하여 -G 제거
     # 빌드 번호를 xcargs에도 명시적으로 설정하여 확실히 적용
