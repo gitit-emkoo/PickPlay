@@ -229,11 +229,16 @@ export default function RootLayout() {
 
       // 2. ATT 권한 요청 (iOS)
       if (Platform.OS === 'ios') {
-        const { status } = await Tracking.requestTrackingPermissionsAsync();
-        if (status === 'granted') {
-          console.log('✅ ATT: 광고 추적 허용됨');
-        } else {
-          console.log('❌ ATT: 광고 추적 거부됨');
+        try {
+          const { status } = await Tracking.requestTrackingPermissionsAsync();
+          if (status === 'granted') {
+            console.log('✅ ATT: 광고 추적 허용됨');
+          } else {
+            console.log('❌ ATT: 광고 추적 거부됨');
+          }
+        } catch (error: any) {
+          console.error('⚠️ ATT 권한 요청 실패:', error?.message || error);
+          // 크래시 방지: 에러 발생 시에도 앱은 계속 실행
         }
       }
       
