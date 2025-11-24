@@ -12,7 +12,10 @@ import appCheck from '@react-native-firebase/app-check';
 import { getApp, initializeApp, getApps } from '@react-native-firebase/app';
 
 import NotificationBootstrap from './components/NotificationBootstrap';
+import LoadingScreen from './components/LoadingScreen';
+import ErrorScreen from './components/ErrorScreen';
 import { initAds } from '../src/services/ads';
+import { ensureAnonymousAuth } from '../src/services/firebase';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -179,12 +182,55 @@ export default function RootLayout() {
   const [loaded] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
+  const [firebaseStatus, setFirebaseStatus] = useState<'pending' | 'ready' | 'error'>('pending');
+  const [firebaseStatusLog, setFirebaseStatusLog] = useState<string[]>([]);
+  const [firebaseErrorMessage, setFirebaseErrorMessage] = useState<string>('Firebase 초기화 중입니다...');
+  const [initToken, setInitToken] = useState(0);
+
+  const pushStatusLog = (msg: string) => {
+    console.log(`[InitStatus] ${msg}`);
+    setFirebaseStatusLog((prev) => {
+      const next = [...prev, msg];
+      if (next.length > 6) {
+        return next.slice(next.length - 6);
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     (async () => {
       // 0. Firebase 초기화 확인
       console.log('[RootLayout] Firebase 초기화 확인 시작...');
-      await initializeFirebaseIfNeeded();
+      pushStatusLog('Firebase 초기화 확인 중...');
+      const initResult = await initializeFirebaseIfNeeded();
+      if (!initResult) {
+        pushStatusLog('Firebase 네이티브 초기화 실패');
+        setFirebaseErrorMessage('Firebase 초기화에 실패했습니다. 네트워크 상태 또는 설치를 확인해주세요.');
+        setFirebaseStatus('error');
+        return;
+      }
+      pushStatusLog('Firebase 네이티브 초기화 완료');
+
+      try {
+        pushStatusLog('익명 인증 준비 중...');
+        const user = await ensureAnonymousAuth();
+        if (user) {
+          pushStatusLog(`익명 사용자 확보: ${user.uid}`);
+          setFirebaseStatus('ready');
+        } else {
+          pushStatusLog('익명 사용자 확보 실패');
+          setFirebaseErrorMessage('익명 로그인에 실패했습니다. 잠시 후 다시 시도해주세요.');
+          setFirebaseStatus('error');
+          return;
+        }
+      } catch (authError: any) {
+        const message = authError?.message || '알 수 없는 이유로 Firebase 인증에 실패했습니다.';
+        pushStatusLog(`익명 로그인 실패: ${message}`);
+        setFirebaseErrorMessage(`Firebase 인증에 실패했습니다: ${message}`);
+        setFirebaseStatus('error');
+        return;
+      }
       
       // 1. App Check 디버그 토큰 출력
       // v23+ 에서는 activate() 호출 없이 자동 초기화됨
@@ -257,7 +303,7 @@ export default function RootLayout() {
       console.log('🚀 광고 모듈 초기화를 시작합니다...');
       await initAds();
     })();
-  }, []);
+  }, [initToken]);
 
   useEffect(() => {
     if (loaded) {
@@ -267,6 +313,27 @@ export default function RootLayout() {
 
   if (!loaded) {
     return null;
+  }
+
+  if (firebaseStatus === 'pending') {
+    return <LoadingScreen message="Firebase 초기화 중입니다..." details={firebaseStatusLog} />;
+  }
+
+  if (firebaseStatus === 'error') {
+    return (
+      <ErrorScreen
+        title="Firebase 초기화 실패"
+        subtitle="서비스에 연결하지 못했습니다."
+        message={firebaseErrorMessage}
+        onRetry={() => {
+          pushStatusLog('사용자 요청으로 재시작');
+          setFirebaseStatus('pending');
+          setFirebaseStatusLog([]);
+          setFirebaseErrorMessage('Firebase 초기화 중입니다...');
+          setInitToken((prev) => prev + 1);
+        }}
+      />
+    );
   }
 
   return (
