@@ -257,18 +257,30 @@ def verify_firebase_native_modules!
     if app_delegate_paths.any?
       app_delegate_path = app_delegate_paths.first
       app_delegate_content = File.read(app_delegate_path)
+      has_import = app_delegate_content.include?('#import <Firebase.h>') || app_delegate_content.include?('import Firebase')
+      has_configure = app_delegate_content.include?('[FIRApp configure]') || app_delegate_content.include?('FirebaseApp.configure')
       
-      if app_delegate_content.include?('[FIRApp configure]') || app_delegate_content.include?('FirebaseApp.configure()')
+      if has_configure
         UI.success("✅ AppDelegate에 Firebase 초기화 코드가 포함되어 있습니다.")
       else
-        UI.important("⚠️ AppDelegate에 Firebase 초기화 코드가 없습니다.")
-        UI.important("⚠️ Config Plugin이 추가해야 하지만, 확인이 필요합니다.")
+        UI.important("⚠️ AppDelegate에 Firebase 초기화 코드가 없습니다. 자동으로 추가합니다.")
+        if ensure_app_delegate_firebase_config!(app_delegate_path)
+          UI.success("✅ AppDelegate에 Firebase 초기화 코드를 추가했습니다: #{File.basename(app_delegate_path)}")
+          has_configure = true
+        else
+          UI.important("⚠️ AppDelegate에 Firebase 초기화 코드를 자동으로 추가하지 못했습니다. 수동 확인이 필요합니다.")
+        end
       end
       
-      if app_delegate_content.include?('#import <Firebase.h>') || app_delegate_content.include?('import Firebase')
+      if has_import
         UI.success("✅ AppDelegate에 Firebase import가 포함되어 있습니다.")
       else
-        UI.important("⚠️ AppDelegate에 Firebase import가 없습니다.")
+        UI.important("⚠️ AppDelegate에 Firebase import가 없습니다. 자동으로 추가합니다.")
+        if ensure_app_delegate_firebase_import!(app_delegate_path)
+          UI.success("✅ AppDelegate에 Firebase import를 추가했습니다: #{File.basename(app_delegate_path)}")
+        else
+          UI.important("⚠️ AppDelegate에 Firebase import를 자동으로 추가하지 못했습니다. 수동 확인이 필요합니다.")
+        end
       end
     else
       UI.important("⚠️ AppDelegate 파일을 찾을 수 없습니다.")
@@ -279,6 +291,62 @@ def verify_firebase_native_modules!
     UI.important("⚠️ Firebase 네이티브 모듈 확인 중 에러 발생: #{e.message}")
     UI.important("⚠️ 계속 진행합니다...")
   end
+end
+
+def ensure_app_delegate_firebase_import!(app_delegate_path)
+  content = File.read(app_delegate_path)
+  if app_delegate_path.end_with?(".swift")
+    return true if content.include?("import Firebase")
+    content = content.sub(/import ExpoModulesCore.*?\n/i) { |match| "#{match}import Firebase\n" }
+  else
+    return true if content.include?("#import <Firebase.h>")
+    content = content.sub(/#import "AppDelegate\.h"\s*\n/) { |match| "#{match}#import <Firebase.h>\n" }
+  end
+  File.write(app_delegate_path, content)
+  true
+rescue => e
+  UI.important("⚠️ Firebase import 추가 실패: #{e.message}")
+  false
+end
+
+def ensure_app_delegate_firebase_config!(app_delegate_path)
+  content = File.read(app_delegate_path)
+  if app_delegate_path.end_with?(".swift")
+    return true if content.include?("FirebaseApp.configure")
+    snippet = <<~SWIFT
+
+        // MARK: Firebase Initialization (Fastlane patch)
+        if FirebaseApp.app() == nil {
+          FirebaseApp.configure()
+        }
+
+    SWIFT
+    if content =~ /(func\s+application\([^\{]+\)\s*\{\s*\n)/
+      content = content.sub($1, "#{$1}#{snippet}")
+    else
+      return false
+    end
+  else
+    return true if content.include?("[FIRApp configure]")
+    snippet = <<~OBJC
+
+      // MARK: - Firebase Initialization (Fastlane patch)
+      if ([FIRApp defaultApp] == nil) {
+        [FIRApp configure];
+      }
+
+    OBJC
+    if content =~ /(\)\s*\{\s*\n)/
+      content = content.sub($1, "#{$1}#{snippet}")
+    else
+      return false
+    end
+  end
+  File.write(app_delegate_path, content)
+  true
+rescue => e
+  UI.important("⚠️ AppDelegate Firebase 초기화 코드 추가 실패: #{e.message}")
+  false
 end
 
 def verify_google_services_plist!
@@ -832,13 +900,13 @@ platform :ios do
     
     # ============================================
     # 빌드 번호 고정 설정 (TestFlight 업로드를 위해 필수)
-    # TODO: 다음 빌드에서는 9로 변경 필요
+    # TODO: 다음 빌드에서는 10으로 변경 필요
     # ============================================
     UI.important("=" * 60)
-    UI.important("🔢 [빌드 번호 설정] 빌드 번호 고정: 8")
+    UI.important("🔢 [빌드 번호 설정] 빌드 번호 고정: 9")
     UI.important("=" * 60)
     
-    new_build_number = "8"
+    new_build_number = "9"
     
     begin
       require 'xcodeproj'
