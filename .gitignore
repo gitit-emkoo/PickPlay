@@ -46,6 +46,9 @@ yarn-error.*
 *.md
 !README.md
 
+# Fastfile backup
+fastlane/Fastfile.backup
+
 app-example
 firebase-service-account.json
 google-service-account.json

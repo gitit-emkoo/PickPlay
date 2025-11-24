@@ -1,6 +1,7 @@
 ﻿# frozen_string_literal: true
 require "base64"
 require "fileutils"
+require "pathname"
 
 default_platform(:ios)
 
@@ -94,6 +95,380 @@ def assert_push_in_profile!(profile_path)
     /usr/bin/security cms -D -i "#{profile_path}" > /tmp/profile.plist &&
     echo "➡️  Entitlements.aps-environment in profile:" &&
     /usr/libexec/PlistBuddy -c "Print :Entitlements:aps-environment" /tmp/profile.plist
+  )
+end
+
+# ============================================
+# 공통 Helper Functions
+# ============================================
+
+def expo_prebuild!(options = {})
+  # expo prebuild 실행 및 기본 설정
+  # options:
+  #   - check_firebase: true/false (기본: false)
+  #   - setup_att: true/false (기본: false) - NSUserTrackingUsageDescription 추가
+  
+  UI.important("=" * 60)
+  UI.important("🔧 [네이티브 빌드 재생성] expo prebuild 실행")
+  UI.important("=" * 60)
+  
+  begin
+    UI.message("📁 프로젝트 루트: #{REPO_ROOT}")
+    UI.message("🔧 expo prebuild --clean --platform ios 실행 중...")
+    
+    begin
+      sh("cd #{REPO_ROOT} && npx expo prebuild --clean --platform ios")
+    rescue => prebuild_error
+      if Dir.exist?(IOS_DIR)
+        UI.important("⚠️ expo prebuild가 에러로 종료되었지만 ios 디렉토리는 존재합니다.")
+        UI.important("⚠️ 에러: #{prebuild_error.message}")
+        UI.important("⚠️ 계속 진행합니다...")
+      else
+        raise prebuild_error
+      end
+    end
+    
+    UI.success("✅ [네이티브 빌드 재생성] expo prebuild 완료")
+    UI.message("   → 플러그인이 실행되어 AppDelegate가 수정되었습니다")
+    
+    # Firebase 확인 (옵션)
+    if options[:check_firebase]
+      verify_firebase_native_modules!
+      verify_google_services_plist!
+    end
+    
+    # ATT 설정 (옵션, beta lane 전용)
+    if options[:setup_att]
+      setup_info_plist_att!
+    end
+    
+    UI.important("=" * 60)
+  rescue => e
+    UI.user_error!("❌ [네이티브 빌드 재생성 실패] expo prebuild 실행 실패: #{e.message}")
+  end
+end
+
+def verify_firebase_native_modules!
+  # React Native Firebase 네이티브 모듈 링크 확인
+  begin
+    UI.important("=" * 60)
+    UI.important("🔍 [Firebase 네이티브 모듈 확인] React Native Firebase 링크 상태 확인 중...")
+    UI.important("=" * 60)
+    
+    # 1. Podfile.lock에서 Firebase 관련 pod 확인
+    podfile_lock_path = File.join(IOS_DIR, "Podfile.lock")
+    if File.exist?(podfile_lock_path)
+      podfile_lock_content = File.read(podfile_lock_path)
+      
+      firebase_pods = [
+        'RNFBApp',
+        'FirebaseCore',
+        'FirebaseAuth',
+        'FirebaseFirestore',
+        'FirebaseFunctions',
+        'FirebaseAppCheck'
+      ]
+      
+      found_pods = []
+      missing_pods = []
+      
+      firebase_pods.each do |pod_name|
+        if podfile_lock_content.include?(pod_name)
+          found_pods << pod_name
+        else
+          missing_pods << pod_name
+        end
+      end
+      
+      if found_pods.any?
+        UI.success("✅ Firebase 관련 Pod 발견 (#{found_pods.length}개):")
+        found_pods.each { |pod| UI.message("   - #{pod}") }
+      end
+      
+      if missing_pods.any?
+        UI.important("⚠️ 다음 Firebase Pod이 Podfile.lock에 없습니다:")
+        missing_pods.each { |pod| UI.message("   - #{pod}") }
+        UI.important("⚠️ pod install이 제대로 실행되지 않았을 수 있습니다.")
+      end
+      
+      # RNFBApp이 필수이므로 확인
+      if !found_pods.include?('RNFBApp')
+        UI.user_error!("❌ RNFBApp Pod이 없습니다! React Native Firebase가 제대로 설치되지 않았습니다.")
+      end
+    else
+      UI.important("⚠️ Podfile.lock이 없습니다. pod install이 실행되지 않았을 수 있습니다.")
+    end
+    
+    # 2. Xcode 프로젝트에서 Firebase 프레임워크 링크 확인
+    begin
+      require 'xcodeproj'
+      project = Xcodeproj::Project.open(XCODEPROJ)
+      
+      project.targets.each do |target|
+        next unless target.name == SCHEME
+        
+        # Link Binary With Libraries 빌드 단계 찾기
+        frameworks_phase = target.build_phases.find { |phase| phase.is_a?(Xcodeproj::Project::Object::PBXFrameworksBuildPhase) }
+        
+        if frameworks_phase
+          firebase_frameworks = [
+            'FirebaseCore.framework',
+            'FirebaseAuth.framework',
+            'FirebaseFirestore.framework',
+            'FirebaseFunctions.framework',
+            'FirebaseAppCheck.framework'
+          ]
+          
+          linked_frameworks = frameworks_phase.files.map { |bf| bf.file_ref&.path }.compact
+          
+          found_frameworks = []
+          missing_frameworks = []
+          
+          firebase_frameworks.each do |framework_name|
+            if linked_frameworks.any? { |f| f&.include?(framework_name) || f&.include?('Firebase') }
+              found_frameworks << framework_name
+            else
+              missing_frameworks << framework_name
+            end
+          end
+          
+          if found_frameworks.any?
+            UI.success("✅ Firebase 프레임워크가 Xcode 프로젝트에 링크됨 (#{found_frameworks.length}개)")
+          end
+          
+          if missing_frameworks.any?
+            UI.important("⚠️ 다음 Firebase 프레임워크가 링크되지 않았습니다:")
+            missing_frameworks.each { |f| UI.message("   - #{f}") }
+            UI.important("⚠️ 하지만 CocoaPods가 자동으로 링크할 수 있으므로 정상일 수 있습니다.")
+          end
+        end
+      end
+    rescue LoadError
+      UI.important("⚠️ xcodeproj gem 없음 - Xcode 프로젝트 확인 건너뜀")
+    rescue => e
+      UI.important("⚠️ Xcode 프로젝트 확인 중 에러: #{e.message}")
+    end
+    
+    # 3. AppDelegate에 Firebase 초기화 코드 확인
+    app_delegate_paths = Dir.glob(File.join(IOS_DIR, "**", "AppDelegate.{m,mm,swift}")).select do |path|
+      !path.include?("Pods/") && !path.include?("DerivedData/")
+    end
+    
+    if app_delegate_paths.any?
+      app_delegate_path = app_delegate_paths.first
+      app_delegate_content = File.read(app_delegate_path)
+      
+      if app_delegate_content.include?('[FIRApp configure]') || app_delegate_content.include?('FirebaseApp.configure()')
+        UI.success("✅ AppDelegate에 Firebase 초기화 코드가 포함되어 있습니다.")
+      else
+        UI.important("⚠️ AppDelegate에 Firebase 초기화 코드가 없습니다.")
+        UI.important("⚠️ Config Plugin이 추가해야 하지만, 확인이 필요합니다.")
+      end
+      
+      if app_delegate_content.include?('#import <Firebase.h>') || app_delegate_content.include?('import Firebase')
+        UI.success("✅ AppDelegate에 Firebase import가 포함되어 있습니다.")
+      else
+        UI.important("⚠️ AppDelegate에 Firebase import가 없습니다.")
+      end
+    else
+      UI.important("⚠️ AppDelegate 파일을 찾을 수 없습니다.")
+    end
+    
+    UI.important("=" * 60)
+  rescue => e
+    UI.important("⚠️ Firebase 네이티브 모듈 확인 중 에러 발생: #{e.message}")
+    UI.important("⚠️ 계속 진행합니다...")
+  end
+end
+
+def verify_google_services_plist!
+  # GoogleService-Info.plist 파일 확인 및 Xcode 프로젝트에 추가
+  begin
+    UI.important("=" * 60)
+    UI.important("🔍 [Firebase 설정 확인] GoogleService-Info.plist 파일 확인 중...")
+    UI.important("=" * 60)
+    
+    google_services_source = File.join(REPO_ROOT, "GoogleService-Info.plist")
+    google_services_dest = Dir.glob(File.join(IOS_DIR, "**", "GoogleService-Info.plist")).select do |path|
+      !path.include?("Pods/") && !path.include?("DerivedData/")
+    end.first
+    
+    if File.exist?(google_services_source)
+      UI.success("✅ GoogleService-Info.plist 소스 파일 확인: #{File.basename(google_services_source)}")
+    else
+      UI.user_error!("❌ GoogleService-Info.plist 소스 파일을 찾을 수 없습니다: #{google_services_source}")
+    end
+    
+    # Config Plugin이 복사한 파일 확인
+    if google_services_dest && File.exist?(google_services_dest)
+      UI.success("✅ GoogleService-Info.plist가 ios 디렉토리에 포함되었습니다: #{File.basename(File.dirname(google_services_dest))}/#{File.basename(google_services_dest)}")
+    else
+      UI.important("⚠️ GoogleService-Info.plist가 ios 디렉토리에 없습니다. Config Plugin이 복사하지 않았을 수 있습니다.")
+      UI.important("⚠️ 수동으로 복사합니다...")
+      
+      # 수동 복사 (pickplay 타겟 디렉토리에)
+      target_dir = File.join(IOS_DIR, SCHEME)
+      FileUtils.mkdir_p(target_dir) unless Dir.exist?(target_dir)
+      manual_dest = File.join(target_dir, "GoogleService-Info.plist")
+      FileUtils.cp(google_services_source, manual_dest)
+      UI.success("✅ GoogleService-Info.plist 수동 복사 완료: #{manual_dest}")
+      google_services_dest = manual_dest
+    end
+    
+    # Xcode 프로젝트에 파일이 포함되어 있는지 확인 및 추가
+    begin
+      require 'xcodeproj'
+      project = Xcodeproj::Project.open(XCODEPROJ)
+      
+      project.targets.each do |target|
+        next unless target.name == SCHEME
+        
+        # Copy Bundle Resources 빌드 단계 찾기
+        resources_phase = target.build_phases.find { |phase| phase.is_a?(Xcodeproj::Project::Object::PBXResourcesBuildPhase) }
+        
+        if resources_phase
+          # 파일 참조 찾기
+          file_ref = project.files.find { |f| f.path == "GoogleService-Info.plist" || f.path&.end_with?("GoogleService-Info.plist") }
+          
+          if file_ref
+            # 이미 포함되어 있는지 확인
+            already_added = resources_phase.files.any? { |bf| bf.file_ref == file_ref }
+            if already_added
+              UI.success("✅ GoogleService-Info.plist가 이미 Xcode 프로젝트의 Copy Bundle Resources에 포함되어 있습니다.")
+            else
+              UI.important("⚠️ GoogleService-Info.plist 파일 참조는 있지만 Copy Bundle Resources에 없습니다. 추가 중...")
+              resources_phase.add_file_reference(file_ref)
+              UI.success("✅ GoogleService-Info.plist를 Copy Bundle Resources에 추가했습니다.")
+            end
+          else
+            # 파일 참조가 없으면 생성
+            UI.important("⚠️ GoogleService-Info.plist 파일 참조가 없습니다. 생성 중...")
+            
+            # 상대 경로 계산
+            relative_path = Pathname.new(google_services_dest).relative_path_from(Pathname.new(IOS_DIR)).to_s
+            
+            # 파일 참조 생성
+            file_ref = project.main_group.find_subpath(SCHEME, true).new_reference(relative_path)
+            resources_phase.add_file_reference(file_ref)
+            UI.success("✅ GoogleService-Info.plist 파일 참조를 생성하고 Copy Bundle Resources에 추가했습니다.")
+          end
+          
+          project.save
+        else
+          UI.important("⚠️ Copy Bundle Resources 빌드 단계를 찾을 수 없습니다.")
+        end
+      end
+    rescue LoadError
+      UI.important("⚠️ xcodeproj gem 없음 - Xcode 프로젝트 확인 건너뜀")
+      UI.important("⚠️ GoogleService-Info.plist가 IPA 번들에 포함되는지 빌드 후 확인하세요.")
+    rescue => e
+      UI.important("⚠️ Xcode 프로젝트 확인 중 에러: #{e.message}")
+      UI.important("⚠️ GoogleService-Info.plist가 IPA 번들에 포함되는지 빌드 후 확인하세요.")
+    end
+    
+    UI.important("=" * 60)
+  rescue => e
+    UI.important("⚠️ GoogleService-Info.plist 확인 중 에러 발생: #{e.message}")
+    UI.important("⚠️ 계속 진행합니다...")
+  end
+end
+
+def setup_info_plist_att!
+  # Info.plist에 NSUserTrackingUsageDescription 확인 및 추가
+  UI.important("=" * 60)
+  UI.important("🔍 [ATT 설정 확인] Info.plist에 NSUserTrackingUsageDescription 확인 중...")
+  UI.important("=" * 60)
+  
+  info_plist_paths = Dir.glob(File.join(IOS_DIR, "**", "Info.plist")).select do |path|
+    !path.include?("Pods/") && !path.include?("DerivedData/") && !path.include?(".xcodeproj/")
+  end
+  
+  tracking_description = "이 정보를 사용하여 더 관련성 높은 맞춤형 광고를 제공합니다."
+  
+  if info_plist_paths.any?
+    info_plist_paths.each do |info_plist_path|
+      begin
+        UI.message("📝 Info.plist 확인 중: #{File.basename(File.dirname(info_plist_path))}/#{File.basename(info_plist_path)}")
+        
+        unless File.exist?(info_plist_path)
+          UI.important("⚠️ Info.plist 파일이 존재하지 않습니다: #{info_plist_path}")
+          next
+        end
+        
+        result = sh("/usr/libexec/PlistBuddy -c 'Print :NSUserTrackingUsageDescription' '#{info_plist_path}' 2>&1", log: false) rescue nil
+        
+        if result.nil? || result.to_s.strip.empty? || result.to_s.include?("Does Not Exist") || result.to_s.include?("Error")
+          UI.important("⚠️ NSUserTrackingUsageDescription이 없습니다. 추가 중...")
+          
+          add_result = sh("/usr/libexec/PlistBuddy -c 'Add :NSUserTrackingUsageDescription string \"#{tracking_description}\"' '#{info_plist_path}' 2>&1", log: false) rescue nil
+          
+          if add_result && !add_result.to_s.include?("Error")
+            verify_result = sh("/usr/libexec/PlistBuddy -c 'Print :NSUserTrackingUsageDescription' '#{info_plist_path}' 2>&1", log: false).strip rescue ""
+            if verify_result == tracking_description
+              UI.success("✅ NSUserTrackingUsageDescription 추가 완료: #{File.basename(info_plist_path)}")
+            else
+              UI.important("⚠️ NSUserTrackingUsageDescription 추가 확인 실패: #{File.basename(info_plist_path)}")
+            end
+          else
+            set_result = sh("/usr/libexec/PlistBuddy -c 'Set :NSUserTrackingUsageDescription \"#{tracking_description}\"' '#{info_plist_path}' 2>&1", log: false) rescue nil
+            if set_result && !set_result.to_s.include?("Error")
+              UI.success("✅ NSUserTrackingUsageDescription 설정 완료: #{File.basename(info_plist_path)}")
+            else
+              UI.important("⚠️ NSUserTrackingUsageDescription 추가/설정 실패: #{File.basename(info_plist_path)}")
+            end
+          end
+        else
+          UI.success("✅ NSUserTrackingUsageDescription이 이미 있습니다: #{File.basename(info_plist_path)}")
+          UI.message("   내용: #{result.strip}")
+        end
+      rescue => e
+        UI.important("⚠️ Info.plist 처리 중 에러 발생: #{File.basename(info_plist_path)} - #{e.message}")
+      end
+    end
+  else
+    UI.user_error!("❌ Info.plist 파일을 찾을 수 없습니다. NSUserTrackingUsageDescription을 추가할 수 없습니다.")
+  end
+  
+  # 최종 검증
+  missing_descriptions = []
+  info_plist_paths.each do |info_plist_path|
+    begin
+      next unless File.exist?(info_plist_path)
+      verify_result = sh("/usr/libexec/PlistBuddy -c 'Print :NSUserTrackingUsageDescription' '#{info_plist_path}' 2>&1", log: false) rescue nil
+      if verify_result.nil? || verify_result.to_s.strip.empty? || verify_result.to_s.include?("Does Not Exist") || verify_result.to_s.include?("Error")
+        missing_descriptions << File.basename(info_plist_path)
+      end
+    rescue => e
+      UI.important("⚠️ 검증 중 에러 발생: #{File.basename(info_plist_path)} - #{e.message}")
+      missing_descriptions << File.basename(info_plist_path)
+    end
+  end
+  
+  if missing_descriptions.any?
+    UI.important("⚠️ 다음 Info.plist 파일들에 NSUserTrackingUsageDescription이 없을 수 있습니다: #{missing_descriptions.join(', ')}")
+    UI.important("⚠️ Config Plugin이 자동으로 추가해야 하지만, 빌드 후 확인이 필요합니다.")
+  else
+    UI.success("✅ 모든 Info.plist 파일에 NSUserTrackingUsageDescription이 확인되었습니다.")
+  end
+  
+  UI.important("=" * 60)
+end
+
+def embed_provisioning_profile!(profile_path, scheme_name = SCHEME)
+  # 프로파일을 프로젝트에 임베드
+  if !profile_path.empty? && File.exist?(profile_path)
+    embedded_profile_path = File.join(IOS_DIR, scheme_name, "embedded.mobileprovision")
+    FileUtils.mkdir_p(File.dirname(embedded_profile_path))
+    FileUtils.cp(profile_path, embedded_profile_path)
+    UI.success("✅ 프로파일 임베드 완료: #{embedded_profile_path}")
+  end
+end
+
+def update_xcode_project_team!(team_id = TEAM_ID)
+  # Team ID 주입
+  update_project_team(
+    path: XCODEPROJ,
+    teamid: team_id
   )
 end
 
@@ -303,154 +678,10 @@ platform :ios do
     # 네이티브 프로젝트 재생성 (중요!)
     # expo prebuild를 실행하여 app.json의 플러그인 설정을 적용 (예: AppDelegate 수정)
     # ============================================
-    UI.important("=" * 60)
-    UI.important("🔧 [네이티브 빌드 재생성] expo prebuild 실행")
-    UI.important("=" * 60)
-    
-    begin
-      # 프로젝트 루트로 이동하여 expo prebuild 실행
-      UI.message("📁 프로젝트 루트: #{REPO_ROOT}")
-      UI.message("🔧 expo prebuild --clean --platform ios 실행 중...")
-      
-      # expo prebuild 실행 (--clean으로 기존 네이티브 파일 제거 후 재생성)
-      # 이때 플러그인이 실행되어 AppDelegate가 수정됩니다
-      # exit code가 0이 아니어도 경고일 수 있으므로 에러 처리 추가
-      begin
-        sh("cd #{REPO_ROOT} && npx expo prebuild --clean --platform ios")
-      rescue => prebuild_error
-        # expo prebuild가 실패했지만, 이미 ios 디렉토리가 생성되었을 수 있으므로 확인
-        if Dir.exist?(IOS_DIR)
-          UI.important("⚠️ expo prebuild가 에러로 종료되었지만 ios 디렉토리는 존재합니다.")
-          UI.important("⚠️ 에러: #{prebuild_error.message}")
-          UI.important("⚠️ 계속 진행합니다...")
-        else
-          raise prebuild_error
-        end
-      end
-      
-      UI.success("✅ [네이티브 빌드 재생성] expo prebuild 완료")
-      UI.message("   → 플러그인이 실행되어 AppDelegate가 수정되었습니다")
-      
-      # GoogleService-Info.plist 파일 확인
-      begin
-        UI.important("=" * 60)
-        UI.important("🔍 [Firebase 설정 확인] GoogleService-Info.plist 파일 확인 중...")
-        UI.important("=" * 60)
-        
-        google_services_source = File.join(REPO_ROOT, "GoogleService-Info.plist")
-        google_services_dest = Dir.glob(File.join(IOS_DIR, "**", "GoogleService-Info.plist")).select do |path|
-          !path.include?("Pods/") && !path.include?("DerivedData/")
-        end.first
-        
-        if File.exist?(google_services_source)
-          UI.success("✅ GoogleService-Info.plist 소스 파일 확인: #{File.basename(google_services_source)}")
-        else
-          UI.important("⚠️ GoogleService-Info.plist 소스 파일을 찾을 수 없습니다: #{google_services_source}")
-        end
-        
-        if google_services_dest && File.exist?(google_services_dest)
-          UI.success("✅ GoogleService-Info.plist가 ios 디렉토리에 포함되었습니다: #{File.basename(File.dirname(google_services_dest))}/#{File.basename(google_services_dest)}")
-        else
-          UI.important("⚠️ GoogleService-Info.plist가 ios 디렉토리에 아직 없을 수 있습니다.")
-          UI.important("⚠️ Config Plugin이 자동으로 복사하지만, 빌드 후 IPA에 포함되는지 확인하세요.")
-        end
-        
-        UI.important("=" * 60)
-      rescue => e
-        UI.important("⚠️ GoogleService-Info.plist 확인 중 에러 발생: #{e.message}")
-        UI.important("⚠️ 계속 진행합니다...")
-      end
-      
-      # Info.plist에 NSUserTrackingUsageDescription 확인 및 추가
-      UI.important("=" * 60)
-      UI.important("🔍 [ATT 설정 확인] Info.plist에 NSUserTrackingUsageDescription 확인 중...")
-      UI.important("=" * 60)
-      
-      info_plist_paths = Dir.glob(File.join(IOS_DIR, "**", "Info.plist")).select do |path|
-        # 메인 앱 타겟의 Info.plist만 (Pods 제외)
-        !path.include?("Pods/") && !path.include?("DerivedData/") && !path.include?(".xcodeproj/")
-      end
-      
-      tracking_description = "이 정보를 사용하여 더 관련성 높은 맞춤형 광고를 제공합니다."
-      
-      if info_plist_paths.any?
-        info_plist_paths.each do |info_plist_path|
-          begin
-            UI.message("📝 Info.plist 확인 중: #{File.basename(File.dirname(info_plist_path))}/#{File.basename(info_plist_path)}")
-            
-            # 파일 존재 여부 확인
-            unless File.exist?(info_plist_path)
-              UI.important("⚠️ Info.plist 파일이 존재하지 않습니다: #{info_plist_path}")
-              next
-            end
-            
-            # NSUserTrackingUsageDescription 확인
-            result = sh("/usr/libexec/PlistBuddy -c 'Print :NSUserTrackingUsageDescription' '#{info_plist_path}' 2>&1", log: false) rescue nil
-            
-            if result.nil? || result.to_s.strip.empty? || result.to_s.include?("Does Not Exist") || result.to_s.include?("Error")
-              UI.important("⚠️ NSUserTrackingUsageDescription이 없습니다. 추가 중...")
-              
-              # 키 추가 시도
-              add_result = sh("/usr/libexec/PlistBuddy -c 'Add :NSUserTrackingUsageDescription string \"#{tracking_description}\"' '#{info_plist_path}' 2>&1", log: false) rescue nil
-              
-              if add_result && !add_result.to_s.include?("Error")
-                # 확인
-                verify_result = sh("/usr/libexec/PlistBuddy -c 'Print :NSUserTrackingUsageDescription' '#{info_plist_path}' 2>&1", log: false).strip rescue ""
-                if verify_result == tracking_description
-                  UI.success("✅ NSUserTrackingUsageDescription 추가 완료: #{File.basename(info_plist_path)}")
-                else
-                  UI.important("⚠️ NSUserTrackingUsageDescription 추가 확인 실패: #{File.basename(info_plist_path)}")
-                end
-              else
-                # Add 실패 시 Set으로 시도
-                set_result = sh("/usr/libexec/PlistBuddy -c 'Set :NSUserTrackingUsageDescription \"#{tracking_description}\"' '#{info_plist_path}' 2>&1", log: false) rescue nil
-                if set_result && !set_result.to_s.include?("Error")
-                  UI.success("✅ NSUserTrackingUsageDescription 설정 완료: #{File.basename(info_plist_path)}")
-                else
-                  UI.important("⚠️ NSUserTrackingUsageDescription 추가/설정 실패: #{File.basename(info_plist_path)}")
-                end
-              end
-            else
-              UI.success("✅ NSUserTrackingUsageDescription이 이미 있습니다: #{File.basename(info_plist_path)}")
-              UI.message("   내용: #{result.strip}")
-            end
-          rescue => e
-            UI.important("⚠️ Info.plist 처리 중 에러 발생: #{File.basename(info_plist_path)} - #{e.message}")
-            # 에러가 발생해도 다음 파일로 계속 진행
-          end
-        end
-      else
-        UI.user_error!("❌ Info.plist 파일을 찾을 수 없습니다. NSUserTrackingUsageDescription을 추가할 수 없습니다.")
-      end
-      
-      # 최종 검증: 모든 Info.plist에 NSUserTrackingUsageDescription이 있는지 확인
-      missing_descriptions = []
-      info_plist_paths.each do |info_plist_path|
-        begin
-          next unless File.exist?(info_plist_path)
-          verify_result = sh("/usr/libexec/PlistBuddy -c 'Print :NSUserTrackingUsageDescription' '#{info_plist_path}' 2>&1", log: false) rescue nil
-          if verify_result.nil? || verify_result.to_s.strip.empty? || verify_result.to_s.include?("Does Not Exist") || verify_result.to_s.include?("Error")
-            missing_descriptions << File.basename(info_plist_path)
-          end
-        rescue => e
-          UI.important("⚠️ 검증 중 에러 발생: #{File.basename(info_plist_path)} - #{e.message}")
-          missing_descriptions << File.basename(info_plist_path)
-        end
-      end
-      
-      if missing_descriptions.any?
-        UI.important("⚠️ 다음 Info.plist 파일들에 NSUserTrackingUsageDescription이 없을 수 있습니다: #{missing_descriptions.join(', ')}")
-        UI.important("⚠️ Config Plugin이 자동으로 추가해야 하지만, 빌드 후 확인이 필요합니다.")
-      else
-        UI.success("✅ 모든 Info.plist 파일에 NSUserTrackingUsageDescription이 확인되었습니다.")
-      end
-      
-      UI.important("=" * 60)
-    rescue => e
-      UI.user_error!("❌ [네이티브 빌드 재생성 실패] expo prebuild 실행 실패: #{e.message}")
-    end
-    
-    UI.important("=" * 60)
+    expo_prebuild!(
+      check_firebase: true,
+      setup_att: true
+    )
 
     # Pods 재설치 (post_install 설정 적용)
     sh("cd #{IOS_DIR} && pod install")
@@ -465,10 +696,7 @@ platform :ios do
     # 빌드 번호 자동 증가는 아래에서 처리 (TestFlight 최신 빌드 번호 고려)
 
     # Team ID 주입 (타겟 자동서명 사용 안 함)
-    update_project_team(
-      path: XCODEPROJ,
-      teamid: TEAM_ID
-    )
+    update_xcode_project_team!
 
     # 🚀 아카이브 — specifier는 반드시 UUID로 고정 (공백 파싱 문제 방지)
     if pp_uuid.empty? || pp_uuid.length != 36
@@ -534,12 +762,7 @@ platform :ios do
     end
     
     # ✅ 프로파일을 프로젝트에 직접 임베드 (Xcode 인식 확실히 보장)
-    if !pp_path.empty? && File.exist?(pp_path)
-      embedded_profile_path = File.join(IOS_DIR, SCHEME, "embedded.mobileprovision")
-      FileUtils.mkdir_p(File.dirname(embedded_profile_path))
-      FileUtils.cp(pp_path, embedded_profile_path)
-      UI.success("✅ 프로파일 임베드 완료: #{embedded_profile_path}")
-    end
+    embed_provisioning_profile!(pp_path)
     
     # ✅ xcodeproj gem으로 프로젝트 파일 직접 수정 (가장 확실한 방법)
     begin
@@ -609,13 +832,13 @@ platform :ios do
     
     # ============================================
     # 빌드 번호 고정 설정 (TestFlight 업로드를 위해 필수)
-    # TODO: 다음 빌드에서는 8로 변경 필요
+    # TODO: 다음 빌드에서는 9로 변경 필요
     # ============================================
     UI.important("=" * 60)
-    UI.important("🔢 [빌드 번호 설정] 빌드 번호 고정: 7")
+    UI.important("🔢 [빌드 번호 설정] 빌드 번호 고정: 8")
     UI.important("=" * 60)
     
-    new_build_number = "7"
+    new_build_number = "8"
     
     begin
       require 'xcodeproj'
@@ -859,25 +1082,10 @@ platform :ios do
     # 네이티브 프로젝트 재생성 (중요!)
     # expo prebuild를 실행하여 app.json의 googleServicesFile 설정을 적용
     # ============================================
-    UI.important("=" * 60)
-    UI.important("🔧 [네이티브 빌드 재생성] expo prebuild 실행")
-    UI.important("=" * 60)
-    
-    begin
-      # 프로젝트 루트로 이동하여 expo prebuild 실행
-      UI.message("📁 프로젝트 루트: #{REPO_ROOT}")
-      UI.message("🔧 expo prebuild --clean --platform ios 실행 중...")
-      
-      # expo prebuild 실행 (--clean으로 기존 네이티브 파일 제거 후 재생성)
-      sh("cd #{REPO_ROOT} && npx expo prebuild --clean --platform ios")
-      
-      UI.success("✅ [네이티브 빌드 재생성] expo prebuild 완료")
-      UI.message("   → GoogleService-Info.plist가 ios/ 디렉토리에 포함되었는지 확인하세요")
-    rescue => e
-      UI.user_error!("❌ [네이티브 빌드 재생성 실패] expo prebuild 실행 실패: #{e.message}")
-    end
-    
-    UI.important("=" * 60)
+    expo_prebuild!(
+      check_firebase: false,
+      setup_att: false
+    )
 
     # Pods 재설치
     sh("cd #{IOS_DIR} && pod install")
@@ -1655,18 +1863,10 @@ platform :ios do
     end
 
     # Team ID 주입
-    update_project_team(
-      path: XCODEPROJ,
-      teamid: TEAM_ID
-    )
+    update_xcode_project_team!
 
     # 프로파일을 프로젝트에 임베드
-    if !profile_path.to_s.empty? && File.exist?(profile_path)
-      embedded_profile_path = File.join(IOS_DIR, SCHEME, "embedded.mobileprovision")
-      FileUtils.mkdir_p(File.dirname(embedded_profile_path))
-      FileUtils.cp(profile_path, embedded_profile_path)
-      UI.success("✅ 프로파일 임베드 완료: #{embedded_profile_path}")
-    end
+    embed_provisioning_profile!(profile_path)
 
     # Xcode 프로젝트에 Development 프로파일 설정 (Debug)
     begin

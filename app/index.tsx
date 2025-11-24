@@ -34,6 +34,7 @@ export default function App() {
     p1: 50,
   });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showTomorrowModal, setShowTomorrowModal] = useState(false);
   const [msg, setMsg] = useState('');
   const [rewardCompleted, setRewardCompleted] = useState(false);
@@ -124,6 +125,9 @@ export default function App() {
   }, [user, question, userChoice]);
 
   useEffect(() => {
+    let retryCount = 0;
+    const MAX_RETRIES = 5; // 최대 5회 재시도 (약 5초)
+    
     const init = async () => {
       if (!user) return;
       setLoading(true);
@@ -172,17 +176,30 @@ export default function App() {
         }
       } catch (error: any) {
         const errorMessage = error?.message || String(error);
-        if (errorMessage.includes("No Firebase App '[DEFAULT]'")) {
-          console.warn('[App] Firebase 초기화 대기 중, 잠시 후 재시도...');
-          // Firebase 초기화 대기 후 재시도
-          setTimeout(() => {
-            if (user) {
-              init();
-            }
-          }, 1000);
-          return; // setLoading(false) 호출 전에 return
+        if (errorMessage.includes("No Firebase App '[DEFAULT]'") || 
+            errorMessage.includes("Firebase") ||
+            errorMessage.includes("firestore")) {
+          retryCount++;
+          if (retryCount < MAX_RETRIES) {
+            console.warn(`[App] Firebase 초기화 대기 중, 잠시 후 재시도... (${retryCount}/${MAX_RETRIES})`);
+            // Firebase 초기화 대기 후 재시도
+            setTimeout(() => {
+              if (user) {
+                init();
+              }
+            }, 1000);
+            return; // setLoading(false) 호출 전에 return
+          } else {
+            console.error('[App] Firebase 초기화 실패: 최대 재시도 횟수 초과');
+            console.error('[App] Firebase가 초기화되지 않아 앱을 사용할 수 없습니다.');
+            console.error('[App] GoogleService-Info.plist가 앱 번들에 포함되었는지 확인하세요.');
+            setError('Firebase 연결에 실패했습니다.\n앱을 다시 시작해주세요.');
+            setLoading(false);
+            return;
+          }
         } else {
           console.error('[App] 초기화 실패:', error);
+          setError('데이터를 불러오는 중 오류가 발생했습니다.');
           // 에러가 발생해도 앱이 계속 실행되도록
         }
       }
@@ -388,7 +405,21 @@ export default function App() {
     return <LoadingScreen />;
   }
 
-  // 4. 메인 화면 로딩 및 에러 처리
+  // 4. 에러 화면 (Firebase 초기화 실패 등)
+  if (error) {
+    return <ErrorScreen message={error} onRetry={() => {
+      setError(null);
+      setLoading(true);
+      // 앱 재시작을 위해 user 상태를 초기화하고 다시 시도
+      if (user) {
+        // useEffect가 다시 실행되도록 user를 재설정
+        setUser(null);
+        setTimeout(() => setUser(user), 100);
+      }
+    }} />;
+  }
+
+  // 5. 메인 화면 로딩
   if (loading) return <LoadingScreen />;
   if (!question) return <ErrorScreen title="오늘의 질문을 불러오지 못했습니다." />;
 
