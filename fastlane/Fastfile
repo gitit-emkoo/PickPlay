@@ -900,13 +900,13 @@ platform :ios do
     
     # ============================================
     # 빌드 번호 고정 설정 (TestFlight 업로드를 위해 필수)
-    # TODO: 다음 빌드에서는 10으로 변경 필요
+    # TODO: 다음 빌드에서는 11로 변경 필요
     # ============================================
     UI.important("=" * 60)
-    UI.important("🔢 [빌드 번호 설정] 빌드 번호 고정: 9")
+    UI.important("🔢 [빌드 번호 설정] 빌드 번호 고정: 10")
     UI.important("=" * 60)
     
-    new_build_number = "9"
+    new_build_number = "10"
     
     begin
       require 'xcodeproj'
