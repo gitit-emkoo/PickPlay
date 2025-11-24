@@ -227,16 +227,22 @@ export default function RootLayout() {
         }
       }
 
-      // 2. ATT 권한 요청 (iOS) - 임시 비활성화
-      // ⚠️ 중요: NSUserTrackingUsageDescription이 Info.plist에 없으면 네이티브 크래시 발생
-      // Config Plugin이 expo prebuild 시 제대로 적용되지 않아 크래시 발생
-      // 일단 ATT 권한 요청을 완전히 제거하여 크래시 방지
-      // TODO: Info.plist에 NSUserTrackingUsageDescription이 확실히 추가된 후 다시 활성화
+      // 2. ATT 권한 요청 (iOS)
+      // Fastfile에서 expo prebuild 후 Info.plist에 NSUserTrackingUsageDescription을 확실히 추가함
+      // 이제 안전하게 ATT 권한 요청을 호출할 수 있습니다.
       if (Platform.OS === 'ios') {
-        console.log('⚠️ ATT: 권한 요청이 비활성화되어 있습니다.');
-        console.log('⚠️ ATT: Info.plist에 NSUserTrackingUsageDescription이 추가되면 다시 활성화하세요.');
-        // ATT 권한 요청 제거 - 크래시 방지
-        // const { status } = await Tracking.requestTrackingPermissionsAsync();
+        try {
+          console.log('🔍 ATT: 광고 추적 권한 요청 시작...');
+          const { status } = await Tracking.requestTrackingPermissionsAsync();
+          if (status === 'granted') {
+            console.log('✅ ATT: 광고 추적 허용됨');
+          } else {
+            console.log('❌ ATT: 광고 추적 거부됨');
+          }
+        } catch (error: any) {
+          console.error('⚠️ ATT 권한 요청 실패:', error?.message || error);
+          // 에러 발생 시에도 앱은 계속 실행
+        }
       }
       
       // 3. 광고 초기화

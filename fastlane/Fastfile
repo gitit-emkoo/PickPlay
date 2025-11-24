@@ -319,6 +319,47 @@ platform :ios do
       UI.success("✅ [네이티브 빌드 재생성] expo prebuild 완료")
       UI.message("   → 플러그인이 실행되어 AppDelegate가 수정되었습니다")
       UI.message("   → GoogleService-Info.plist가 ios/ 디렉토리에 포함되었는지 확인하세요")
+      
+      # Info.plist에 NSUserTrackingUsageDescription 확인 및 추가
+      UI.important("=" * 60)
+      UI.important("🔍 [ATT 설정 확인] Info.plist에 NSUserTrackingUsageDescription 확인 중...")
+      UI.important("=" * 60)
+      
+      info_plist_paths = Dir.glob(File.join(IOS_DIR, "**", "Info.plist")).select do |path|
+        # 메인 앱 타겟의 Info.plist만 (Pods 제외)
+        !path.include?("Pods/") && !path.include?("DerivedData/") && !path.include?(".xcodeproj/")
+      end
+      
+      tracking_description = "이 정보를 사용하여 더 관련성 높은 맞춤형 광고를 제공합니다."
+      
+      if info_plist_paths.any?
+        info_plist_paths.each do |info_plist_path|
+          UI.message("📝 Info.plist 확인 중: #{File.basename(File.dirname(info_plist_path))}/#{File.basename(info_plist_path)}")
+          
+          # NSUserTrackingUsageDescription 확인
+          result = sh("/usr/libexec/PlistBuddy -c 'Print :NSUserTrackingUsageDescription' '#{info_plist_path}' 2>&1", log: false)
+          
+          if result.to_s.strip.empty? || result.to_s.include?("Does Not Exist")
+            UI.important("⚠️ NSUserTrackingUsageDescription이 없습니다. 추가 중...")
+            sh("/usr/libexec/PlistBuddy -c 'Add :NSUserTrackingUsageDescription string \"#{tracking_description}\"' '#{info_plist_path}' 2>&1")
+            
+            # 확인
+            verify_result = sh("/usr/libexec/PlistBuddy -c 'Print :NSUserTrackingUsageDescription' '#{info_plist_path}' 2>&1", log: false).strip
+            if verify_result == tracking_description
+              UI.success("✅ NSUserTrackingUsageDescription 추가 완료: #{File.basename(info_plist_path)}")
+            else
+              UI.user_error!("❌ NSUserTrackingUsageDescription 추가 실패: #{File.basename(info_plist_path)}")
+            end
+          else
+            UI.success("✅ NSUserTrackingUsageDescription이 이미 있습니다: #{File.basename(info_plist_path)}")
+            UI.message("   내용: #{result.strip}")
+          end
+        end
+      else
+        UI.important("⚠️ Info.plist 파일을 찾을 수 없습니다.")
+      end
+      
+      UI.important("=" * 60)
     rescue => e
       UI.user_error!("❌ [네이티브 빌드 재생성 실패] expo prebuild 실행 실패: #{e.message}")
     end
