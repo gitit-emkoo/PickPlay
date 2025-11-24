@@ -228,18 +228,35 @@ export default function RootLayout() {
       }
 
       // 2. ATT 권한 요청 (iOS)
+      // ⚠️ 중요: NSUserTrackingUsageDescription이 Info.plist에 없으면 네이티브 크래시 발생
+      // Config Plugin (with-tracking-transparency)이 expo prebuild 시 적용되어야 함
+      // 일단 ATT 권한 요청을 지연시켜서 다른 초기화가 완료된 후 호출
       if (Platform.OS === 'ios') {
-        try {
-          const { status } = await Tracking.requestTrackingPermissionsAsync();
-          if (status === 'granted') {
-            console.log('✅ ATT: 광고 추적 허용됨');
-          } else {
-            console.log('❌ ATT: 광고 추적 거부됨');
+        // ATT 권한 요청을 비동기로 지연 실행 (앱 초기화 완료 후)
+        // 네이티브 모듈이 완전히 로드될 때까지 충분히 대기
+        setTimeout(async () => {
+          try {
+            // 추가 대기 시간 (네이티브 모듈 완전 초기화 대기)
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            console.log('🔍 ATT: 권한 요청 시작...');
+            console.log('💡 참고: NSUserTrackingUsageDescription이 Info.plist에 있어야 합니다.');
+            console.log('💡 참고: Config Plugin (with-tracking-transparency)이 expo prebuild 시 적용되어야 합니다.');
+            
+            const { status } = await Tracking.requestTrackingPermissionsAsync();
+            if (status === 'granted') {
+              console.log('✅ ATT: 광고 추적 허용됨');
+            } else {
+              console.log('❌ ATT: 광고 추적 거부됨');
+            }
+          } catch (error: any) {
+            console.error('⚠️ ATT 권한 요청 실패:', error?.message || error);
+            console.error('⚠️ ATT: 네이티브 크래시가 발생했을 수 있습니다.');
+            console.error('⚠️ ATT: Info.plist에 NSUserTrackingUsageDescription이 있는지 확인하세요.');
+            // 크래시 방지: 에러 발생 시에도 앱은 계속 실행하려고 하지만,
+            // 네이티브 크래시는 이미 발생했을 수 있으므로 여기서는 로그만 남김
           }
-        } catch (error: any) {
-          console.error('⚠️ ATT 권한 요청 실패:', error?.message || error);
-          // 크래시 방지: 에러 발생 시에도 앱은 계속 실행
-        }
+        }, 3000); // 3초 후 실행 (앱 초기화 완료 후)
       }
       
       // 3. 광고 초기화
