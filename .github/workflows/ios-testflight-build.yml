@@ -156,7 +156,7 @@ jobs:
           path: |
             ${{ env.PROJ_DIR }}/ios/Pods
             ${{ env.PROJ_DIR }}/ios/Podfile.lock
-          key: ${{ runner.os }}-pods-${{ hashFiles(format('{0}/package.json', env.PROJ_DIR)) }}-${{ hashFiles(format('{0}/ios/Podfile', env.PROJ_DIR)) }}
+          key: ${{ runner.os }}-pods-${{ hashFiles('**/package.json') }}-${{ hashFiles('**/Podfile') }}
           restore-keys: |
             ${{ runner.os }}-pods-
 
