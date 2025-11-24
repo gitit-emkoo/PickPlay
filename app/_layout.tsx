@@ -157,7 +157,10 @@ const initializeFirebaseIfNeeded = async () => {
         console.error('[Firebase Init]   1. IPA 파일에 GoogleService-Info.plist가 포함되어 있는지');
         console.error('[Firebase Init]   2. Xcode 프로젝트의 "Copy Bundle Resources"에 파일이 있는지');
         console.error('[Firebase Init]   3. 네이티브 빌드가 최신 버전인지');
-        throw new Error('Firebase 초기화 후에도 앱이 등록되지 않음 - GoogleService-Info.plist가 번들에 포함되지 않았을 가능성');
+        console.error('[Firebase Init] ⚠️ Firebase 초기화 실패했지만 앱은 계속 실행합니다.');
+        // 크래시 방지: 에러를 throw하지 않고 false 반환 (앱은 계속 실행)
+        // Firebase 초기화 실패 시에도 앱은 동작해야 함 (네트워크 문제 등으로 일시적일 수 있음)
+        return false;
       }
     } catch (initError: any) {
       console.error('[Firebase Init] ❌ JavaScript 레벨 초기화도 실패:', initError?.message || initError);
