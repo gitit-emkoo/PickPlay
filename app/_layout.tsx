@@ -229,10 +229,13 @@ export default function RootLayout() {
 
       // 2. ATT 권한 요청 (iOS)
       // Fastfile에서 expo prebuild 후 Info.plist에 NSUserTrackingUsageDescription을 확실히 추가함
-      // 이제 안전하게 ATT 권한 요청을 호출할 수 있습니다.
+      // 추가 안전장치: 에러 발생 시에도 앱이 크래시하지 않도록 try-catch 처리
       if (Platform.OS === 'ios') {
         try {
           console.log('🔍 ATT: 광고 추적 권한 요청 시작...');
+          // 약간의 지연을 두어 네이티브 모듈이 완전히 초기화되도록 함
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
           const { status } = await Tracking.requestTrackingPermissionsAsync();
           if (status === 'granted') {
             console.log('✅ ATT: 광고 추적 허용됨');
@@ -241,7 +244,9 @@ export default function RootLayout() {
           }
         } catch (error: any) {
           console.error('⚠️ ATT 권한 요청 실패:', error?.message || error);
-          // 에러 발생 시에도 앱은 계속 실행
+          console.error('⚠️ ATT: Info.plist에 NSUserTrackingUsageDescription이 없을 수 있습니다.');
+          // 에러 발생 시에도 앱은 계속 실행 (네이티브 크래시는 이미 발생했을 수 있음)
+          // 하지만 Fastfile에서 검증을 강화했으므로 이 경우는 드물어야 함
         }
       }
       

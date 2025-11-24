@@ -356,7 +356,22 @@ platform :ios do
           end
         end
       else
-        UI.important("⚠️ Info.plist 파일을 찾을 수 없습니다.")
+        UI.user_error!("❌ Info.plist 파일을 찾을 수 없습니다. NSUserTrackingUsageDescription을 추가할 수 없습니다.")
+      end
+      
+      # 최종 검증: 모든 Info.plist에 NSUserTrackingUsageDescription이 있는지 확인
+      missing_descriptions = []
+      info_plist_paths.each do |info_plist_path|
+        verify_result = sh("/usr/libexec/PlistBuddy -c 'Print :NSUserTrackingUsageDescription' '#{info_plist_path}' 2>&1", log: false)
+        if verify_result.to_s.strip.empty? || verify_result.to_s.include?("Does Not Exist")
+          missing_descriptions << File.basename(info_plist_path)
+        end
+      end
+      
+      if missing_descriptions.any?
+        UI.user_error!("❌ 다음 Info.plist 파일들에 NSUserTrackingUsageDescription이 없습니다: #{missing_descriptions.join(', ')}")
+      else
+        UI.success("✅ 모든 Info.plist 파일에 NSUserTrackingUsageDescription이 확인되었습니다.")
       end
       
       UI.important("=" * 60)
@@ -523,13 +538,13 @@ platform :ios do
     
     # ============================================
     # 빌드 번호 고정 설정 (TestFlight 업로드를 위해 필수)
-    # TODO: 다음 빌드에서는 7로 변경 필요
+    # TODO: 다음 빌드에서는 8로 변경 필요
     # ============================================
     UI.important("=" * 60)
-    UI.important("🔢 [빌드 번호 설정] 빌드 번호 고정: 6")
+    UI.important("🔢 [빌드 번호 설정] 빌드 번호 고정: 7")
     UI.important("=" * 60)
     
-    new_build_number = "6"
+    new_build_number = "7"
     
     begin
       require 'xcodeproj'
