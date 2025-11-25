@@ -316,8 +316,16 @@ def ensure_app_delegate_firebase_config!(app_delegate_path)
     snippet = <<~SWIFT
 
         // MARK: Firebase Initialization (Fastlane patch)
+        // React Native Firebase는 네이티브에서 GoogleService-Info.plist를 자동으로 읽어야 합니다
+        // 파일이 번들에 없으면 configure()가 실패할 수 있으므로 에러 처리를 추가합니다
         if FirebaseApp.app() == nil {
-          FirebaseApp.configure()
+          do {
+            FirebaseApp.configure()
+            print("✅ [Firebase] Firebase 초기화 성공")
+          } catch {
+            print("❌ [Firebase] Firebase 초기화 실패: \\(error.localizedDescription)")
+            print("💡 [Firebase] GoogleService-Info.plist가 앱 번들에 포함되어 있는지 확인하세요")
+          }
         }
 
     SWIFT
@@ -331,8 +339,16 @@ def ensure_app_delegate_firebase_config!(app_delegate_path)
     snippet = <<~OBJC
 
       // MARK: - Firebase Initialization (Fastlane patch)
+      // React Native Firebase는 네이티브에서 GoogleService-Info.plist를 자동으로 읽어야 합니다
+      // 파일이 번들에 없으면 configure가 실패할 수 있으므로 에러 처리를 추가합니다
       if ([FIRApp defaultApp] == nil) {
-        [FIRApp configure];
+        @try {
+          [FIRApp configure];
+          NSLog(@"✅ [Firebase] Firebase 초기화 성공");
+        } @catch (NSException *exception) {
+          NSLog(@"❌ [Firebase] Firebase 초기화 실패: %@", exception.reason);
+          NSLog(@"💡 [Firebase] GoogleService-Info.plist가 앱 번들에 포함되어 있는지 확인하세요");
+        }
       }
 
     OBJC
@@ -900,13 +916,13 @@ platform :ios do
     
     # ============================================
     # 빌드 번호 고정 설정 (TestFlight 업로드를 위해 필수)
-    # TODO: 다음 빌드에서는 11로 변경 필요
+    # TODO: 다음 빌드에서는 12로 변경 필요
     # ============================================
     UI.important("=" * 60)
-    UI.important("🔢 [빌드 번호 설정] 빌드 번호 고정: 10")
+    UI.important("🔢 [빌드 번호 설정] 빌드 번호 고정: 11")
     UI.important("=" * 60)
     
-    new_build_number = "10"
+    new_build_number = "11"
     
     begin
       require 'xcodeproj'
@@ -1005,6 +1021,38 @@ platform :ios do
         provisioningProfiles: export_profiles
       }
     )
+    
+    # 빌드 후 검증: 아카이브 내부에 GoogleService-Info.plist가 포함되어 있는지 확인
+    begin
+      archive_path = lane_context[SharedValues::XCODEBUILD_ARCHIVE]
+      if archive_path && Dir.exist?(archive_path)
+        UI.important("=" * 60)
+        UI.important("🔍 [빌드 후 검증] 아카이브 내부 파일 확인 중...")
+        UI.important("=" * 60)
+        
+        # .app 번들 찾기
+        app_bundles = Dir.glob(File.join(archive_path, "**", "*.app"))
+        if app_bundles.any?
+          app_bundle = app_bundles.first
+          google_services_path = File.join(app_bundle, "GoogleService-Info.plist")
+          
+          if File.exist?(google_services_path)
+            UI.success("✅ GoogleService-Info.plist가 앱 번들에 포함되어 있습니다: #{File.basename(app_bundle)}/GoogleService-Info.plist")
+          else
+            UI.user_error!("❌ GoogleService-Info.plist가 앱 번들에 포함되지 않았습니다!")
+            UI.important("💡 Xcode 프로젝트의 'Copy Bundle Resources'에 파일이 추가되었는지 확인하세요.")
+            UI.important("💡 파일 경로: #{google_services_path}")
+          end
+        else
+          UI.important("⚠️ .app 번들을 찾을 수 없습니다: #{archive_path}")
+        end
+        
+        UI.important("=" * 60)
+      end
+    rescue => e
+      UI.important("⚠️ 빌드 후 검증 중 에러 발생: #{e.message}")
+      UI.important("⚠️ 계속 진행합니다...")
+    end
 
     # TestFlight 업로드
     upload_to_testflight(

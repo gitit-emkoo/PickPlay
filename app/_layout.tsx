@@ -102,14 +102,22 @@ const initializeFirebaseIfNeeded = async () => {
           messagingSenderId: '981215713715',
           appId: '1:981215713715:android:820a3f60db5067369c53c6',
         },
-        default: {},
       });
+      
+      // 플랫폼이 iOS나 Android가 아니면 에러
+      if (!firebaseConfig || !firebaseConfig.appId) {
+        throw new Error('지원되지 않는 플랫폼입니다. iOS 또는 Android에서만 실행할 수 있습니다.');
+      }
       
       // 이미 초기화된 앱이 있는지 다시 확인
       const existingApps = getApps();
       if (existingApps.length === 0) {
         console.log('[Firebase Init] initializeApp() 호출 중...');
-        const app = initializeApp(firebaseConfig);
+        // React Native Firebase의 initializeApp은 동기 함수이지만, 타입 정의상 Promise로 추론될 수 있음
+        // 실제로는 동기이므로 결과를 바로 사용
+        const appResult = initializeApp(firebaseConfig);
+        // Promise인지 확인하고 처리
+        const app = appResult instanceof Promise ? await appResult : appResult;
         
         if (!app) {
           console.error('[Firebase Init] ❌ initializeApp()이 undefined를 반환했습니다.');
@@ -118,9 +126,9 @@ const initializeFirebaseIfNeeded = async () => {
         }
         
         console.log('[Firebase Init] initializeApp() 반환값:', {
-          name: app?.name,
-          options: app?.options,
-          app: app ? '존재함' : 'undefined'
+          name: app.name || 'unknown',
+          options: app.options ? '있음' : '없음',
+          app: '존재함'
         });
         
         // 앱이 반환되었더라도 네이티브 모듈이 제대로 초기화되었는지 확인
@@ -206,7 +214,14 @@ export default function RootLayout() {
       const initResult = await initializeFirebaseIfNeeded();
       if (!initResult) {
         pushStatusLog('Firebase 네이티브 초기화 실패');
-        setFirebaseErrorMessage('Firebase 초기화에 실패했습니다. 네트워크 상태 또는 설치를 확인해주세요.');
+        setFirebaseErrorMessage(
+          'Firebase 초기화에 실패했습니다.\n\n' +
+          '가능한 원인:\n' +
+          '• GoogleService-Info.plist가 앱 번들에 포함되지 않았을 수 있습니다\n' +
+          '• 네이티브 모듈이 제대로 링크되지 않았을 수 있습니다\n' +
+          '• 네트워크 연결 문제일 수 있습니다\n\n' +
+          '개발자 콘솔 로그를 확인하거나 앱을 재시작해보세요.'
+        );
         setFirebaseStatus('error');
         return;
       }
