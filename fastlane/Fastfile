@@ -919,10 +919,10 @@ platform :ios do
     # TODO: 다음 빌드에서는 12로 변경 필요
     # ============================================
     UI.important("=" * 60)
-    UI.important("🔢 [빌드 번호 설정] 빌드 번호 고정: 11")
+    UI.important("🔢 [빌드 번호 설정] 빌드 번호 고정: 12")
     UI.important("=" * 60)
     
-    new_build_number = "11"
+    new_build_number = "12"
     
     begin
       require 'xcodeproj'
