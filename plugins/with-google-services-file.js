@@ -75,11 +75,33 @@ const withGoogleServicesFile = (config) => {
   // React Native Firebase는 네이티브에서 자동으로 GoogleService-Info.plist를 읽어서 초기화합니다.
   // 파일이 앱 번들에 포함되어 있으면 FirebaseApp.configure()가 자동으로 호출됩니다.
   // 하지만 명시적으로 초기화를 보장하기 위해 여기에 코드를 추가합니다.
-  if ([FIRApp defaultApp] == nil) {
-    [FIRApp configure];
-    RCTLogInfo(@"[PickPlay][Firebase] Firebase initialized in AppDelegate");
+  RCTLogInfo(@"[PickPlay][Firebase] AppDelegate에서 Firebase 초기화 시작...");
+  NSBundle *mainBundle = [NSBundle mainBundle];
+  NSString *googleServicesPath = [mainBundle pathForResource:@"GoogleService-Info" ofType:@"plist"];
+  if (googleServicesPath) {
+    RCTLogInfo(@"[PickPlay][Firebase] GoogleService-Info.plist 경로: %@", googleServicesPath);
   } else {
-    RCTLogInfo(@"[PickPlay][Firebase] Firebase already initialized");
+    RCTLogError(@"[PickPlay][Firebase] ❌ GoogleService-Info.plist를 번들에서 찾을 수 없습니다!");
+  }
+  
+  if ([FIRApp defaultApp] == nil) {
+    RCTLogInfo(@"[PickPlay][Firebase] FIRApp defaultApp이 nil이므로 configure() 호출...");
+    @try {
+      [FIRApp configure];
+      FIRApp *defaultApp = [FIRApp defaultApp];
+      if (defaultApp) {
+        RCTLogInfo(@"[PickPlay][Firebase] ✅ Firebase 초기화 성공: %@", defaultApp.name);
+      } else {
+        RCTLogError(@"[PickPlay][Firebase] ❌ Firebase configure() 후에도 defaultApp이 nil입니다!");
+      }
+    } @catch (NSException *exception) {
+      RCTLogError(@"[PickPlay][Firebase] ❌ Firebase 초기화 실패: %@", exception.reason);
+      RCTLogError(@"[PickPlay][Firebase] ❌ 예외 이름: %@", exception.name);
+      RCTLogError(@"[PickPlay][Firebase] 💡 GoogleService-Info.plist가 앱 번들에 포함되어 있는지 확인하세요");
+    }
+  } else {
+    FIRApp *existingApp = [FIRApp defaultApp];
+    RCTLogInfo(@"[PickPlay][Firebase] ✅ Firebase가 이미 초기화되어 있습니다: %@", existingApp.name);
   }
 `;
       
