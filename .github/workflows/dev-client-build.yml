@@ -37,12 +37,35 @@ jobs:
         with:
           node-version: 18
           cache: npm
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: "**/package-lock.json"
+
+      - name: Detect project directory
+        id: detect_dir
+        run: |
+          if [ -d "pickplay/pickplay" ]; then
+            PROJ_DIR="pickplay/pickplay"
+          elif [ -d "pickplay" ]; then
+            PROJ_DIR="pickplay"
+          else
+            PROJ_DIR="."
+          fi
+          echo "PROJ_DIR=$PROJ_DIR" >> $GITHUB_ENV
+          echo "project_dir=$PROJ_DIR" >> $GITHUB_OUTPUT
+          echo "✅ Project directory detected: $PROJ_DIR"
+
+      - name: Write App Store Connect API key to file
+        env:
+          ASC_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+        run: |
+          KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
+          echo "$ASC_P8" > "$KEY_PATH"
+          echo "APP_STORE_CONNECT_API_KEY_PATH=$KEY_PATH" >> $GITHUB_ENV
 
       - name: Install JavaScript dependencies
         run: |
-          cd pickplay
-          npm ci --legacy-peer-deps
+          cd "$PROJ_DIR"
+          npm ci --include=dev --legacy-peer-deps
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -52,8 +75,13 @@ jobs:
 
       - name: Install fastlane and CocoaPods
         run: |
-          gem install fastlane -NV
-          sudo gem install cocoapods -NV
+          cd "$PROJ_DIR"
+          if [ -f Gemfile ]; then
+            bundle install
+          else
+            gem install fastlane -NV
+            sudo gem install cocoapods -NV
+          fi
           pod --version
 
       - name: Select Xcode version
@@ -61,14 +89,14 @@ jobs:
 
       - name: Build iOS Dev Client (fastlane ios dev_client)
         run: |
-          cd pickplay
+          cd "$PROJ_DIR"
           fastlane ios dev_client
 
       - name: Upload Dev Client IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: pickplay-dev-client-ipa
-          path: pickplay/*.ipa
+          path: ${{ env.PROJ_DIR }}/*.ipa
           retention-days: 7
           if-no-files-found: error
 
