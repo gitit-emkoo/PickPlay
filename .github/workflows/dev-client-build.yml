@@ -1,0 +1,71 @@
+name: iOS Dev Client Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: '선택 사항: 체크아웃할 브랜치/태그 (비워두면 기본)'
+        required: false
+
+jobs:
+  build-dev-client:
+    runs-on: macos-14
+    timeout-minutes: 90
+
+    env:
+      APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+      APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+      APP_STORE_CONNECT_API_KEY_PATH: ${{ secrets.APP_STORE_CONNECT_API_KEY_PATH }}
+      MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+      MATCH_GIT_USERNAME: ${{ secrets.MATCH_GIT_USERNAME }}
+      MATCH_GIT_PASSWORD: ${{ secrets.MATCH_GIT_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      KEYCHAIN_PASSWORD: actions
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+          cache-dependency-path: pickplay/package-lock.json
+
+      - name: Install JavaScript dependencies
+        run: |
+          cd pickplay
+          npm ci --legacy-peer-deps
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: false
+
+      - name: Install fastlane and CocoaPods
+        run: |
+          gem install fastlane -NV
+          sudo gem install cocoapods -NV
+          pod --version
+
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app
+
+      - name: Build iOS Dev Client (fastlane ios dev_client)
+        run: |
+          cd pickplay
+          fastlane ios dev_client
+
+      - name: Upload Dev Client IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pickplay-dev-client-ipa
+          path: pickplay/*.ipa
+          retention-days: 7
+          if-no-files-found: error
+
