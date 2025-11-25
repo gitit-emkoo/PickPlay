@@ -6,6 +6,9 @@ on:
       ref:
         description: '선택 사항: 체크아웃할 브랜치/태그 (비워두면 기본)'
         required: false
+  push:
+    branches:
+      - release
 
 jobs:
   build-dev-client:
