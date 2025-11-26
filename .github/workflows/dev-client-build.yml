@@ -45,42 +45,6 @@ jobs:
           echo "$ASC_P8" > "$KEY_PATH"
           echo "APP_STORE_CONNECT_API_KEY_PATH=$KEY_PATH" >> $GITHUB_ENV
 
-      # 프로젝트 디렉토리 확인
-      - name: Detect project dir
-        id: detect_dir
-        run: |
-          if [ -d "pickplay/pickplay" ]; then
-            PROJ_DIR="pickplay/pickplay"
-          elif [ -d "pickplay" ]; then
-            PROJ_DIR="pickplay"
-          else
-            PROJ_DIR="."
-          fi
-          echo "PROJ_DIR=$PROJ_DIR" >> $GITHUB_ENV
-          echo "project_dir=$PROJ_DIR" >> $GITHUB_OUTPUT
-          echo "✅ Detected project directory: $PROJ_DIR"
-
-      - name: Setup Ruby & tools
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: "3.2"
-          bundler-cache: true
-
-      # 프로젝트 디렉토리 확인
-      - name: Detect project dir
-        id: detect_dir
-        run: |
-          if [ -d "pickplay/pickplay" ]; then
-            PROJ_DIR="pickplay/pickplay"
-          elif [ -d "pickplay" ]; then
-            PROJ_DIR="pickplay"
-          else
-            PROJ_DIR="."
-          fi
-          echo "PROJ_DIR=$PROJ_DIR" >> $GITHUB_ENV
-          echo "project_dir=$PROJ_DIR" >> $GITHUB_OUTPUT
-          echo "✅ Detected project directory: $PROJ_DIR"
-
       - name: Setup Ruby & tools
         uses: ruby/setup-ruby@v1
         with:
@@ -95,6 +59,21 @@ jobs:
           else
             gem install fastlane cocoapods xcodeproj --no-document
           fi
+
+      # 프로젝트 디렉토리 확인
+      - name: Detect project dir
+        id: detect_dir
+        run: |
+          if [ -d "pickplay/pickplay" ]; then
+            PROJ_DIR="pickplay/pickplay"
+          elif [ -d "pickplay" ]; then
+            PROJ_DIR="pickplay"
+          else
+            PROJ_DIR="."
+          fi
+          echo "PROJ_DIR=$PROJ_DIR" >> $GITHUB_ENV
+          echo "project_dir=$PROJ_DIR" >> $GITHUB_OUTPUT
+          echo "✅ Detected project directory: $PROJ_DIR"
 
       # Clean caches (clean build)
       - name: Clean caches (clean build)
