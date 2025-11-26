@@ -1119,6 +1119,13 @@ platform :ios do
   lane :dev_client do
     prepare_ci!
 
+    # API 키 파일 경로 확인 (app_store_connect_api_key 호출 전에 확인)
+    api_key_path = ENV["APP_STORE_CONNECT_API_KEY_PATH"]
+    unless api_key_path && File.exist?(api_key_path)
+      UI.user_error!("❌ App Store Connect API 키 파일을 찾을 수 없습니다: #{api_key_path || '(없음)'}")
+    end
+    UI.success("✅ App Store Connect API 키 파일 확인: #{api_key_path}")
+
     api_key = app_store_connect_api_key(
       key_id:       ENV["APP_STORE_CONNECT_API_KEY_ID"],
       issuer_id:    ENV["APP_STORE_CONNECT_API_ISSUER_ID"],
@@ -1128,9 +1135,6 @@ platform :ios do
     )
 
     UI.message("🔧 Dev Client 빌드 시작 (Debug, Internal Distribution)")
-
-    # GitHub Actions에서 설정한 api_key_path가 남아 있으면 match와 충돌하므로 제거
-    ENV.delete("APP_STORE_CONNECT_API_KEY_PATH")
 
     # CI 환경에서 match의 임시 디렉토리 정리 (이전 빌드의 잔여물 방지)
     # match는 ~/.match 디렉토리를 사용하므로 정리
