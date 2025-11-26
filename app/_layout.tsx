@@ -3,8 +3,9 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import 'react-native-reanimated';
-import { Platform, useColorScheme } from 'react-native';
+import { Platform, useColorScheme, View, Text, TouchableOpacity, Modal, ScrollView, StyleSheet } from 'react-native';
 import * as Tracking from 'expo-tracking-transparency';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -22,6 +23,7 @@ SplashScreen.preventAutoHideAsync();
 
 // Firebase 초기화 (네이티브 모듈이 자동 초기화하지 못하는 경우를 대비)
 let firebaseInitialized = false;
+const DEBUG_LOG_LIMIT = 50;
 const initializeFirebaseIfNeeded = async () => {
   if (firebaseInitialized) return true;
   
@@ -93,6 +95,7 @@ const initializeFirebaseIfNeeded = async () => {
           storageBucket: 'today-balance-fa0a5.firebasestorage.app',
           messagingSenderId: '981215713715',
           appId: '1:981215713715:ios:9c812d5a30fea59b9c53c6',
+          databaseURL: 'https://today-balance-fa0a5-default-rtdb.asia-southeast1.firebasedatabase.app',
         },
         android: {
           // Android용 Firebase 설정 (google-services.json에서 추출)
@@ -101,6 +104,7 @@ const initializeFirebaseIfNeeded = async () => {
           storageBucket: 'today-balance-fa0a5.firebasestorage.app',
           messagingSenderId: '981215713715',
           appId: '1:981215713715:android:820a3f60db5067369c53c6',
+          databaseURL: 'https://today-balance-fa0a5-default-rtdb.asia-southeast1.firebasedatabase.app',
         },
       });
       
@@ -194,17 +198,38 @@ export default function RootLayout() {
   const [firebaseStatusLog, setFirebaseStatusLog] = useState<string[]>([]);
   const [firebaseErrorMessage, setFirebaseErrorMessage] = useState<string>('Firebase 초기화 중입니다...');
   const [initToken, setInitToken] = useState(0);
+  const [isLogViewerVisible, setIsLogViewerVisible] = useState(false);
 
   const pushStatusLog = (msg: string) => {
     console.log(`[InitStatus] ${msg}`);
     setFirebaseStatusLog((prev) => {
       const next = [...prev, msg];
-      if (next.length > 6) {
-        return next.slice(next.length - 6);
+      if (next.length > DEBUG_LOG_LIMIT) {
+        next.shift();
       }
       return next;
     });
   };
+  const recentLogsForScreen = firebaseStatusLog.slice(-6);
+  const renderWithLogControls = (content: ReactNode) => (
+    <View style={{ flex: 1 }}>
+      {content}
+      <View pointerEvents="box-none" style={styles.logButtonContainer}>
+        <TouchableOpacity
+          onPress={() => setIsLogViewerVisible(true)}
+          style={styles.logButton}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.logButtonText}>로그 보기</Text>
+        </TouchableOpacity>
+      </View>
+      <LogViewerModal
+        visible={isLogViewerVisible}
+        logs={firebaseStatusLog}
+        onClose={() => setIsLogViewerVisible(false)}
+      />
+    </View>
+  );
 
   useEffect(() => {
     (async () => {
@@ -331,11 +356,13 @@ export default function RootLayout() {
   }
 
   if (firebaseStatus === 'pending') {
-    return <LoadingScreen message="Firebase 초기화 중입니다..." details={firebaseStatusLog} />;
+    return renderWithLogControls(
+      <LoadingScreen message="Firebase 초기화 중입니다..." details={recentLogsForScreen} />
+    );
   }
 
   if (firebaseStatus === 'error') {
-    return (
+    return renderWithLogControls(
       <ErrorScreen
         title="Firebase 초기화 실패"
         subtitle="서비스에 연결하지 못했습니다."
@@ -351,8 +378,8 @@ export default function RootLayout() {
     );
   }
 
-  return (
-    <SafeAreaProvider>
+  return renderWithLogControls(
+    <SafeAreaProvider style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }} edges={['top','bottom']}>
         <StatusBar style="dark" />
         <NotificationBootstrap />
@@ -363,4 +390,110 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 }
+
+interface LogViewerModalProps {
+  visible: boolean;
+  logs: string[];
+  onClose: () => void;
+}
+
+function LogViewerModal({ visible, logs, onClose }: LogViewerModalProps) {
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={styles.modalBackdrop}>
+        <View style={styles.modalContainer}>
+          <Text style={styles.modalTitle}>Firebase 상태 로그</Text>
+          <ScrollView
+            style={styles.modalScroll}
+            contentContainerStyle={styles.modalScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {logs.length > 0 ? (
+              logs.map((log, idx) => (
+                <View key={`${log}-${idx}`} style={styles.logRow}>
+                  <Text style={styles.logRowIndex}>{idx + 1}.</Text>
+                  <Text style={styles.logRowText}>{log}</Text>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.logRowText}>아직 기록된 로그가 없습니다.</Text>
+            )}
+          </ScrollView>
+          <TouchableOpacity style={styles.closeButton} onPress={onClose} activeOpacity={0.85}>
+            <Text style={styles.closeButtonText}>닫기</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  logButtonContainer: {
+    position: 'absolute',
+    bottom: 32,
+    right: 20,
+  },
+  logButton: {
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  logButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalContainer: {
+    backgroundColor: '#111',
+    borderRadius: 16,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  modalTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  modalScroll: {
+    maxHeight: 300,
+  },
+  modalScrollContent: {
+    paddingBottom: 8,
+  },
+  logRow: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  logRowIndex: {
+    color: '#888',
+    width: 20,
+    fontSize: 12,
+  },
+  logRowText: {
+    color: '#eee',
+    fontSize: 13,
+    flex: 1,
+  },
+  closeButton: {
+    marginTop: 16,
+    backgroundColor: '#444',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+});
 

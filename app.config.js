@@ -30,7 +30,8 @@ module.exports = {
       infoPlist: {
         // TODO: 실배포 시 실제 AdMob 앱 ID(아래 주석)로 교체하세요.
         // 'ca-app-pub-2555567440328829~5483134579'
-        GADApplicationIdentifier: 'ca-app-pub-3940256099942544~1458002511'
+        GADApplicationIdentifier: 'ca-app-pub-3940256099942544~1458002511',
+        NSUserTrackingUsageDescription: '이 정보를 사용하여 더 관련성 높은 맞춤형 광고를 제공합니다.'
       }
     },
     android: {
@@ -64,7 +65,8 @@ module.exports = {
         }
       ],
       './plugins/with-google-services-file',
-      './plugins/with-admob-test-device'
+      './plugins/with-admob-test-device',
+      './plugins/with-tracking-transparency'
     ]
   },
   'react-native-google-mobile-ads': {
