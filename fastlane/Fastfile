@@ -1148,9 +1148,11 @@ platform :ios do
       end
     end
 
+    # Development 프로파일 사용 (readonly=true: 기존 프로파일 사용)
+    # 새로 생성하려면 fastlane ios bootstrap_dev_profiles 실행 필요
     match(
       type: "development",
-      readonly: false,
+      readonly: true,
       app_identifier: BUNDLE_ID,
       team_id: TEAM_ID,
       git_url: ENV["MATCH_GIT_URL"],
@@ -1158,9 +1160,9 @@ platform :ios do
       keychain_name: "build",
       keychain_password: KEYCHAIN_PW,
       git_branch: MATCH_BRANCH,
-      clone_branch_directly: false,  # CI 환경에서 브랜치 충돌 방지
-      shallow_clone: true,
-      api_key: api_key
+      clone_branch_directly: true,
+      shallow_clone: true
+      # api_key는 app_store_connect_api_key가 환경 변수에 설정하므로 별도 전달 불필요
     )
 
     mapping = lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING] || {}
