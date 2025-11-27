@@ -38,19 +38,26 @@ const withAdMobTestDevice = (config) => {
   NSUUID *advertisingIdentifier = identifierManager.advertisingIdentifier;
   NSString *idfaString = [advertisingIdentifier UUIDString];
   
-  // IDFA가 "00000000-0000-0000-0000-000000000000"인 경우 (제한된 광고 추적)
+  // 기본 저장소에 기록해 JS에서 Settings.get으로 읽을 수 있게 함
+  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+
   if ([idfaString isEqualToString:@"00000000-0000-0000-0000-000000000000"]) {
     RCTLogWarn(@"[PickPlay][AdMob] IDFA is zero - User has limited ad tracking enabled");
+    [defaults setObject:@"LIMITED_AD_TRACKING" forKey:@"PickPlayIDFA"];
+    [defaults synchronize];
     return @"LIMITED_AD_TRACKING";
   }
-  
+
+  [defaults setObject:idfaString forKey:@"PickPlayIDFA"];
+  [defaults synchronize];
+
   RCTLogInfo(@"[PickPlay][AdMob] ========================================");
   RCTLogInfo(@"[PickPlay][AdMob] Test Device Identifier: %@", idfaString);
   RCTLogInfo(@"[PickPlay][AdMob] To register this device in AdMob console:");
   RCTLogInfo(@"[PickPlay][AdMob] 1. Go to AdMob Console > App settings > Test devices");
   RCTLogInfo(@"[PickPlay][AdMob] 2. Add device with ID: %@", idfaString);
   RCTLogInfo(@"[PickPlay][AdMob] ========================================");
-  
+
   return idfaString;
 }
 `;

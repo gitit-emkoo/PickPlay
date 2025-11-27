@@ -4,7 +4,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
 import 'react-native-reanimated';
-import { Platform, useColorScheme } from 'react-native';
+import { Platform, Settings, useColorScheme } from 'react-native';
 import * as Tracking from 'expo-tracking-transparency';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -240,11 +240,21 @@ export default function RootLayout() {
           Tracking.requestTrackingPermissionsAsync().then(async ({ status }) => {
             if (status === 'granted') {
               console.log('✅ ATT: 광고 추적 허용됨');
-              // IDFA 가져오기 시도 (네이티브 모듈을 통해)
               try {
-                // expo-tracking-transparency는 IDFA를 직접 제공하지 않으므로
-                // 네이티브 플러그인이 로그로 출력하는 것을 확인해야 함
-                console.log('📱 IDFA는 네이티브 로그에서 확인하세요. (Xcode Console 또는 Metro 초기 로그)');
+                const idfaFromNative = Settings.get?.('PickPlayIDFA');
+                if (typeof idfaFromNative === 'string' && idfaFromNative.length > 0) {
+                  if (idfaFromNative === 'LIMITED_AD_TRACKING') {
+                    console.log('📵 IDFA가 0으로 고정되어 있습니다. (제한된 광고 추적 설정)');
+                  } else {
+                    console.log('═══════════════════════════════════════');
+                    console.log('📱 IDFA (AdMob Test Device):');
+                    console.log(idfaFromNative);
+                    console.log('═══════════════════════════════════════');
+                    console.log('👆 AdMob 콘솔 > 테스트 기기 등록 시 위 ID를 입력하세요.');
+                  }
+                } else {
+                  console.log('⌛ IDFA가 아직 준비되지 않았습니다. Dev Client 재실행 후 다시 시도해주세요.');
+                }
               } catch (error: any) {
                 console.warn('⚠️ IDFA 확인 실패:', error?.message);
               }
