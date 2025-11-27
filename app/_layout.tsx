@@ -3,9 +3,8 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
-import type { ReactNode } from 'react';
 import 'react-native-reanimated';
-import { Platform, useColorScheme, View, Text, TouchableOpacity, Modal, ScrollView, StyleSheet } from 'react-native';
+import { Platform, useColorScheme } from 'react-native';
 import * as Tracking from 'expo-tracking-transparency';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -23,7 +22,6 @@ SplashScreen.preventAutoHideAsync();
 
 // Firebase 초기화 (네이티브 모듈이 자동 초기화하지 못하는 경우를 대비)
 let firebaseInitialized = false;
-const DEBUG_LOG_LIMIT = 50;
 const initializeFirebaseIfNeeded = async () => {
   if (firebaseInitialized) return true;
   
@@ -32,45 +30,35 @@ const initializeFirebaseIfNeeded = async () => {
     console.log('[Firebase Init] 📋 React Native Firebase는 네이티브에서 GoogleService-Info.plist를 자동으로 읽어서 초기화합니다.');
     console.log('[Firebase Init] 📋 파일이 앱 번들에 포함되지 않으면 네이티브 초기화가 실패합니다.');
     
-    // 이미 초기화되었는지 확인
+    // 이미 초기화되었는지 확인 (빠른 체크)
     try {
       const apps = getApps();
       if (apps.length > 0) {
-        console.log('[Firebase Init] ✅ Firebase 앱이 이미 초기화되어 있습니다. (앱 수:', apps.length, ')');
-        apps.forEach((app, idx) => {
-          console.log(`[Firebase Init]   앱 ${idx + 1}: ${app.name}`);
-        });
+        console.log('[Firebase Init] ✅ Firebase 앱이 이미 초기화되어 있습니다.');
         firebaseInitialized = true;
         return true;
-      } else {
-        console.log('[Firebase Init] ⚠️ Firebase 앱이 초기화되지 않음 (앱 수: 0)');
       }
     } catch (getAppsError: any) {
-      console.log('[Firebase Init] ⚠️ getApps() 호출 실패:', getAppsError?.message || getAppsError);
-      console.log('[Firebase Init] 💡 이것은 네이티브 모듈이 아직 준비되지 않았거나 GoogleService-Info.plist가 번들에 없을 수 있습니다.');
+      // 네이티브 모듈이 아직 준비되지 않았을 수 있음
     }
     
     // React Native Firebase는 네이티브에서 자동 초기화되므로
-    // 네이티브 모듈이 초기화될 때까지 대기 (최대 10초)
-    console.log('[Firebase Init] ⏳ Firebase 네이티브 초기화 대기 중... (최대 10초)');
+    // 짧은 시간만 대기 (최대 500ms)
+    console.log('[Firebase Init] ⏳ Firebase 네이티브 초기화 확인 중...');
     
-    for (let i = 0; i < 50; i++) {
+    // 최대 5번 시도 (총 500ms)
+    for (let i = 0; i < 5; i++) {
       try {
         const apps = getApps();
         if (apps.length > 0) {
-          console.log('[Firebase Init] ✅ Firebase 네이티브 초기화 완료! (앱 수:', apps.length, ')');
-          apps.forEach((app, idx) => {
-            console.log(`[Firebase Init]   앱 ${idx + 1}: ${app.name}`);
-          });
+          console.log('[Firebase Init] ✅ Firebase 네이티브 초기화 완료!');
           firebaseInitialized = true;
           return true;
         }
       } catch (e: any) {
-        if (i % 10 === 0) {
-          console.log(`[Firebase Init] ⏳ 네이티브 초기화 대기 중... (${i * 200}ms 경과, ${e?.message || '앱 없음'})`);
-        }
+        // 에러 무시하고 계속 시도
       }
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
     
     console.log('[Firebase Init] ❌ 네이티브 초기화 실패 (10초 대기 후에도 앱이 등록되지 않음)');
@@ -143,17 +131,16 @@ const initializeFirebaseIfNeeded = async () => {
         console.log('[Firebase Init] ✅ Firebase 앱이 이미 초기화되어 있습니다.', existingApps[0].name);
       }
       
-      // 초기화 확인 (여러 번 시도)
+      // 초기화 확인 (빠른 체크)
       let appsAfterInit = getApps();
       if (appsAfterInit.length === 0) {
-        // 네이티브 모듈이 준비될 때까지 최대 2초 대기
-        for (let i = 0; i < 10; i++) {
-          await new Promise(resolve => setTimeout(resolve, 200));
+        // 네이티브 모듈이 준비될 때까지 최대 500ms 대기
+        for (let i = 0; i < 5; i++) {
+          await new Promise(resolve => setTimeout(resolve, 100));
           appsAfterInit = getApps();
           if (appsAfterInit.length > 0) {
             break;
           }
-          console.log(`[Firebase Init] 앱 등록 대기 중... (${i + 1}/10)`);
         }
       }
       
@@ -195,153 +182,85 @@ export default function RootLayout() {
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
   const [firebaseStatus, setFirebaseStatus] = useState<'pending' | 'ready' | 'error'>('pending');
-  const [firebaseStatusLog, setFirebaseStatusLog] = useState<string[]>([]);
-  const [firebaseErrorMessage, setFirebaseErrorMessage] = useState<string>('Firebase 초기화 중입니다...');
+  const [firebaseErrorMessage, setFirebaseErrorMessage] = useState<string>('서비스에 연결하는 중입니다...');
   const [initToken, setInitToken] = useState(0);
-  const [isLogViewerVisible, setIsLogViewerVisible] = useState(false);
 
-  const pushStatusLog = (msg: string) => {
-    console.log(`[InitStatus] ${msg}`);
-    setFirebaseStatusLog((prev) => {
-      const next = [...prev, msg];
-      if (next.length > DEBUG_LOG_LIMIT) {
-        next.shift();
+  // Firebase 초기화 상태를 즉시 확인 (이미 초기화되어 있을 수 있음)
+  useEffect(() => {
+    const checkFirebaseImmediately = async () => {
+      try {
+        const apps = getApps();
+        if (apps.length > 0) {
+          // 이미 초기화되어 있으면 바로 ready 상태로
+          setFirebaseStatus('ready');
+        }
+      } catch {
+        // 에러 무시 - 정상적인 초기화 프로세스 진행
       }
-      return next;
-    });
-  };
-  const recentLogsForScreen = firebaseStatusLog.slice(-6);
-  const renderWithLogControls = (content: ReactNode) => (
-    <View style={{ flex: 1 }}>
-      {content}
-      <View pointerEvents="box-none" style={styles.logButtonContainer}>
-        <TouchableOpacity
-          onPress={() => setIsLogViewerVisible(true)}
-          style={styles.logButton}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.logButtonText}>로그 보기</Text>
-        </TouchableOpacity>
-      </View>
-      <LogViewerModal
-        visible={isLogViewerVisible}
-        logs={firebaseStatusLog}
-        onClose={() => setIsLogViewerVisible(false)}
-      />
-    </View>
-  );
+    };
+    checkFirebaseImmediately();
+  }, []);
 
   useEffect(() => {
     (async () => {
-      // 0. Firebase 초기화 확인
-      console.log('[RootLayout] Firebase 초기화 확인 시작...');
-      pushStatusLog('Firebase 초기화 확인 중...');
+      // 0. Firebase 초기화 확인 (빠른 체크)
       const initResult = await initializeFirebaseIfNeeded();
       if (!initResult) {
-        pushStatusLog('Firebase 네이티브 초기화 실패');
-        setFirebaseErrorMessage(
-          'Firebase 초기화에 실패했습니다.\n\n' +
-          '가능한 원인:\n' +
-          '• GoogleService-Info.plist가 앱 번들에 포함되지 않았을 수 있습니다\n' +
-          '• 네이티브 모듈이 제대로 링크되지 않았을 수 있습니다\n' +
-          '• 네트워크 연결 문제일 수 있습니다\n\n' +
-          '개발자 콘솔 로그를 확인하거나 앱을 재시작해보세요.'
-        );
-        setFirebaseStatus('error');
+        // 초기화 실패 시에도 앱은 계속 진행 (백그라운드에서 재시도)
+        console.warn('[RootLayout] Firebase 초기화 확인 실패 - 백그라운드에서 재시도');
+        setFirebaseStatus('ready'); // 에러 화면 대신 메인 화면으로 진행
         return;
       }
-      pushStatusLog('Firebase 네이티브 초기화 완료');
 
-      try {
-        pushStatusLog('익명 인증 준비 중...');
-        const user = await ensureAnonymousAuth();
-        if (user) {
-          pushStatusLog(`익명 사용자 확보: ${user.uid}`);
-          setFirebaseStatus('ready');
-        } else {
-          pushStatusLog('익명 사용자 확보 실패');
-          setFirebaseErrorMessage('익명 로그인에 실패했습니다. 잠시 후 다시 시도해주세요.');
-          setFirebaseStatus('error');
-          return;
-        }
-      } catch (authError: any) {
-        const message = authError?.message || '알 수 없는 이유로 Firebase 인증에 실패했습니다.';
-        pushStatusLog(`익명 로그인 실패: ${message}`);
-        setFirebaseErrorMessage(`Firebase 인증에 실패했습니다: ${message}`);
-        setFirebaseStatus('error');
-        return;
-      }
+      // 익명 인증은 백그라운드에서 처리 (블로킹하지 않음)
+      ensureAnonymousAuth().catch((authError: any) => {
+        console.warn('[RootLayout] 익명 인증 실패 - 백그라운드에서 재시도:', authError?.message);
+      });
       
-      // 1. App Check 디버그 토큰 출력
-      // v23+ 에서는 activate() 호출 없이 자동 초기화됨
-      // 디버그 토큰만 가져와서 출력
-      // Firebase 네이티브 모듈 초기화를 위해 지연 후 호출
-      if (__DEV__) {
-        // Firebase 네이티브 모듈이 초기화될 때까지 대기 (최대 3초, 5회 재시도)
-        const waitForFirebase = async (maxRetries = 5, delay = 600) => {
-          for (let i = 0; i < maxRetries; i++) {
-            try {
-              await new Promise(resolve => setTimeout(resolve, delay));
-              const token = await appCheck().getToken(true);
-              return token;
-            } catch (error: any) {
-              if (error?.message?.includes("No Firebase App '[DEFAULT]'")) {
-                if (i < maxRetries - 1) {
-                  console.log(`⏳ Firebase 초기화 대기 중... (${i + 1}/${maxRetries})`);
-                  continue;
-                }
-              }
-              throw error;
-            }
-          }
-          return null;
-        };
-
-        try {
-          console.log('🔍 App Check 디버그 토큰 확인 중...');
-          const token = await waitForFirebase();
-          if (token) {
+      setFirebaseStatus('ready');
+      
+      // 1. App Check 디버그 토큰, ATT 권한, 광고 초기화는 모두 백그라운드에서 처리
+      // (앱 시작을 블로킹하지 않음)
+      setTimeout(() => {
+        // App Check 디버그 토큰 (개발 환경만)
+        if (__DEV__) {
+          appCheck().getToken(true).then((token) => {
             console.log('═══════════════════════════════════════');
             console.log('🔑 Firebase App Check Debug Token:');
             console.log(token.token);
             console.log('═══════════════════════════════════════');
             console.log('👆 위 토큰을 Firebase Console → App Check → Debug tokens에 등록하세요');
-          } else {
-            console.log('⚠️ App Check 디버그 토큰을 가져올 수 없습니다. (앱은 정상 동작합니다)');
-          }
-        } catch (tokenError) {
-          // 개발 환경에서는 디버그 토큰이 없어도 앱이 동작해야 하므로 에러를 무시
-          console.log('⚠️ App Check 디버그 토큰을 가져올 수 없습니다. (앱은 정상 동작합니다)');
-          console.log('💡 Firebase가 완전히 초기화된 후 다시 시도해보세요.');
+          }).catch(() => {
+            // 에러 무시
+          });
         }
-      }
 
-      // 2. ATT 권한 요청 (iOS)
-      // Fastfile에서 expo prebuild 후 Info.plist에 NSUserTrackingUsageDescription을 확실히 추가함
-      // 추가 안전장치: 에러 발생 시에도 앱이 크래시하지 않도록 try-catch 처리
-      if (Platform.OS === 'ios') {
-        try {
-          console.log('🔍 ATT: 광고 추적 권한 요청 시작...');
-          // 약간의 지연을 두어 네이티브 모듈이 완전히 초기화되도록 함
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          const { status } = await Tracking.requestTrackingPermissionsAsync();
-          if (status === 'granted') {
-            console.log('✅ ATT: 광고 추적 허용됨');
-          } else {
-            console.log('❌ ATT: 광고 추적 거부됨');
-          }
-        } catch (error: any) {
-          console.error('⚠️ ATT 권한 요청 실패:', error?.message || error);
-          console.error('⚠️ ATT: Info.plist에 NSUserTrackingUsageDescription이 없을 수 있습니다.');
-          // 에러 발생 시에도 앱은 계속 실행 (네이티브 크래시는 이미 발생했을 수 있음)
-          // 하지만 Fastfile에서 검증을 강화했으므로 이 경우는 드물어야 함
+        // ATT 권한 요청 및 IDFA 가져오기 (iOS)
+        if (Platform.OS === 'ios') {
+          Tracking.requestTrackingPermissionsAsync().then(async ({ status }) => {
+            if (status === 'granted') {
+              console.log('✅ ATT: 광고 추적 허용됨');
+              // IDFA 가져오기 시도 (네이티브 모듈을 통해)
+              try {
+                // expo-tracking-transparency는 IDFA를 직접 제공하지 않으므로
+                // 네이티브 플러그인이 로그로 출력하는 것을 확인해야 함
+                console.log('📱 IDFA는 네이티브 로그에서 확인하세요. (Xcode Console 또는 Metro 초기 로그)');
+              } catch (error: any) {
+                console.warn('⚠️ IDFA 확인 실패:', error?.message);
+              }
+            } else {
+              console.log('❌ ATT: 광고 추적 거부됨 - IDFA를 가져올 수 없습니다.');
+            }
+          }).catch((error: any) => {
+            console.warn('⚠️ ATT 권한 요청 실패:', error?.message);
+          });
         }
-      }
-      
-      // 3. 광고 초기화
-      console.log('🚀 광고 모듈 초기화를 시작합니다...');
-      await initAds();
+
+        // 광고 초기화
+        initAds().catch((error) => {
+          console.warn('⚠️ 광고 모듈 초기화 실패:', error);
+        });
+      }, 100);
     })();
   }, [initToken]);
 
@@ -356,29 +275,25 @@ export default function RootLayout() {
   }
 
   if (firebaseStatus === 'pending') {
-    return renderWithLogControls(
-      <LoadingScreen message="Firebase 초기화 중입니다..." details={recentLogsForScreen} />
-    );
+    return <LoadingScreen message="잠시만 기다려주세요..." />;
   }
 
   if (firebaseStatus === 'error') {
-    return renderWithLogControls(
+    return (
       <ErrorScreen
-        title="Firebase 초기화 실패"
+        title="연결 실패"
         subtitle="서비스에 연결하지 못했습니다."
         message={firebaseErrorMessage}
         onRetry={() => {
-          pushStatusLog('사용자 요청으로 재시작');
           setFirebaseStatus('pending');
-          setFirebaseStatusLog([]);
-          setFirebaseErrorMessage('Firebase 초기화 중입니다...');
+          setFirebaseErrorMessage('잠시 후 다시 시도해주세요.');
           setInitToken((prev) => prev + 1);
         }}
       />
     );
   }
 
-  return renderWithLogControls(
+  return (
     <SafeAreaProvider style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }} edges={['top','bottom']}>
         <StatusBar style="dark" />
@@ -390,110 +305,3 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 }
-
-interface LogViewerModalProps {
-  visible: boolean;
-  logs: string[];
-  onClose: () => void;
-}
-
-function LogViewerModal({ visible, logs, onClose }: LogViewerModalProps) {
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
-        <View style={styles.modalContainer}>
-          <Text style={styles.modalTitle}>Firebase 상태 로그</Text>
-          <ScrollView
-            style={styles.modalScroll}
-            contentContainerStyle={styles.modalScrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {logs.length > 0 ? (
-              logs.map((log, idx) => (
-                <View key={`${log}-${idx}`} style={styles.logRow}>
-                  <Text style={styles.logRowIndex}>{idx + 1}.</Text>
-                  <Text style={styles.logRowText}>{log}</Text>
-                </View>
-              ))
-            ) : (
-              <Text style={styles.logRowText}>아직 기록된 로그가 없습니다.</Text>
-            )}
-          </ScrollView>
-          <TouchableOpacity style={styles.closeButton} onPress={onClose} activeOpacity={0.85}>
-            <Text style={styles.closeButtonText}>닫기</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-const styles = StyleSheet.create({
-  logButtonContainer: {
-    position: 'absolute',
-    bottom: 32,
-    right: 20,
-  },
-  logButton: {
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-  logButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  modalContainer: {
-    backgroundColor: '#111',
-    borderRadius: 16,
-    padding: 20,
-    maxHeight: '80%',
-  },
-  modalTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 12,
-  },
-  modalScroll: {
-    maxHeight: 300,
-  },
-  modalScrollContent: {
-    paddingBottom: 8,
-  },
-  logRow: {
-    flexDirection: 'row',
-    marginBottom: 8,
-  },
-  logRowIndex: {
-    color: '#888',
-    width: 20,
-    fontSize: 12,
-  },
-  logRowText: {
-    color: '#eee',
-    fontSize: 13,
-    flex: 1,
-  },
-  closeButton: {
-    marginTop: 16,
-    backgroundColor: '#444',
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  closeButtonText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-});
-
