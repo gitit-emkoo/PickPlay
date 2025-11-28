@@ -14,6 +14,7 @@ import { getApp, initializeApp, getApps } from '@react-native-firebase/app';
 import NotificationBootstrap from './components/NotificationBootstrap';
 import LoadingScreen from './components/LoadingScreen';
 import ErrorScreen from './components/ErrorScreen';
+import IDFADebugOverlay from './components/IDFADebugOverlay';
 import { initAds } from '../src/services/ads';
 import { ensureAnonymousAuth } from '../src/services/firebase';
 
@@ -240,24 +241,43 @@ export default function RootLayout() {
           Tracking.requestTrackingPermissionsAsync().then(async ({ status }) => {
             if (status === 'granted') {
               console.log('✅ ATT: 광고 추적 허용됨');
-              try {
-                const idfaFromNative = Settings.get?.('PickPlayIDFA');
-                if (typeof idfaFromNative === 'string' && idfaFromNative.length > 0) {
-                  if (idfaFromNative === 'LIMITED_AD_TRACKING') {
-                    console.log('📵 IDFA가 0으로 고정되어 있습니다. (제한된 광고 추적 설정)');
+              
+              // IDFA 읽기 재시도 로직 (최대 10회, 500ms 간격)
+              let retryCount = 0;
+              const maxRetries = 10;
+              const retryDelay = 500;
+              
+              const tryGetIDFA = async (): Promise<void> => {
+                try {
+                  const idfaFromNative = Settings.get?.('PickPlayIDFA');
+                  if (typeof idfaFromNative === 'string' && idfaFromNative.length > 0) {
+                    if (idfaFromNative === 'LIMITED_AD_TRACKING') {
+                      console.log('📵 IDFA가 0으로 고정되어 있습니다. (제한된 광고 추적 설정)');
+                    } else {
+                      console.log('═══════════════════════════════════════');
+                      console.log('📱 IDFA (AdMob Test Device):');
+                      console.log(idfaFromNative);
+                      console.log('═══════════════════════════════════════');
+                      console.log('👆 AdMob 콘솔 > 테스트 기기 등록 시 위 ID를 입력하세요.');
+                    }
+                    return; // 성공 시 종료
                   } else {
-                    console.log('═══════════════════════════════════════');
-                    console.log('📱 IDFA (AdMob Test Device):');
-                    console.log(idfaFromNative);
-                    console.log('═══════════════════════════════════════');
-                    console.log('👆 AdMob 콘솔 > 테스트 기기 등록 시 위 ID를 입력하세요.');
+                    // IDFA가 아직 저장되지 않음 - 재시도
+                    retryCount++;
+                    if (retryCount < maxRetries) {
+                      await new Promise(resolve => setTimeout(resolve, retryDelay));
+                      return tryGetIDFA();
+                    } else {
+                      console.log('⌛ IDFA가 아직 준비되지 않았습니다. 앱을 재시작하거나 네이티브 빌드를 확인하세요.');
+                    }
                   }
-                } else {
-                  console.log('⌛ IDFA가 아직 준비되지 않았습니다. Dev Client 재실행 후 다시 시도해주세요.');
+                } catch (error: any) {
+                  console.warn('⚠️ IDFA 확인 실패:', error?.message);
                 }
-              } catch (error: any) {
-                console.warn('⚠️ IDFA 확인 실패:', error?.message);
-              }
+              };
+              
+              // 첫 시도 시작
+              await tryGetIDFA();
             } else {
               console.log('❌ ATT: 광고 추적 거부됨 - IDFA를 가져올 수 없습니다.');
             }
@@ -311,6 +331,7 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" />
         </Stack>
+        <IDFADebugOverlay />
       </SafeAreaView>
     </SafeAreaProvider>
   );
