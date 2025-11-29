@@ -4,7 +4,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
 import 'react-native-reanimated';
-import { Platform, Settings, useColorScheme } from 'react-native';
+import { AppState, Platform, Settings, useColorScheme } from 'react-native';
 import * as Tracking from 'expo-tracking-transparency';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -242,42 +242,27 @@ export default function RootLayout() {
             if (status === 'granted') {
               console.log('✅ ATT: 광고 추적 허용됨');
               
-              // IDFA 읽기 재시도 로직 (최대 10회, 500ms 간격)
-              let retryCount = 0;
-              const maxRetries = 10;
-              const retryDelay = 500;
-              
-              const tryGetIDFA = async (): Promise<void> => {
-                try {
-                  const idfaFromNative = Settings.get?.('PickPlayIDFA');
-                  if (typeof idfaFromNative === 'string' && idfaFromNative.length > 0) {
-                    if (idfaFromNative === 'LIMITED_AD_TRACKING') {
-                      console.log('📵 IDFA가 0으로 고정되어 있습니다. (제한된 광고 추적 설정)');
-                    } else {
-                      console.log('═══════════════════════════════════════');
-                      console.log('📱 IDFA (AdMob Test Device):');
-                      console.log(idfaFromNative);
-                      console.log('═══════════════════════════════════════');
-                      console.log('👆 AdMob 콘솔 > 테스트 기기 등록 시 위 ID를 입력하세요.');
-                    }
-                    return; // 성공 시 종료
-                  } else {
-                    // IDFA가 아직 저장되지 않음 - 재시도
-                    retryCount++;
-                    if (retryCount < maxRetries) {
-                      await new Promise(resolve => setTimeout(resolve, retryDelay));
-                      return tryGetIDFA();
-                    } else {
-                      console.log('⌛ IDFA가 아직 준비되지 않았습니다. 앱을 재시작하거나 네이티브 빌드를 확인하세요.');
-                    }
-                  }
-                } catch (error: any) {
-                  console.warn('⚠️ IDFA 확인 실패:', error?.message);
+              // ATT 권한 허용 직후 IDFA 확인 (한 번만)
+              // IDFA는 디바이스에 고정된 값이며, ATT 권한 허용 후 바로 접근 가능합니다
+              // 네이티브가 NSUserDefaults에 저장하기 전일 수 있으므로, 앱 재시작 후 확인하는 것이 가장 확실합니다
+              const idfaFromNative = Settings.get?.('PickPlayIDFA');
+              if (typeof idfaFromNative === 'string' && idfaFromNative.length > 0) {
+                if (idfaFromNative === 'LIMITED_AD_TRACKING') {
+                  console.log('📵 IDFA가 0으로 고정되어 있습니다. (제한된 광고 추적 설정)');
+                } else {
+                  console.log('═══════════════════════════════════════');
+                  console.log('📱 IDFA (AdMob Test Device):');
+                  console.log(idfaFromNative);
+                  console.log('═══════════════════════════════════════');
+                  console.log('👆 AdMob 콘솔 > 테스트 기기 등록 시 위 ID를 입력하세요.');
                 }
-              };
-              
-              // 첫 시도 시작
-              await tryGetIDFA();
+              } else {
+                console.log('💡 IDFA 확인 방법:');
+                console.log('   1. 앱을 완전히 종료한 후 다시 실행');
+                console.log('   2. 또는 화면 오른쪽 아래 플로팅 버튼(📱) 클릭');
+                console.log('   3. 네이티브 빌드가 최신인지 확인 (새로 빌드한 IPA인지)');
+                console.log('   → ATT 권한 허용 후 앱 재시작 시 IDFA가 자동으로 표시됩니다');
+              }
             } else {
               console.log('❌ ATT: 광고 추적 거부됨 - IDFA를 가져올 수 없습니다.');
             }
@@ -293,6 +278,35 @@ export default function RootLayout() {
       }, 100);
     })();
   }, [initToken]);
+
+  // ATT 권한 허용 후 앱이 활성화될 때 IDFA 다시 확인
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+
+    const subscription = AppState.addEventListener('change', async (nextAppState) => {
+      if (nextAppState === 'active') {
+        // 앱이 포그라운드로 돌아올 때 ATT 권한 상태 확인
+        try {
+          const trackingStatus = await Tracking.getTrackingPermissionsAsync();
+          if (trackingStatus.status === 'granted') {
+            // ATT 권한이 허용된 경우, IDFA 확인
+            const idfaFromNative = Settings.get?.('PickPlayIDFA');
+            if (typeof idfaFromNative === 'string' && idfaFromNative.length > 0) {
+              if (idfaFromNative !== 'LIMITED_AD_TRACKING') {
+                console.log('📱 [AppState] IDFA 확인:', idfaFromNative);
+              }
+            }
+          }
+        } catch (error) {
+          // 에러 무시
+        }
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (loaded) {

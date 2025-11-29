@@ -127,10 +127,16 @@ const withAdMobTestDevice = (config) => {
   }
   
   // ATT 권한 상태 변경 감지를 위한 알림 등록
+  // 앱이 포그라운드로 돌아올 때마다 IDFA 갱신 시도
   [[NSNotificationCenter defaultCenter] addObserver:self
                                            selector:@selector(refreshIDFAIfAuthorized)
                                                name:UIApplicationDidBecomeActiveNotification
                                              object:nil];
+  
+  // 초기 실행 시 한 번만 IDFA 갱신 시도 (ATT 권한이 이미 허용된 경우)
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    [self refreshIDFAIfAuthorized];
+  });
 `;
 
     // didFinishLaunchingWithOptions 메서드 찾기 (다양한 패턴 지원)
