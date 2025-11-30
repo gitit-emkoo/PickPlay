@@ -916,13 +916,13 @@ platform :ios do
     
     # ============================================
     # 빌드 번호 고정 설정 (TestFlight 업로드를 위해 필수)
-    # TODO: 다음 빌드에서는 17로 변경 필요
+    # TODO: 다음 빌드에서는 18로 변경 필요
     # ============================================
     UI.important("=" * 60)
-    UI.important("🔢 [빌드 번호 설정] 빌드 번호 고정: 16")
+    UI.important("🔢 [빌드 번호 설정] 빌드 번호 고정: 17")
     UI.important("=" * 60)
     
-    new_build_number = "16"
+    new_build_number = "17"
     
     begin
       require 'xcodeproj'
@@ -1203,11 +1203,29 @@ platform :ios do
     # ============================================
     # 네이티브 프로젝트 재생성 (중요!)
     # expo prebuild를 실행하여 app.json의 googleServicesFile 설정을 적용
+    # 
+    # 참고: GitHub Actions 워크플로우에서 이미 expo prebuild를 실행했을 수 있으므로,
+    # ios/ 디렉토리가 이미 존재하고 AppDelegate가 있다면 건너뛰기
     # ============================================
-    expo_prebuild!(
-      check_firebase: false,
-      setup_att: false
-    )
+    app_delegate_path = File.join(IOS_DIR, SCHEME, "AppDelegate.mm")
+    if File.exist?(app_delegate_path)
+      app_delegate_content = File.read(app_delegate_path) rescue ""
+      if app_delegate_content.include?('[PickPlay][AdMob] Test Device Identifier')
+        UI.success("✅ [네이티브 프로젝트] AppDelegate에 IDFA 플러그인 코드가 이미 포함되어 있습니다. prebuild 건너뜁니다.")
+      else
+        UI.important("⚠️ [네이티브 프로젝트] AppDelegate에 IDFA 플러그인 코드가 없습니다. prebuild를 실행합니다...")
+        expo_prebuild!(
+          check_firebase: false,
+          setup_att: false
+        )
+      end
+    else
+      UI.important("⚠️ [네이티브 프로젝트] AppDelegate.mm 파일이 없습니다. prebuild를 실행합니다...")
+      expo_prebuild!(
+        check_firebase: false,
+        setup_att: false
+      )
+    end
 
     # Pods 재설치
     sh("cd #{IOS_DIR} && pod install")

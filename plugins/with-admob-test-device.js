@@ -5,13 +5,20 @@ const { withAppDelegate } = require('@expo/config-plugins');
  * IDFA를 가져와서 로그로 출력하고, AdMob 테스트 기기로 등록
  */
 const withAdMobTestDevice = (config) => {
+  console.log('[PickPlay Plugin] withAdMobTestDevice 플러그인 시작');
   return withAppDelegate(config, (config) => {
     const appDelegate = config.modResults;
 
+    console.log('[PickPlay Plugin] AppDelegate 파일 확인 중...');
+    console.log('[PickPlay Plugin] AppDelegate 내용 길이:', appDelegate.contents?.length || 0);
+
     // 이미 추가된 경우 건너뛰기
     if (appDelegate.contents.includes('[PickPlay][AdMob] Test Device Identifier')) {
+      console.log('[PickPlay Plugin] ✅ 이미 IDFA 코드가 추가되어 있습니다. 건너뜁니다.');
       return config;
     }
+
+    console.log('[PickPlay Plugin] 🚀 IDFA 코드 추가 시작...');
 
     // 필요한 import 추가 (파일 상단에)
     const importsToAdd = `#import <AdSupport/AdSupport.h>
@@ -165,10 +172,31 @@ const withAdMobTestDevice = (config) => {
 
     // 패턴 매칭이 실패한 경우, return YES 앞에 수동으로 추가 시도
     if (!added && appDelegate.contents.includes('didFinishLaunchingWithOptions')) {
+      console.log('[PickPlay Plugin] ⚠️ 패턴 매칭 실패, 수동 추가 시도...');
       appDelegate.contents = appDelegate.contents.replace(
         /(  return YES;\s*\n\s*\})/,
         `${didFinishLaunchingCode}$1`
       );
+      added = true;
+    }
+
+    if (added) {
+      console.log('[PickPlay Plugin] ✅ IDFA 코드가 AppDelegate에 성공적으로 추가되었습니다!');
+      console.log('[PickPlay Plugin] AppDelegate 최종 길이:', appDelegate.contents.length);
+      // 추가 확인: 실제로 코드가 포함되었는지 확인
+      if (appDelegate.contents.includes('[PickPlay][AdMob] Test Device Setup')) {
+        console.log('[PickPlay Plugin] ✅ 검증: didFinishLaunchingWithOptions 코드 확인됨');
+      } else {
+        console.log('[PickPlay Plugin] ❌ 경고: didFinishLaunchingWithOptions 코드가 없습니다!');
+      }
+      if (appDelegate.contents.includes('getAdMobTestDeviceIdentifier')) {
+        console.log('[PickPlay Plugin] ✅ 검증: getAdMobTestDeviceIdentifier 함수 확인됨');
+      } else {
+        console.log('[PickPlay Plugin] ❌ 경고: getAdMobTestDeviceIdentifier 함수가 없습니다!');
+      }
+    } else {
+      console.log('[PickPlay Plugin] ❌ 에러: IDFA 코드를 추가하지 못했습니다!');
+      console.log('[PickPlay Plugin] AppDelegate에 didFinishLaunchingWithOptions가 있는지 확인:', appDelegate.contents.includes('didFinishLaunchingWithOptions'));
     }
 
     return config;
