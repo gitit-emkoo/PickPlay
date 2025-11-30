@@ -170,14 +170,89 @@ const withAdMobTestDevice = (config) => {
       }
     }
 
-    // 패턴 매칭이 실패한 경우, return YES 앞에 수동으로 추가 시도
+    // 패턴 매칭이 실패한 경우, 더 강력한 수동 추가 시도
     if (!added && appDelegate.contents.includes('didFinishLaunchingWithOptions')) {
       console.log('[PickPlay Plugin] ⚠️ 패턴 매칭 실패, 수동 추가 시도...');
-      appDelegate.contents = appDelegate.contents.replace(
-        /(  return YES;\s*\n\s*\})/,
-        `${didFinishLaunchingCode}$1`
-      );
-      added = true;
+      
+      // didFinishLaunchingWithOptions 메서드 내부에서 return YES 또는 return true 찾기
+      const returnPatterns = [
+        /(didFinishLaunchingWithOptions[^}]*?)(\s+return\s+YES;)/s,  // return YES
+        /(didFinishLaunchingWithOptions[^}]*?)(\s+return\s+true;)/s, // return true
+        /(didFinishLaunchingWithOptions[^}]*?)(\s+return\s+\w+;)/s,  // 기타 return
+      ];
+      
+      for (const pattern of returnPatterns) {
+        if (pattern.test(appDelegate.contents)) {
+          appDelegate.contents = appDelegate.contents.replace(
+            pattern,
+            (match, beforeReturn, returnStatement) => {
+              // 이미 추가된 경우 건너뛰기
+              if (beforeReturn.includes('[PickPlay][AdMob] Test Device Setup')) {
+                return match;
+              }
+              added = true;
+              return `${beforeReturn}${didFinishLaunchingCode}${returnStatement}`;
+            }
+          );
+          if (added) break;
+        }
+      }
+      
+      // 여전히 실패한 경우, didFinishLaunchingWithOptions 메서드 끝부분 찾기
+      if (!added) {
+        // 메서드 시그니처부터 찾기
+        const methodSignatureMatch = appDelegate.contents.match(/- \(BOOL\)application:\(UIApplication \*\)application\s+didFinishLaunchingWithOptions:[^{]*\{/);
+        if (methodSignatureMatch) {
+          const methodStartIndex = methodSignatureMatch.index + methodSignatureMatch[0].length;
+          
+          // 메서드 끝 찾기 (중괄호 매칭)
+          let braceCount = 1;
+          let methodEndIndex = methodStartIndex;
+          
+          for (let i = methodStartIndex; i < appDelegate.contents.length && braceCount > 0; i++) {
+            if (appDelegate.contents[i] === '{') braceCount++;
+            if (appDelegate.contents[i] === '}') braceCount--;
+            if (braceCount === 0) {
+              methodEndIndex = i;
+              break;
+            }
+          }
+          
+          if (methodEndIndex > methodStartIndex) {
+            const methodBody = appDelegate.contents.substring(methodStartIndex, methodEndIndex);
+            
+            // 이미 추가된 경우 건너뛰기
+            if (!methodBody.includes('[PickPlay][AdMob] Test Device Setup')) {
+              // return 문 바로 앞에 코드 삽입
+              const returnMatch = methodBody.match(/(.*?)(\s+return\s+(YES|true|\w+);)/s);
+              if (returnMatch) {
+                const beforeReturn = returnMatch[1];
+                const returnStatement = returnMatch[2];
+                const newMethodBody = `${beforeReturn}${didFinishLaunchingCode}${returnStatement}`;
+                appDelegate.contents = 
+                  appDelegate.contents.substring(0, methodStartIndex) +
+                  newMethodBody +
+                  appDelegate.contents.substring(methodEndIndex);
+                added = true;
+                console.log('[PickPlay Plugin] ✅ 수동 추가 성공 (메서드 끝부분 매칭)');
+              } else {
+                // return 문이 없으면 메서드 끝 바로 앞에 추가
+                const newMethodBody = methodBody + didFinishLaunchingCode;
+                appDelegate.contents = 
+                  appDelegate.contents.substring(0, methodStartIndex) +
+                  newMethodBody +
+                  appDelegate.contents.substring(methodEndIndex);
+                added = true;
+                console.log('[PickPlay Plugin] ✅ 수동 추가 성공 (메서드 끝에 추가)');
+              }
+            }
+          }
+        }
+      }
+      
+      if (!added) {
+        console.log('[PickPlay Plugin] ⚠️ 수동 추가도 실패했습니다. AppDelegate 구조를 확인해야 합니다.');
+      }
     }
 
     if (added) {
