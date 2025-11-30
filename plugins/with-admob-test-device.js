@@ -259,8 +259,16 @@ const withAdMobTestDevice = (config) => {
       console.log('[PickPlay Plugin] ✅ IDFA 코드가 AppDelegate에 성공적으로 추가되었습니다!');
       console.log('[PickPlay Plugin] AppDelegate 최종 길이:', appDelegate.contents.length);
       // 추가 확인: 실제로 코드가 포함되었는지 확인
-      if (appDelegate.contents.includes('[PickPlay][AdMob] Test Device Setup')) {
-        console.log('[PickPlay Plugin] ✅ 검증: didFinishLaunchingWithOptions 코드 확인됨');
+      // 여러 마커를 확인 (주석 또는 실제 코드)
+      const codeMarkers = [
+        '[PickPlay][AdMob] Test Device Setup',
+        '// MARK: - AdMob Test Device Setup',
+        'ATTrackingManagerAuthorizationStatus attStatus',
+        'refreshIDFAIfAuthorized'
+      ];
+      const foundMarker = codeMarkers.find(marker => appDelegate.contents.includes(marker));
+      if (foundMarker) {
+        console.log('[PickPlay Plugin] ✅ 검증: didFinishLaunchingWithOptions 코드 확인됨 (마커:', foundMarker, ')');
       } else {
         console.log('[PickPlay Plugin] ❌ 경고: didFinishLaunchingWithOptions 코드가 없습니다!');
       }
