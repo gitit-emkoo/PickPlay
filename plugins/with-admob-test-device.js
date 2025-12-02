@@ -12,8 +12,9 @@ const withAdMobTestDevice = (config) => {
     console.log('[PickPlay Plugin] AppDelegate 파일 확인 중...');
     console.log('[PickPlay Plugin] AppDelegate 내용 길이:', appDelegate.contents?.length || 0);
 
-    // 이미 추가된 경우 건너뛰기
-    if (appDelegate.contents.includes('[PickPlay][AdMob] Test Device Identifier')) {
+    // 이미 추가된 경우 건너뛰기 (더 명확한 마커 확인)
+    if (appDelegate.contents.includes('// MARK: - AdMob Test Device Setup') || 
+        appDelegate.contents.includes('getAdMobTestDeviceIdentifier')) {
       console.log('[PickPlay Plugin] ✅ 이미 IDFA 코드가 추가되어 있습니다. 건너뜁니다.');
       return config;
     }
@@ -115,9 +116,12 @@ const withAdMobTestDevice = (config) => {
 
     // didFinishLaunchingWithOptions 메서드 내부에 IDFA 로깅 코드 추가
     const didFinishLaunchingCode = `
-  // MARK: - AdMob Test Device Setup
-  // ATT 권한이 이미 허용된 경우에만 IDFA 가져오기
-  ATTrackingManagerAuthorizationStatus attStatus = [ATTrackingManager trackingAuthorizationStatus];
+          // MARK: - AdMob Test Device Setup
+          RCTLogInfo(@"[PickPlay][AdMob] 🔍 IDFA 코드 시작 - AppDelegate didFinishLaunchingWithOptions");
+          
+          // ATT 권한이 이미 허용된 경우에만 IDFA 가져오기
+          ATTrackingManagerAuthorizationStatus attStatus = [ATTrackingManager trackingAuthorizationStatus];
+          RCTLogInfo(@"[PickPlay][AdMob] 🔍 현재 ATT 권한 상태: %ld", (long)attStatus);
   if (attStatus == ATTrackingManagerAuthorizationStatusAuthorized) {
     NSString *testDeviceId = [self getAdMobTestDeviceIdentifier];
     if (testDeviceId && ![testDeviceId isEqualToString:@"LIMITED_AD_TRACKING"]) {

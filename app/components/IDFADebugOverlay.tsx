@@ -41,11 +41,43 @@ export default function IDFADebugOverlay() {
       setAttStatus(statusText);
 
       // IDFA 가져오기
-      const idfaFromNative = Settings.get?.('PickPlayIDFA');
+      let idfaFromNative;
+      try {
+        if (Settings && typeof Settings.get === 'function') {
+          idfaFromNative = Settings.get('PickPlayIDFA');
+          
+          // IDFA가 발견된 경우에만 상세 로그 출력
+          if (idfaFromNative && typeof idfaFromNative === 'string' && idfaFromNative.length > 0) {
+            console.log('[IDFA Debug] ✅ Settings.get("PickPlayIDFA") 결과:', idfaFromNative);
+          }
+        } else {
+          console.error('[IDFA Debug] ❌ Settings.get 함수를 사용할 수 없음');
+          setIdfa('Settings.get 함수를 사용할 수 없습니다 (iOS에서만 지원)');
+          return;
+        }
+      } catch (error: any) {
+        console.error('[IDFA Debug] Settings.get 호출 중 오류:', error);
+        setIdfa(`오류: ${error?.message || '알 수 없는 오류'}`);
+        return;
+      }
+      
       if (typeof idfaFromNative === 'string' && idfaFromNative.length > 0) {
-        setIdfa(idfaFromNative === 'LIMITED_AD_TRACKING' ? '제한된 광고 추적 (0으로 고정됨)' : idfaFromNative);
+        const displayValue = idfaFromNative === 'LIMITED_AD_TRACKING' ? '제한된 광고 추적 (0으로 고정됨)' : idfaFromNative;
+        console.log('[IDFA Debug] ✅ IDFA 발견:', displayValue);
+        setIdfa(displayValue);
+      } else if (idfaFromNative === null || idfaFromNative === undefined) {
+        // 로그 스팸 방지: 이전에 IDFA가 없었던 경우에만 경고 출력
+        if (!idfa || !idfa.includes('IDFA를 가져올 수 없음')) {
+          console.warn('[IDFA Debug] ❌ IDFA를 찾을 수 없음. 값:', idfaFromNative);
+          console.warn('[IDFA Debug] 💡 가능한 원인:');
+          console.warn('[IDFA Debug]   1. 네이티브 코드가 NSUserDefaults에 값을 저장하지 않음');
+          console.warn('[IDFA Debug]   2. ATT 권한이 허용되었지만 네이티브 코드 실행 실패');
+          console.warn('[IDFA Debug]   3. 앱 번들에 최신 네이티브 코드가 포함되지 않음');
+          console.warn('[IDFA Debug]   4. 네이티브 로그 확인 필요 (Xcode Console 또는 기기 로그)');
+        }
+        setIdfa(`IDFA를 가져올 수 없음 (NSUserDefaults에 저장되지 않음)\n\n값: ${idfaFromNative}\n\n💡 확인사항:\n1. 최신 IPA 빌드가 설치되었는지 확인\n2. Xcode Console에서 네이티브 로그 확인\n3. ATT 권한 허용 후 앱 완전 재시작`);
       } else {
-        setIdfa('IDFA를 가져올 수 없음 (네이티브 빌드 필요 또는 ATT 미허용)');
+        setIdfa(`예상치 못한 값: ${idfaFromNative} (타입: ${typeof idfaFromNative})`);
       }
     } catch (error: any) {
       setAttStatus('오류 발생');
@@ -57,11 +89,21 @@ export default function IDFADebugOverlay() {
     // 모달이 열릴 때마다 IDFA 확인
     if (visible) {
       checkIDFA();
-      // 주기적으로 다시 확인 (1초마다)
-      const interval = setInterval(checkIDFA, 1000);
+      // 주기적으로 다시 확인 (5초마다 - IDFA가 발견되면 즉시 멈춤)
+      const interval = setInterval(() => {
+        checkIDFA();
+        // IDFA가 이미 발견되었으면 interval 중지
+        if (idfa && idfa !== 'IDFA를 가져올 수 없음' && !idfa.includes('NSUserDefaults에 저장되지 않음')) {
+          clearInterval(interval);
+        }
+      }, 5000); // 1초 -> 5초로 변경 (로그 스팸 방지)
       return () => clearInterval(interval);
+    } else {
+      // 모달이 닫히면 상태 초기화 (다음에 열 때 깨끗한 상태로 시작)
+      setIdfa(null);
+      setAttStatus('확인 중...');
     }
-  }, [visible]);
+  }, [visible, idfa]);
 
   return (
     <>
