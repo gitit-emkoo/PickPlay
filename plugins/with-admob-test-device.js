@@ -14,7 +14,8 @@ const withAdMobTestDevice = (config) => {
 
     // 이미 추가된 경우 건너뛰기 (더 명확한 마커 확인)
     if (appDelegate.contents.includes('// MARK: - AdMob Test Device Setup') || 
-        appDelegate.contents.includes('getAdMobTestDeviceIdentifier')) {
+        appDelegate.contents.includes('getAdMobTestDeviceIdentifier') ||
+        appDelegate.contents.includes('PickPlayIDFAModule')) {
       console.log('[PickPlay Plugin] ✅ 이미 IDFA 코드가 추가되어 있습니다. 건너뜁니다.');
       return config;
     }
@@ -25,6 +26,7 @@ const withAdMobTestDevice = (config) => {
     const importsToAdd = `#import <AdSupport/AdSupport.h>
 #import <AppTrackingTransparency/AppTrackingTransparency.h>
 #import <React/RCTLog.h>
+#import <React/RCTBridgeModule.h>
 #import <GoogleMobileAds/GoogleMobileAds.h>
 `;
 
@@ -37,7 +39,7 @@ const withAdMobTestDevice = (config) => {
       );
     }
 
-    // IDFA 헬퍼 함수 추가 (클래스 구현부 끝부분, @end 바로 전)
+    // IDFA 헬퍼 함수 및 React Native Bridge 모듈 추가 (클래스 구현부 끝부분, @end 바로 전)
     const idfaHelperFunction = `
 // MARK: - AdMob Test Device Identifier Helper
 - (NSString *)getAdMobTestDeviceIdentifier {
@@ -61,7 +63,6 @@ const withAdMobTestDevice = (config) => {
         break;
     }
     RCTLogWarn(@"[PickPlay][AdMob] ATT 권한이 허용되지 않음: %@", statusString);
-    // NSUserDefaults에 저장하지 않고 nil 반환
     return nil;
   }
   
@@ -70,19 +71,11 @@ const withAdMobTestDevice = (config) => {
   // IDFA 가져오기
   NSUUID *advertisingIdentifier = identifierManager.advertisingIdentifier;
   NSString *idfaString = [advertisingIdentifier UUIDString];
-  
-  // 기본 저장소에 기록해 JS에서 Settings.get으로 읽을 수 있게 함
-  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
 
   if ([idfaString isEqualToString:@"00000000-0000-0000-0000-000000000000"]) {
     RCTLogWarn(@"[PickPlay][AdMob] IDFA is zero - User has limited ad tracking enabled");
-    [defaults setObject:@"LIMITED_AD_TRACKING" forKey:@"PickPlayIDFA"];
-    [defaults synchronize];
     return @"LIMITED_AD_TRACKING";
   }
-
-  [defaults setObject:idfaString forKey:@"PickPlayIDFA"];
-  [defaults synchronize];
 
   RCTLogInfo(@"[PickPlay][AdMob] ========================================");
   RCTLogInfo(@"[PickPlay][AdMob] Test Device Identifier: %@", idfaString);
@@ -112,6 +105,75 @@ const withAdMobTestDevice = (config) => {
         /(\n@end\s*$)/,
         `${idfaHelperFunction}$1`
       );
+    }
+
+    // Bridge Module을 AppDelegate 클래스 외부(@end 이후)에 추가
+    const bridgeModule = `
+// MARK: - React Native Bridge Module for IDFA
+@class AppDelegate;
+
+@interface PickPlayIDFAModule : NSObject <RCTBridgeModule>
+@end
+
+@implementation PickPlayIDFAModule
+
+RCT_EXPORT_MODULE(PickPlayIDFA);
+
+// JavaScript에서 호출 가능한 메서드: IDFA 가져오기
+RCT_EXPORT_METHOD(getIDFA:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
+  dispatch_async(dispatch_get_main_queue(), ^{
+    AppDelegate *appDelegate = (AppDelegate *)[UIApplication sharedApplication].delegate;
+    if (appDelegate && [appDelegate respondsToSelector:@selector(getAdMobTestDeviceIdentifier)]) {
+      NSString *idfa = [appDelegate getAdMobTestDeviceIdentifier];
+      
+      if (idfa) {
+        resolve(idfa);
+      } else {
+        NSError *error = [NSError errorWithDomain:@"PickPlayIDFA" code:1 userInfo:@{NSLocalizedDescriptionKey: @"IDFA를 가져올 수 없습니다. ATT 권한이 허용되지 않았거나 제한된 광고 추적이 활성화되어 있습니다."}];
+        reject(@"IDFA_ERROR", @"IDFA를 가져올 수 없음", error);
+      }
+    } else {
+      NSError *error = [NSError errorWithDomain:@"PickPlayIDFA" code:2 userInfo:@{NSLocalizedDescriptionKey: @"AppDelegate를 찾을 수 없거나 IDFA 메서드가 없습니다."}];
+      reject(@"IDFA_ERROR", @"AppDelegate 메서드 없음", error);
+    }
+  });
+}
+
+@end
+`;
+
+    // Bridge Module을 @end 이후에 추가 (중복 확인)
+    if (!appDelegate.contents.includes('PickPlayIDFAModule')) {
+      if (appDelegate.contents.includes('@end')) {
+        // 마지막 @end 뒤에 추가 (파일 끝에서 가장 가까운 @end 찾기)
+        const lines = appDelegate.contents.split('\n');
+        let lastEndIndex = -1;
+        for (let i = lines.length - 1; i >= 0; i--) {
+          if (lines[i].trim() === '@end') {
+            lastEndIndex = i;
+            break;
+          }
+        }
+        
+        if (lastEndIndex >= 0) {
+          // 마지막 @end 뒤에 Bridge Module 추가
+          lines.splice(lastEndIndex + 1, 0, bridgeModule.trim());
+          appDelegate.contents = lines.join('\n');
+          console.log('[PickPlay Plugin] ✅ Bridge Module이 @end 이후에 추가되었습니다.');
+        } else {
+          // @end를 찾지 못한 경우 파일 끝에 추가
+          appDelegate.contents += '\n' + bridgeModule;
+          console.log('[PickPlay Plugin] ✅ Bridge Module이 파일 끝에 추가되었습니다.');
+        }
+      } else {
+        // @end가 없는 경우 파일 끝에 추가
+        appDelegate.contents += '\n' + bridgeModule;
+        console.log('[PickPlay Plugin] ✅ Bridge Module이 파일 끝에 추가되었습니다 (@end 없음).');
+      }
+    } else {
+      console.log('[PickPlay Plugin] ✅ Bridge Module이 이미 추가되어 있습니다. 건너뜁니다.');
     }
 
     // didFinishLaunchingWithOptions 메서드 내부에 IDFA 로깅 코드 추가

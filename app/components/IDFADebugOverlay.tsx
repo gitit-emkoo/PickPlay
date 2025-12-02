@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Modal, StyleSheet, Platform } from 'react-native';
-import { Settings } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, StyleSheet, Platform, NativeModules } from 'react-native';
 import * as Tracking from 'expo-tracking-transparency';
+
+// React Native Bridge 모듈로부터 IDFA 가져오기
+const { PickPlayIDFA } = NativeModules;
 
 /**
  * 개발 환경에서만 표시되는 IDFA 디버그 오버레이
@@ -40,24 +42,22 @@ export default function IDFADebugOverlay() {
       }
       setAttStatus(statusText);
 
-      // IDFA 가져오기
-      let idfaFromNative;
+      // IDFA 가져오기 (React Native Bridge 모듈 사용)
+      let idfaFromNative: string | null = null;
       try {
-        if (Settings && typeof Settings.get === 'function') {
-          idfaFromNative = Settings.get('PickPlayIDFA');
-          
-          // IDFA가 발견된 경우에만 상세 로그 출력
-          if (idfaFromNative && typeof idfaFromNative === 'string' && idfaFromNative.length > 0) {
-            console.log('[IDFA Debug] ✅ Settings.get("PickPlayIDFA") 결과:', idfaFromNative);
-          }
+        if (PickPlayIDFA && typeof PickPlayIDFA.getIDFA === 'function') {
+          // Promise 기반으로 IDFA 가져오기
+          idfaFromNative = await PickPlayIDFA.getIDFA();
+          console.log('[IDFA Debug] ✅ NativeModules.PickPlayIDFA.getIDFA() 결과:', idfaFromNative);
         } else {
-          console.error('[IDFA Debug] ❌ Settings.get 함수를 사용할 수 없음');
-          setIdfa('Settings.get 함수를 사용할 수 없습니다 (iOS에서만 지원)');
+          console.error('[IDFA Debug] ❌ PickPlayIDFA 모듈을 찾을 수 없음');
+          setIdfa('네이티브 모듈을 찾을 수 없습니다. 네이티브 빌드가 최신인지 확인하세요.');
           return;
         }
       } catch (error: any) {
-        console.error('[IDFA Debug] Settings.get 호출 중 오류:', error);
-        setIdfa(`오류: ${error?.message || '알 수 없는 오류'}`);
+        console.error('[IDFA Debug] PickPlayIDFA.getIDFA() 호출 중 오류:', error);
+        const errorMessage = error?.message || error?.toString() || '알 수 없는 오류';
+        setIdfa(`오류: ${errorMessage}\n\n💡 가능한 원인:\n1. ATT 권한이 허용되지 않음\n2. 네이티브 빌드가 최신이 아님\n3. 광고 추적이 제한됨`);
         return;
       }
       
@@ -65,19 +65,8 @@ export default function IDFADebugOverlay() {
         const displayValue = idfaFromNative === 'LIMITED_AD_TRACKING' ? '제한된 광고 추적 (0으로 고정됨)' : idfaFromNative;
         console.log('[IDFA Debug] ✅ IDFA 발견:', displayValue);
         setIdfa(displayValue);
-      } else if (idfaFromNative === null || idfaFromNative === undefined) {
-        // 로그 스팸 방지: 이전에 IDFA가 없었던 경우에만 경고 출력
-        if (!idfa || !idfa.includes('IDFA를 가져올 수 없음')) {
-          console.warn('[IDFA Debug] ❌ IDFA를 찾을 수 없음. 값:', idfaFromNative);
-          console.warn('[IDFA Debug] 💡 가능한 원인:');
-          console.warn('[IDFA Debug]   1. 네이티브 코드가 NSUserDefaults에 값을 저장하지 않음');
-          console.warn('[IDFA Debug]   2. ATT 권한이 허용되었지만 네이티브 코드 실행 실패');
-          console.warn('[IDFA Debug]   3. 앱 번들에 최신 네이티브 코드가 포함되지 않음');
-          console.warn('[IDFA Debug]   4. 네이티브 로그 확인 필요 (Xcode Console 또는 기기 로그)');
-        }
-        setIdfa(`IDFA를 가져올 수 없음 (NSUserDefaults에 저장되지 않음)\n\n값: ${idfaFromNative}\n\n💡 확인사항:\n1. 최신 IPA 빌드가 설치되었는지 확인\n2. Xcode Console에서 네이티브 로그 확인\n3. ATT 권한 허용 후 앱 완전 재시작`);
       } else {
-        setIdfa(`예상치 못한 값: ${idfaFromNative} (타입: ${typeof idfaFromNative})`);
+        setIdfa(`IDFA를 가져올 수 없음\n\n💡 확인사항:\n1. ATT 권한 허용 여부 확인\n2. 최신 네이티브 빌드 설치 확인\n3. 앱 완전 재시작`);
       }
     } catch (error: any) {
       setAttStatus('오류 발생');
