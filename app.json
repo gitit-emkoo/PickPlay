@@ -7,7 +7,7 @@
       "projectId": "f0389889-654e-4120-8839-8b795ff4b641"
     },
     "react-native-google-mobile-ads": {
-      "ios_app_id": "ca-app-pub-3940256099942544~1458002511"
+      "ios_app_id": "ca-app-pub-2555567440328829~5483134579"
     }
   },
   "orientation": "portrait",
@@ -26,7 +26,7 @@
     "bundleIdentifier": "com.pickplay.kwcc",
     "googleServicesFile": "./GoogleService-Info.plist",
     "infoPlist": {
-      "GADApplicationIdentifier": "ca-app-pub-3940256099942544~1458002511",
+      "GADApplicationIdentifier": "ca-app-pub-2555567440328829~5483134579",
       "NSUserTrackingUsageDescription": "이 정보를 사용하여 더 관련성 높은 맞춤형 광고를 제공합니다."
     }
   },
@@ -71,6 +71,6 @@
     "./plugins/with-admob-test-device"
   ],
   "react-native-google-mobile-ads": {
-    "ios_app_id": "ca-app-pub-3940256099942544~1458002511"
+    "ios_app_id": "ca-app-pub-2555567440328829~5483134579"
   }
 }

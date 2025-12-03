@@ -10,13 +10,10 @@ const isExpoGo = () => {
   }
 };
 
-// 플랫폼별 광고 단위 ID (테스트용)
+// 플랫폼별 광고 단위 ID (실서비스용)
 const AD_UNITS = {
-  android: 'ca-app-pub-3940256099942544/5354046379',
-  ios: 'ca-app-pub-3940256099942544/6978759866'
-  // TODO: 실서비스 시 아래 실제 광고 단위 ID로 교체하세요.
-  // android: 'ca-app-pub-2555567440328829/7893158578',
-  // ios: 'ca-app-pub-2555567440328829/9198215970'
+  android: 'ca-app-pub-2555567440328829/7893158578',
+  ios: 'ca-app-pub-2555567440328829/9198215970'
 };
 
 // 더미 광고 객체 (Expo Go용)
@@ -119,7 +116,7 @@ export function createRewardedInterstitial() {
     const adUnitId = platformAdUnitId;
       
     console.log(`🎯 보상형 전면 광고 생성: ${adUnitId}`);
-    console.log(`🔧 모드: 테스트 (AdMob 계정 일시정지)`);
+    console.log(`🔧 모드: 실서비스`);
     console.log(`📱 플랫폼: ${Platform.OS}`);
     
     const rewarded = RewardedInterstitialAd.createForAdRequest(adUnitId, {

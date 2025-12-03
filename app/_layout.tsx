@@ -14,7 +14,6 @@ import { getApp, initializeApp, getApps } from '@react-native-firebase/app';
 import NotificationBootstrap from './components/NotificationBootstrap';
 import LoadingScreen from './components/LoadingScreen';
 import ErrorScreen from './components/ErrorScreen';
-import IDFADebugOverlay from './components/IDFADebugOverlay';
 import { initAds } from '../src/services/ads';
 import { ensureAnonymousAuth } from '../src/services/firebase';
 
@@ -239,43 +238,39 @@ export default function RootLayout() {
         // ATT 권한 요청 및 IDFA 가져오기 (iOS)
         if (Platform.OS === 'ios') {
           const { PickPlayIDFA } = NativeModules;
-          Tracking.requestTrackingPermissionsAsync().then(async ({ status }) => {
-            if (status === 'granted') {
-              console.log('✅ ATT: 광고 추적 허용됨');
-              
-              // React Native Bridge를 통해 IDFA 가져오기
-              try {
-                if (PickPlayIDFA && typeof PickPlayIDFA.getIDFA === 'function') {
-                  const idfaFromNative = await PickPlayIDFA.getIDFA();
-                  if (typeof idfaFromNative === 'string' && idfaFromNative.length > 0) {
-                    if (idfaFromNative === 'LIMITED_AD_TRACKING') {
-                      console.log('📵 IDFA가 0으로 고정되어 있습니다. (제한된 광고 추적 설정)');
-                    } else {
-                      console.log('═══════════════════════════════════════');
-                      console.log('📱 IDFA (AdMob Test Device):');
-                      console.log(idfaFromNative);
-                      console.log('═══════════════════════════════════════');
-                      console.log('👆 AdMob 콘솔 > 테스트 기기 등록 시 위 ID를 입력하세요.');
+          Tracking.requestTrackingPermissionsAsync()
+            .then(async ({ status }) => {
+              if (status === 'granted') {
+                console.log('✅ ATT: 광고 추적 허용됨');
+
+                // 개발 모드에서만 IDFA 상세 로그 출력
+                if (__DEV__) {
+                  try {
+                    if (PickPlayIDFA && typeof PickPlayIDFA.getIDFA === 'function') {
+                      const idfaFromNative = await PickPlayIDFA.getIDFA();
+                      if (typeof idfaFromNative === 'string' && idfaFromNative.length > 0) {
+                        if (idfaFromNative === 'LIMITED_AD_TRACKING') {
+                          console.log('📵 IDFA가 0으로 고정되어 있습니다. (제한된 광고 추적 설정)');
+                        } else {
+                          console.log('═══════════════════════════════════════');
+                          console.log('📱 IDFA (AdMob Test Device):');
+                          console.log(idfaFromNative);
+                          console.log('═══════════════════════════════════════');
+                          console.log('👆 AdMob 콘솔 > 테스트 기기 등록 시 위 ID를 입력하세요.');
+                        }
+                      }
                     }
+                  } catch {
+                    // 개발용 로그이므로 에러는 무시
                   }
-                } else {
-                  console.log('💡 IDFA 확인 방법:');
-                  console.log('   1. 앱을 완전히 종료한 후 다시 실행');
-                  console.log('   2. 또는 화면 오른쪽 아래 플로팅 버튼(📱) 클릭');
-                  console.log('   3. 네이티브 빌드가 최신인지 확인 (새로 빌드한 IPA인지)');
                 }
-              } catch (error: any) {
-                console.log('💡 IDFA 확인 방법:');
-                console.log('   1. 앱을 완전히 종료한 후 다시 실행');
-                console.log('   2. 또는 화면 오른쪽 아래 플로팅 버튼(📱) 클릭');
-                console.log('   3. 네이티브 빌드가 최신인지 확인 (새로 빌드한 IPA인지)');
+              } else {
+                console.log('❌ ATT: 광고 추적 거부됨 - IDFA를 가져올 수 없습니다.');
               }
-            } else {
-              console.log('❌ ATT: 광고 추적 거부됨 - IDFA를 가져올 수 없습니다.');
-            }
-          }).catch((error: any) => {
-            console.warn('⚠️ ATT 권한 요청 실패:', error?.message);
-          });
+            })
+            .catch((error: any) => {
+              console.warn('⚠️ ATT 권한 요청 실패:', error?.message);
+            });
         }
 
         // 광고 초기화
@@ -286,17 +281,15 @@ export default function RootLayout() {
     })();
   }, [initToken]);
 
-  // ATT 권한 허용 후 앱이 활성화될 때 IDFA 다시 확인
+  // ATT 권한 허용 후 앱이 활성화될 때 IDFA 다시 확인 (개발 모드에서만 상세 로그)
   useEffect(() => {
-    if (Platform.OS !== 'ios') return;
+    if (Platform.OS !== 'ios' || !__DEV__) return;
 
     const subscription = AppState.addEventListener('change', async (nextAppState) => {
       if (nextAppState === 'active') {
-        // 앱이 포그라운드로 돌아올 때 ATT 권한 상태 확인
         try {
           const trackingStatus = await Tracking.getTrackingPermissionsAsync();
           if (trackingStatus.status === 'granted') {
-            // ATT 권한이 허용된 경우, IDFA 확인 (React Native Bridge 사용)
             try {
               const { PickPlayIDFA } = NativeModules;
               if (PickPlayIDFA && typeof PickPlayIDFA.getIDFA === 'function') {
@@ -307,11 +300,11 @@ export default function RootLayout() {
                   }
                 }
               }
-            } catch (error: any) {
-              // 에러 무시 (IDFA 확인 실패는 치명적이지 않음)
+            } catch {
+              // 개발용 로그이므로 에러는 무시
             }
           }
-        } catch (error) {
+        } catch {
           // 에러 무시
         }
       }
@@ -359,7 +352,6 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" />
         </Stack>
-        <IDFADebugOverlay />
       </SafeAreaView>
     </SafeAreaProvider>
   );

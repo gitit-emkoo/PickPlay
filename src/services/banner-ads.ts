@@ -1,11 +1,8 @@
 import { Platform } from 'react-native';
 
 const BANNER_AD_UNIT_IDS = {
-  android: 'ca-app-pub-3940256099942544/6300978111',
-  ios: 'ca-app-pub-3940256099942544/2934735716'
-  // TODO: 실서비스 시 아래 실제 배너 광고 단위 ID로 교체하세요.
-  // android: 'ca-app-pub-2555567440328829/6607319419',
-  // ios: 'ca-app-pub-2555567440328829/7449627792'
+  android: 'ca-app-pub-2555567440328829/6607319419',
+  ios: 'ca-app-pub-2555567440328829/7449627792'
 };
 
 // Expo Go 환경 감지
@@ -24,7 +21,7 @@ export const getBannerAdUnitId = () => {
     const adUnitId = platformAdUnitId;
     
     console.log(`🎯 배너 광고 ID 가져오기: ${adUnitId}`);
-    console.log(`🔧 모드: 테스트 (AdMob 계정 일시정지)`);
+    console.log(`🔧 모드: 실서비스`);
     console.log(`📱 플랫폼: ${Platform.OS}`);
 
     return adUnitId;
