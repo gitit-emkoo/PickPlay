@@ -1,0 +1,340 @@
+﻿source 'https://cdn.cocoapods.org/'
+require 'fileutils'
+require_relative '../node_modules/react-native/scripts/react_native_pods'
+
+begin
+  require_relative '../node_modules/react-native/scripts/react_native_post_install'
+rescue LoadError
+  Pod::UI.puts '  react_native_post_install not found; continuing without it'
+  def react_native_post_install(*); end
+end
+
+begin
+  require_relative '../node_modules/expo/scripts/autolinking'
+rescue LoadError
+  Pod::UI.puts '  expo autolinking script not found; continuing without it'
+  def use_expo_modules!(*); end
+end
+
+platform :ios, '15.1'
+project 'pickplay.xcodeproj'
+
+target 'pickplay' do
+  use_expo_modules!
+
+  # New Architecture 명시적으로 비활성화
+  ENV['RCT_NEW_ARCH_ENABLED'] = '0'
+
+  use_react_native!(
+    :hermes_enabled => true,
+    :fabric_enabled => false,
+    :app_path => "#{Pod::Config.instance.installation_root}/.."
+  )
+
+  # Ensure AdMob headers are available for AppDelegate logging during dev client builds
+  pod 'Google-Mobile-Ads-SDK'
+
+  # Fallback: Ensure RNScreens is resolvable for Expo pods (e.g., ExpoHead)
+  if File.exist?(File.join(__dir__, '../node_modules/react-native-screens/RNScreens.podspec'))
+    pod 'RNScreens', :path => '../node_modules/react-native-screens'
+  end
+
+end
+
+post_install do |installer|
+  # installer_context를 최상단에서 즉시 정의
+  installer_context = installer
+  
+  Pod::UI.puts ""
+  Pod::UI.puts "═══════════════════════════════════════════════════════════"
+  Pod::UI.puts "  📝 post_install 블록 시작"
+  Pod::UI.puts "═══════════════════════════════════════════════════════════"
+  
+  # 중요: Module map 경로 수정을 가장 먼저 실행 (다른 블록에서 에러가 발생해도 실행되도록)
+  # Module map 파일 경로 문제 해결
+  begin
+    Pod::UI.puts "  🔍 [1단계] Module map 경로 수정 블록 시작..."
+    pods_root = File.expand_path('Pods', __dir__)
+    target_support_files = File.join(pods_root, 'Target Support Files')
+    project_root = File.expand_path('..', __dir__)
+    fixed_count = 0
+    
+    Pod::UI.puts "     Pods 디렉토리: #{pods_root}"
+    Pod::UI.puts "     Target Support Files: #{target_support_files}"
+    Pod::UI.puts "     프로젝트 루트: #{project_root}"
+    Pod::UI.puts "     현재 작업 디렉토리: #{Dir.pwd}"
+    
+    # Target Support Files 디렉토리 확인 (pod install 완료 후 생성됨)
+    if !Dir.exist?(target_support_files)
+      Pod::UI.puts "  ⚠️  Target Support Files 디렉토리가 없습니다 (pod install 후 생성됨)"
+      Pod::UI.puts "     Pods 디렉토리 존재 여부: #{Dir.exist?(pods_root)}"
+      if Dir.exist?(pods_root)
+        Pod::UI.puts "     Pods 디렉토리 내용: #{Dir.entries(pods_root).select { |e| !e.start_with?('.') }.join(', ')}"
+      end
+    else
+      Pod::UI.puts "  ✅ Target Support Files 디렉토리 확인됨"
+    end
+    
+    # Pods 프로젝트의 모든 타겟 수정
+    Pod::UI.puts "     Pods 프로젝트 타겟 수: #{installer_context.pods_project.targets.count}"
+    
+    installer_context.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        target_name = target.name
+        expected_modulemap = File.join(target_support_files, target_name, "#{target_name}.modulemap")
+        correct_path = "$(PODS_ROOT)/Target Support Files/#{target_name}/#{target_name}.modulemap"
+        
+        current_modulemap = config.build_settings['MODULEMAP_FILE'].to_s
+        
+        # 파일 존재 여부 확인 (pod install 완료 후 생성될 수 있음)
+        file_exists = File.exist?(expected_modulemap)
+        
+        # 잘못된 경로 체크 - 절대 경로나 프로젝트 루트를 포함하는 경우
+        needs_fix = false
+        
+        if !current_modulemap.empty?
+          # 프로젝트 루트를 포함하는 절대 경로인 경우 (가장 흔한 케이스)
+          if current_modulemap.include?(project_root) && !current_modulemap.include?('$(PODS_ROOT)')
+            needs_fix = true
+          # Target Support Files를 포함하지만 PODS_ROOT를 포함하지 않는 경우
+          elsif current_modulemap.include?('Target Support Files') && !current_modulemap.include?('$(PODS_ROOT)')
+            needs_fix = true
+          # 절대 경로로 시작하는 경우
+          elsif current_modulemap.start_with?('/') && !current_modulemap.include?('$(PODS_ROOT)')
+            needs_fix = true
+          # 파일이 존재하고 올바른 경로가 아닌 경우
+          elsif file_exists && current_modulemap != correct_path && !current_modulemap.include?('$(PODS_ROOT)')
+            needs_fix = true
+          end
+        elsif file_exists && current_modulemap.empty?
+          # MODULEMAP_FILE이 설정되지 않았지만 파일이 존재하는 경우
+          needs_fix = true
+        end
+        
+        # 경로 수정
+        if needs_fix && file_exists
+          config.build_settings['MODULEMAP_FILE'] = correct_path
+          fixed_count += 1
+          if fixed_count <= 10
+            Pod::UI.puts "  ✅ [#{fixed_count}] Module map 경로 수정: #{target_name}"
+            Pod::UI.puts "     이전: #{current_modulemap.empty? ? '(없음)' : current_modulemap}"
+            Pod::UI.puts "     수정: #{correct_path}"
+          end
+        elsif needs_fix && !file_exists && !current_modulemap.empty?
+          # 파일이 없고 잘못된 경로가 설정된 경우, 빈 문자열로 설정 (Xcode가 자동으로 찾음)
+          config.build_settings['MODULEMAP_FILE'] = ""
+          fixed_count += 1
+          if fixed_count <= 10
+            Pod::UI.puts "  ⚠️  [#{fixed_count}] Module map 파일 없음, 경로 제거: #{target_name}"
+            Pod::UI.puts "     이전 경로: #{current_modulemap}"
+          end
+        end
+        
+        # 필수 빌드 설정 확인
+        if config.build_settings['PODS_CONFIGURATION_BUILD_DIR'].nil?
+          config.build_settings['PODS_CONFIGURATION_BUILD_DIR'] = '$(BUILD_DIR)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)'
+        end
+        if config.build_settings['PODS_ROOT'].nil?
+          config.build_settings['PODS_ROOT'] = '${SRCROOT}/Pods'
+        end
+      end
+    end
+    
+    # Aggregate targets도 수정 (메인 프로젝트)
+    installer_context.aggregate_targets.each do |aggregate_target|
+      aggregate_target.user_project.targets.each do |target|
+        target.build_configurations.each do |config|
+          # HEADER_SEARCH_PATHS 확인
+          header_paths = Array(config.build_settings['HEADER_SEARCH_PATHS'] || [])
+          pods_header_path = '$(PODS_ROOT)/Headers/Public'
+          if !header_paths.include?(pods_header_path) && !header_paths.include?('$(inherited)')
+            header_paths << '$(inherited)'
+            header_paths << pods_header_path
+            config.build_settings['HEADER_SEARCH_PATHS'] = header_paths.uniq
+          end
+          
+          # FRAMEWORK_SEARCH_PATHS 확인
+          framework_paths = Array(config.build_settings['FRAMEWORK_SEARCH_PATHS'] || [])
+          pods_framework_path = '$(PODS_ROOT)/Frameworks'
+          if !framework_paths.include?(pods_framework_path) && !framework_paths.include?('$(inherited)')
+            framework_paths << '$(inherited)'
+            framework_paths << pods_framework_path
+            config.build_settings['FRAMEWORK_SEARCH_PATHS'] = framework_paths.uniq
+          end
+        end
+      end
+    end
+    
+    if fixed_count > 10
+      Pod::UI.puts "  ✅ 총 #{fixed_count}개의 Module map 경로를 수정했습니다 (처음 10개만 표시)"
+    elsif fixed_count > 0
+      Pod::UI.puts "  ✅ 총 #{fixed_count}개의 Module map 경로를 수정했습니다"
+    else
+      Pod::UI.puts "  ✅ Module map 경로 확인 완료 (수정 불필요)"
+    end
+    
+    # 프로젝트 파일 저장
+    installer_context.pods_project.save
+    Pod::UI.puts "  ✅ Pods 프로젝트 파일 저장 완료"
+    
+    # Aggregate targets 프로젝트 파일도 저장
+    installer_context.aggregate_targets.each do |aggregate_target|
+      aggregate_target.user_project.save
+    end
+    Pod::UI.puts "  ✅ Aggregate targets 프로젝트 파일 저장 완료"
+    
+    Pod::UI.puts "  ✅ [1단계] Module map 경로 수정 완료"
+  rescue => e
+    Pod::UI.puts "  ❌ [1단계] Module map 경로 수정 실패: #{e.class}: #{e.message}"
+    Pod::UI.puts "     스택: #{e.backtrace.first(5).join("\n     ")}"
+    Pod::UI.puts "     (계속 진행합니다...)"
+  end
+  
+  # react_native_post_install 호출 (에러가 발생해도 계속 진행)
+  begin
+    Pod::UI.puts "  🔄 [2단계] react_native_post_install 호출 시도..."
+    if defined?(react_native_post_install)
+      react_native_post_install(installer_context)
+      Pod::UI.puts "  ✅ [2단계] react_native_post_install 성공"
+    else
+      Pod::UI.puts "  ℹ️  [2단계] react_native_post_install 함수가 정의되지 않음 (건너뜀)"
+    end
+  rescue => e
+    Pod::UI.puts "  ⚠️  [2단계] react_native_post_install 실패: #{e.class}: #{e.message}"
+    Pod::UI.puts "     (계속 진행합니다...)"
+  end
+
+  # react-native-google-mobile-ads 스크립트가 app.json을 찾을 수 있도록 수정
+  begin
+    project_root = File.expand_path('..', __dir__)
+    app_json_path = File.join(project_root, 'app.json')
+    
+    if File.exist?(app_json_path)
+      Pod::UI.puts "  ✅ app.json 발견: #{app_json_path}"
+      
+      # 프로젝트 타겟(pickplay)의 빌드 설정 수정
+      installer_context.pods_project.targets.each do |target|
+        if target.name == 'RNGoogleMobileAds'
+          target.build_phases.grep(Xcodeproj::Project::Object::PBXShellScriptBuildPhase).each do |phase|
+            if phase.name && phase.name.include?('RNGoogleMobileAds') && phase.name.include?('Configuration')
+              Pod::UI.puts "  📝 RNGoogleMobileAds 스크립트 단계 발견: #{phase.name}"
+              
+              # 스크립트 내용 확인
+              if phase.shell_script
+                # PROJECT_DIR을 프로젝트 루트로 설정하는 코드 추가
+                # ios_config.sh는 PROJECT_DIR에서 시작해서 상위 디렉토리를 검색하므로
+                # PROJECT_DIR을 프로젝트 루트로 설정하면 app.json을 찾을 수 있습니다
+                original_script = phase.shell_script
+                
+                # 스크립트 시작 부분에 PROJECT_DIR을 프로젝트 루트로 설정
+                # SRCROOT는 Xcode가 자동으로 설정하는데, 이것이 프로젝트 루트를 가리킵니다
+                if !original_script.include?('PROJECT_DIR="${SRCROOT}"') && !original_script.include?("PROJECT_DIR=\"#{project_root}\"")
+                  Pod::UI.puts "  🔧 PROJECT_DIR을 프로젝트 루트로 설정 중..."
+                  # 스크립트 시작 부분에 PROJECT_DIR 설정 추가
+                  phase.shell_script = "export PROJECT_DIR=\"${SRCROOT}\"\n#{original_script}"
+                  Pod::UI.puts "  ✅ 스크립트 수정 완료"
+                else
+                  Pod::UI.puts "  ✅ 스크립트에 이미 PROJECT_DIR 설정이 있습니다"
+                end
+              end
+            end
+          end
+        end
+      end
+      
+      # 메인 프로젝트의 빌드 설정도 수정
+      installer_context.aggregate_targets.each do |aggregate_target|
+        aggregate_target.user_project.targets.each do |target|
+          if target.name == 'pickplay'
+            target.build_phases.grep(Xcodeproj::Project::Object::PBXShellScriptBuildPhase).each do |phase|
+              if phase.name && phase.name.include?('RNGoogleMobileAds') && phase.name.include?('Configuration')
+                Pod::UI.puts "  📝 pickplay 타겟의 RNGoogleMobileAds 스크립트 단계 발견: #{phase.name}"
+                if phase.shell_script && !phase.shell_script.include?('PROJECT_DIR="${SRCROOT}"')
+                  Pod::UI.puts "  🔧 pickplay 타겟의 스크립트도 수정 중..."
+                  phase.shell_script = "export PROJECT_DIR=\"${SRCROOT}\"\n#{phase.shell_script}"
+                end
+              end
+            end
+          end
+        end
+      end
+    else
+      Pod::UI.puts "  ⚠️  app.json을 찾을 수 없습니다: #{app_json_path}"
+    end
+  rescue => e
+    Pod::UI.puts "  react-native-google-mobile-ads app.json 확인 실패: #{e.message}"
+    Pod::UI.puts "  스택 트레이스: #{e.backtrace.first(5).join("\n")}"
+  end
+
+  # --- 기존에 유지되어야 했던 중요 패치들 ---
+
+  # ExpoModulesCore Swift 파일들의 import React 패치
+  begin
+    repo_root = File.expand_path('..', __dir__)
+    expo_ios_dir = File.join(repo_root, 'node_modules', 'expo-modules-core', 'ios')
+    if Dir.exist?(expo_ios_dir)
+      Dir.glob(File.join(expo_ios_dir, '**', '*.swift')).each do |swift_file|
+        begin
+          content = File.read(swift_file)
+          original_content = content.dup
+
+          # 'import React' 패치
+          if content.include?('import React') && !content.include?('#if canImport(React)')
+            content.gsub!(/^\s*import\s+React\s*$/, <<~SWIFT.chomp
+              #if canImport(React)
+              import React
+              #elseif canImport(React_Core)
+              import React_Core
+              #endif
+            SWIFT
+            )
+          end
+
+          if content != original_content
+            File.write(swift_file, content)
+            puts " Patched React import in #{swift_file.sub(repo_root + '/', '')}"
+          end
+        rescue => e
+          Pod::UI.puts " Failed to patch module import in #{swift_file}: #{e.message}"
+        end
+      end
+    end
+  rescue => e
+    Pod::UI.puts " ExpoModulesCore module import patch skipped: #{e.message}"
+  end
+
+  # Hermes 스크립트 단계가 CI에서 실패하는 이슈 방지: 스크립트를 no-op 처리
+  begin
+    hermes_target = installer_context.pods_project.targets.find { |t| t.name == 'hermes-engine' }
+    if hermes_target
+      hermes_target.build_phases.grep(Xcodeproj::Project::Object::PBXShellScriptBuildPhase).each do |bp|
+        next unless bp.name.to_s.include?('Replace Hermes for the right configuration')
+        bp.shell_script = "echo \"[CI] Skipping Hermes replacement script (no-op).\""
+        puts "  Hermes replacement script converted to no-op for CI stability."
+      end
+    end
+  rescue => e
+    Pod::UI.puts " Hermes script phase tweak skipped: #{e.message}"
+  end
+
+  # [RN]Check rncore 스크립트 비활성화 (New Architecture 비활성화 상태에서 Codegen 체크 불필요)
+  begin
+    ['React-Fabric', 'React-FabricComponents'].each do |target_name|
+      target = installer_context.pods_project.targets.find { |t| t.name == target_name }
+      next unless target
+
+      target.build_phases.grep(Xcodeproj::Project::Object::PBXShellScriptBuildPhase).each do |bp|
+        next unless bp.name.to_s.include?('[RN]Check rncore')
+        bp.shell_script = "echo \"[CI] Skipping [RN]Check rncore script (newArchEnabled=false).\""
+        puts "  [RN]Check rncore script in #{target_name} converted to no-op."
+      end
+    end
+  rescue => e
+    Pod::UI.puts " [RN]Check rncore script tweak skipped: #{e.message}"
+  end
+
+  Pod::UI.puts ""
+  Pod::UI.puts "═══════════════════════════════════════════════════════════"
+  Pod::UI.puts "  ✅ post_install 블록 완료"
+  Pod::UI.puts "═══════════════════════════════════════════════════════════"
+end

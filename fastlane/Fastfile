@@ -1,0 +1,2129 @@
+﻿# frozen_string_literal: true
+require "base64"
+require "fileutils"
+require "pathname"
+
+default_platform(:ios)
+
+# --- 프로젝트 경로/상수 ---
+REPO_ROOT   = File.expand_path('..', __dir__)       # Fastfile 기준 상위가 리포 루트
+IOS_DIR     = File.join(REPO_ROOT, "ios")
+XCODEPROJ   = File.join(IOS_DIR,  "pickplay.xcodeproj")
+WORKSPACE   = File.join(IOS_DIR,  "pickplay.xcworkspace")
+SCHEME      = "pickplay"                             # Xcode 스킴명과 동일해야 함
+BUNDLE_ID   = "com.pickplay.kwcc"
+
+TEAM_ID     = ENV["APPLE_TEAM_ID"]                  # GitHub Secrets에서 주입됨
+KEYCHAIN_PW = ENV.fetch("KEYCHAIN_PASSWORD", "actions")
+MATCH_BRANCH = ENV.fetch("MATCH_GIT_BRANCH", "master")  # certs repo 기본 브랜치 (에러 로그에서 master 확인됨)
+
+# --- 공통 CI 준비 ---
+def prepare_ci!
+  opt_out_usage
+  setup_ci
+
+  # Runner에서 Xcode는 워크플로우에서 선택되므로 여기선 버전 로깅만 수행
+  sh("xcodebuild -version | tee /dev/stderr")
+  xcode_select("/Applications/Xcode_16.2.app")
+
+  create_keychain(
+    name: "build",
+    password: KEYCHAIN_PW,
+    default_keychain: true,
+    unlock: true,
+    timeout: 3600,
+    add_to_search_list: true
+  )
+end
+
+def decode_profile_name(profile_path)
+  # 모바일프로비전 파일에서 Name 값을 추출하여 SPECIFIER로 사용
+  return "" if profile_path.to_s.strip.empty?
+  begin
+    sh %(
+      /usr/bin/security cms -D -i "#{profile_path}" > /tmp/profile.plist &&
+      /usr/libexec/PlistBuddy -c "Print :Name" /tmp/profile.plist
+    )
+  rescue
+    ""
+  end
+end
+
+def extract_profile_uuid(profile_path)
+  # 모바일프로비전 파일에서 UUID 값을 추출
+  return "" if profile_path.to_s.strip.empty?
+  begin
+    # 프로파일 파일이 존재하는지 확인
+    unless File.exist?(profile_path)
+      UI.important("⚠️ 프로파일 파일이 존재하지 않습니다: #{profile_path}")
+      return ""
+    end
+    
+    # security 명령으로 디코딩 후 UUID 추출
+    plist_path = "/tmp/profile_#{Time.now.to_i}.plist"
+    sh("/usr/bin/security cms -D -i '#{profile_path}' > '#{plist_path}' 2>&1")
+    
+    unless File.exist?(plist_path)
+      UI.important("⚠️ 프로파일 디코딩 실패")
+      return ""
+    end
+    
+    uuid_result = sh("/usr/libexec/PlistBuddy -c 'Print :UUID' '#{plist_path}' 2>&1", log: false)
+    uuid = uuid_result.to_s.strip
+    
+    # 임시 파일 정리
+    File.delete(plist_path) if File.exist?(plist_path)
+    
+    # UUID 검증 (36자리 형태: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+    if uuid.length == 36 && uuid.match?(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+      UI.success("✅ 프로파일에서 UUID 추출 성공: #{uuid}")
+      return uuid
+    else
+      UI.important("⚠️ 추출된 값이 유효한 UUID 형식이 아닙니다: #{uuid}")
+      return ""
+    end
+  rescue => e
+    UI.important("⚠️ UUID 추출 실패: #{e.message}")
+    ""
+  end
+end
+
+def assert_push_in_profile!(profile_path)
+  # 푸시 권한 포함 여부 로그 출력(aps-environment)
+  return if profile_path.to_s.strip.empty?
+  sh %(
+    /usr/bin/security cms -D -i "#{profile_path}" > /tmp/profile.plist &&
+    echo "➡️  Entitlements.aps-environment in profile:" &&
+    /usr/libexec/PlistBuddy -c "Print :Entitlements:aps-environment" /tmp/profile.plist
+  )
+end
+
+# ============================================
+# 공통 Helper Functions
+# ============================================
+
+def expo_prebuild!(options = {})
+  # expo prebuild 실행 및 기본 설정
+  # options:
+  #   - check_firebase: true/false (기본: false)
+  #   - setup_att: true/false (기본: false) - NSUserTrackingUsageDescription 추가
+  
+  UI.important("=" * 60)
+  UI.important("🔧 [네이티브 빌드 재생성] expo prebuild 실행")
+  UI.important("=" * 60)
+  
+  begin
+    UI.message("📁 프로젝트 루트: #{REPO_ROOT}")
+    UI.message("🔧 expo prebuild --clean --platform ios 실행 중...")
+    
+    begin
+      sh("cd #{REPO_ROOT} && npx expo prebuild --clean --platform ios")
+    rescue => prebuild_error
+      if Dir.exist?(IOS_DIR)
+        UI.important("⚠️ expo prebuild가 에러로 종료되었지만 ios 디렉토리는 존재합니다.")
+        UI.important("⚠️ 에러: #{prebuild_error.message}")
+        UI.important("⚠️ 계속 진행합니다...")
+      else
+        raise prebuild_error
+      end
+    end
+    
+    UI.success("✅ [네이티브 빌드 재생성] expo prebuild 완료")
+    UI.message("   → 플러그인이 실행되어 AppDelegate가 수정되었습니다")
+    
+    # Firebase 확인 (옵션)
+    if options[:check_firebase]
+      verify_firebase_native_modules!
+      verify_google_services_plist!
+    end
+    
+    # ATT 설정 (옵션, beta lane 전용)
+    if options[:setup_att]
+      setup_info_plist_att!
+    end
+    
+    UI.important("=" * 60)
+  rescue => e
+    UI.user_error!("❌ [네이티브 빌드 재생성 실패] expo prebuild 실행 실패: #{e.message}")
+  end
+end
+
+def verify_firebase_native_modules!
+  # React Native Firebase 네이티브 모듈 링크 확인
+  begin
+    UI.important("=" * 60)
+    UI.important("🔍 [Firebase 네이티브 모듈 확인] React Native Firebase 링크 상태 확인 중...")
+    UI.important("=" * 60)
+    
+    # 1. Podfile.lock에서 Firebase 관련 pod 확인
+    podfile_lock_path = File.join(IOS_DIR, "Podfile.lock")
+    if File.exist?(podfile_lock_path)
+      podfile_lock_content = File.read(podfile_lock_path)
+      
+      firebase_pods = [
+        'RNFBApp',
+        'FirebaseCore',
+        'FirebaseAuth',
+        'FirebaseFirestore',
+        'FirebaseFunctions',
+        'FirebaseAppCheck'
+      ]
+      
+      found_pods = []
+      missing_pods = []
+      
+      firebase_pods.each do |pod_name|
+        if podfile_lock_content.include?(pod_name)
+          found_pods << pod_name
+        else
+          missing_pods << pod_name
+        end
+      end
+      
+      if found_pods.any?
+        UI.success("✅ Firebase 관련 Pod 발견 (#{found_pods.length}개):")
+        found_pods.each { |pod| UI.message("   - #{pod}") }
+      end
+      
+      if missing_pods.any?
+        UI.important("⚠️ 다음 Firebase Pod이 Podfile.lock에 없습니다:")
+        missing_pods.each { |pod| UI.message("   - #{pod}") }
+        UI.important("⚠️ pod install이 제대로 실행되지 않았을 수 있습니다.")
+      end
+      
+      # RNFBApp이 필수이므로 확인
+      if !found_pods.include?('RNFBApp')
+        UI.user_error!("❌ RNFBApp Pod이 없습니다! React Native Firebase가 제대로 설치되지 않았습니다.")
+      end
+    else
+      UI.important("⚠️ Podfile.lock이 없습니다. pod install이 실행되지 않았을 수 있습니다.")
+    end
+    
+    # 2. Xcode 프로젝트에서 Firebase 프레임워크 링크 확인
+    begin
+      require 'xcodeproj'
+      project = Xcodeproj::Project.open(XCODEPROJ)
+      
+      project.targets.each do |target|
+        next unless target.name == SCHEME
+        
+        # Link Binary With Libraries 빌드 단계 찾기
+        frameworks_phase = target.build_phases.find { |phase| phase.is_a?(Xcodeproj::Project::Object::PBXFrameworksBuildPhase) }
+        
+        if frameworks_phase
+          firebase_frameworks = [
+            'FirebaseCore.framework',
+            'FirebaseAuth.framework',
+            'FirebaseFirestore.framework',
+            'FirebaseFunctions.framework',
+            'FirebaseAppCheck.framework'
+          ]
+          
+          linked_frameworks = frameworks_phase.files.map { |bf| bf.file_ref&.path }.compact
+          
+          found_frameworks = []
+          missing_frameworks = []
+          
+          firebase_frameworks.each do |framework_name|
+            if linked_frameworks.any? { |f| f&.include?(framework_name) || f&.include?('Firebase') }
+              found_frameworks << framework_name
+            else
+              missing_frameworks << framework_name
+            end
+          end
+          
+          if found_frameworks.any?
+            UI.success("✅ Firebase 프레임워크가 Xcode 프로젝트에 링크됨 (#{found_frameworks.length}개)")
+          end
+          
+          if missing_frameworks.any?
+            UI.important("⚠️ 다음 Firebase 프레임워크가 링크되지 않았습니다:")
+            missing_frameworks.each { |f| UI.message("   - #{f}") }
+            UI.important("⚠️ 하지만 CocoaPods가 자동으로 링크할 수 있으므로 정상일 수 있습니다.")
+          end
+        end
+      end
+    rescue LoadError
+      UI.important("⚠️ xcodeproj gem 없음 - Xcode 프로젝트 확인 건너뜀")
+    rescue => e
+      UI.important("⚠️ Xcode 프로젝트 확인 중 에러: #{e.message}")
+    end
+    
+    # 3. AppDelegate에 Firebase 초기화 코드 확인
+    app_delegate_paths = Dir.glob(File.join(IOS_DIR, "**", "AppDelegate.{m,mm,swift}")).select do |path|
+      !path.include?("Pods/") && !path.include?("DerivedData/")
+    end
+    
+    if app_delegate_paths.any?
+      app_delegate_path = app_delegate_paths.first
+      app_delegate_content = File.read(app_delegate_path)
+      has_import = app_delegate_content.include?('#import <Firebase.h>') || app_delegate_content.include?('import Firebase')
+      has_configure = app_delegate_content.include?('[FIRApp configure]') || app_delegate_content.include?('FirebaseApp.configure')
+      
+      if has_configure
+        UI.success("✅ AppDelegate에 Firebase 초기화 코드가 포함되어 있습니다.")
+      else
+        UI.important("⚠️ AppDelegate에 Firebase 초기화 코드가 없습니다. 자동으로 추가합니다.")
+        if ensure_app_delegate_firebase_config!(app_delegate_path)
+          UI.success("✅ AppDelegate에 Firebase 초기화 코드를 추가했습니다: #{File.basename(app_delegate_path)}")
+          has_configure = true
+        else
+          UI.important("⚠️ AppDelegate에 Firebase 초기화 코드를 자동으로 추가하지 못했습니다. 수동 확인이 필요합니다.")
+        end
+      end
+      
+      if has_import
+        UI.success("✅ AppDelegate에 Firebase import가 포함되어 있습니다.")
+      else
+        UI.important("⚠️ AppDelegate에 Firebase import가 없습니다. 자동으로 추가합니다.")
+        if ensure_app_delegate_firebase_import!(app_delegate_path)
+          UI.success("✅ AppDelegate에 Firebase import를 추가했습니다: #{File.basename(app_delegate_path)}")
+        else
+          UI.important("⚠️ AppDelegate에 Firebase import를 자동으로 추가하지 못했습니다. 수동 확인이 필요합니다.")
+        end
+      end
+    else
+      UI.important("⚠️ AppDelegate 파일을 찾을 수 없습니다.")
+    end
+    
+    UI.important("=" * 60)
+  rescue => e
+    UI.important("⚠️ Firebase 네이티브 모듈 확인 중 에러 발생: #{e.message}")
+    UI.important("⚠️ 계속 진행합니다...")
+  end
+end
+
+def ensure_app_delegate_firebase_import!(app_delegate_path)
+  content = File.read(app_delegate_path)
+  if app_delegate_path.end_with?(".swift")
+    return true if content.include?("import Firebase")
+    content = content.sub(/import ExpoModulesCore.*?\n/i) { |match| "#{match}import Firebase\n" }
+  else
+    return true if content.include?("#import <Firebase.h>")
+    content = content.sub(/#import "AppDelegate\.h"\s*\n/) { |match| "#{match}#import <Firebase.h>\n" }
+  end
+  File.write(app_delegate_path, content)
+  true
+rescue => e
+  UI.important("⚠️ Firebase import 추가 실패: #{e.message}")
+  false
+end
+
+def ensure_app_delegate_firebase_config!(app_delegate_path)
+  content = File.read(app_delegate_path)
+  if app_delegate_path.end_with?(".swift")
+    return true if content.include?("FirebaseApp.configure")
+    snippet = <<~SWIFT
+
+        // MARK: Firebase Initialization (Fastlane patch)
+        // React Native Firebase는 네이티브에서 GoogleService-Info.plist를 자동으로 읽어야 합니다
+        // 파일이 번들에 없으면 configure()가 실패할 수 있으므로 에러 처리를 추가합니다
+        if FirebaseApp.app() == nil {
+          do {
+            FirebaseApp.configure()
+            print("✅ [Firebase] Firebase 초기화 성공")
+          } catch {
+            print("❌ [Firebase] Firebase 초기화 실패: \\(error.localizedDescription)")
+            print("💡 [Firebase] GoogleService-Info.plist가 앱 번들에 포함되어 있는지 확인하세요")
+          }
+        }
+
+    SWIFT
+    if content =~ /(func\s+application\([^\{]+\)\s*\{\s*\n)/
+      content = content.sub($1, "#{$1}#{snippet}")
+    else
+      return false
+    end
+  else
+    return true if content.include?("[FIRApp configure]")
+    snippet = <<~OBJC
+
+      // MARK: - Firebase Initialization (Fastlane patch)
+      // React Native Firebase는 네이티브에서 GoogleService-Info.plist를 자동으로 읽어야 합니다
+      // 파일이 번들에 없으면 configure가 실패할 수 있으므로 에러 처리를 추가합니다
+      if ([FIRApp defaultApp] == nil) {
+        @try {
+          [FIRApp configure];
+          NSLog(@"✅ [Firebase] Firebase 초기화 성공");
+        } @catch (NSException *exception) {
+          NSLog(@"❌ [Firebase] Firebase 초기화 실패: %@", exception.reason);
+          NSLog(@"💡 [Firebase] GoogleService-Info.plist가 앱 번들에 포함되어 있는지 확인하세요");
+        }
+      }
+
+    OBJC
+    if content =~ /(\)\s*\{\s*\n)/
+      content = content.sub($1, "#{$1}#{snippet}")
+    else
+      return false
+    end
+  end
+  File.write(app_delegate_path, content)
+  true
+rescue => e
+  UI.important("⚠️ AppDelegate Firebase 초기화 코드 추가 실패: #{e.message}")
+  false
+end
+
+def verify_google_services_plist!
+  # GoogleService-Info.plist 파일 확인 및 Xcode 프로젝트에 추가
+  begin
+    UI.important("=" * 60)
+    UI.important("🔍 [Firebase 설정 확인] GoogleService-Info.plist 파일 확인 중...")
+    UI.important("=" * 60)
+    
+    google_services_source = File.join(REPO_ROOT, "GoogleService-Info.plist")
+    google_services_dest = Dir.glob(File.join(IOS_DIR, "**", "GoogleService-Info.plist")).select do |path|
+      !path.include?("Pods/") && !path.include?("DerivedData/")
+    end.first
+    
+    if File.exist?(google_services_source)
+      UI.success("✅ GoogleService-Info.plist 소스 파일 확인: #{File.basename(google_services_source)}")
+    else
+      UI.user_error!("❌ GoogleService-Info.plist 소스 파일을 찾을 수 없습니다: #{google_services_source}")
+    end
+    
+    # Config Plugin이 복사한 파일 확인
+    if google_services_dest && File.exist?(google_services_dest)
+      UI.success("✅ GoogleService-Info.plist가 ios 디렉토리에 포함되었습니다: #{File.basename(File.dirname(google_services_dest))}/#{File.basename(google_services_dest)}")
+    else
+      UI.important("⚠️ GoogleService-Info.plist가 ios 디렉토리에 없습니다. Config Plugin이 복사하지 않았을 수 있습니다.")
+      UI.important("⚠️ 수동으로 복사합니다...")
+      
+      # 수동 복사 (pickplay 타겟 디렉토리에)
+      target_dir = File.join(IOS_DIR, SCHEME)
+      FileUtils.mkdir_p(target_dir) unless Dir.exist?(target_dir)
+      manual_dest = File.join(target_dir, "GoogleService-Info.plist")
+      FileUtils.cp(google_services_source, manual_dest)
+      UI.success("✅ GoogleService-Info.plist 수동 복사 완료: #{manual_dest}")
+      google_services_dest = manual_dest
+    end
+    
+    # Xcode 프로젝트에 파일이 포함되어 있는지 확인 및 추가
+    begin
+      require 'xcodeproj'
+      project = Xcodeproj::Project.open(XCODEPROJ)
+      
+      project.targets.each do |target|
+        next unless target.name == SCHEME
+        
+        # Copy Bundle Resources 빌드 단계 찾기
+        resources_phase = target.build_phases.find { |phase| phase.is_a?(Xcodeproj::Project::Object::PBXResourcesBuildPhase) }
+        
+        if resources_phase
+          # 파일 참조 찾기
+          file_ref = project.files.find { |f| f.path == "GoogleService-Info.plist" || f.path&.end_with?("GoogleService-Info.plist") }
+          
+          if file_ref
+            # 이미 포함되어 있는지 확인
+            already_added = resources_phase.files.any? { |bf| bf.file_ref == file_ref }
+            if already_added
+              UI.success("✅ GoogleService-Info.plist가 이미 Xcode 프로젝트의 Copy Bundle Resources에 포함되어 있습니다.")
+            else
+              UI.important("⚠️ GoogleService-Info.plist 파일 참조는 있지만 Copy Bundle Resources에 없습니다. 추가 중...")
+              resources_phase.add_file_reference(file_ref)
+              UI.success("✅ GoogleService-Info.plist를 Copy Bundle Resources에 추가했습니다.")
+            end
+          else
+            # 파일 참조가 없으면 생성
+            UI.important("⚠️ GoogleService-Info.plist 파일 참조가 없습니다. 생성 중...")
+            
+            # 상대 경로 계산
+            relative_path = Pathname.new(google_services_dest).relative_path_from(Pathname.new(IOS_DIR)).to_s
+            
+            # 파일 참조 생성
+            file_ref = project.main_group.find_subpath(SCHEME, true).new_reference(relative_path)
+            resources_phase.add_file_reference(file_ref)
+            UI.success("✅ GoogleService-Info.plist 파일 참조를 생성하고 Copy Bundle Resources에 추가했습니다.")
+          end
+          
+          project.save
+        else
+          UI.important("⚠️ Copy Bundle Resources 빌드 단계를 찾을 수 없습니다.")
+        end
+      end
+    rescue LoadError
+      UI.important("⚠️ xcodeproj gem 없음 - Xcode 프로젝트 확인 건너뜀")
+      UI.important("⚠️ GoogleService-Info.plist가 IPA 번들에 포함되는지 빌드 후 확인하세요.")
+    rescue => e
+      UI.important("⚠️ Xcode 프로젝트 확인 중 에러: #{e.message}")
+      UI.important("⚠️ GoogleService-Info.plist가 IPA 번들에 포함되는지 빌드 후 확인하세요.")
+    end
+    
+    UI.important("=" * 60)
+  rescue => e
+    UI.important("⚠️ GoogleService-Info.plist 확인 중 에러 발생: #{e.message}")
+    UI.important("⚠️ 계속 진행합니다...")
+  end
+end
+
+def setup_info_plist_att!
+  # Info.plist에 NSUserTrackingUsageDescription 확인 및 추가
+  UI.important("=" * 60)
+  UI.important("🔍 [ATT 설정 확인] Info.plist에 NSUserTrackingUsageDescription 확인 중...")
+  UI.important("=" * 60)
+  
+  info_plist_paths = Dir.glob(File.join(IOS_DIR, "**", "Info.plist")).select do |path|
+    !path.include?("Pods/") && !path.include?("DerivedData/") && !path.include?(".xcodeproj/")
+  end
+  
+  tracking_description = "이 정보를 사용하여 더 관련성 높은 맞춤형 광고를 제공합니다."
+  
+  if info_plist_paths.any?
+    info_plist_paths.each do |info_plist_path|
+      begin
+        UI.message("📝 Info.plist 확인 중: #{File.basename(File.dirname(info_plist_path))}/#{File.basename(info_plist_path)}")
+        
+        unless File.exist?(info_plist_path)
+          UI.important("⚠️ Info.plist 파일이 존재하지 않습니다: #{info_plist_path}")
+          next
+        end
+        
+        result = sh("/usr/libexec/PlistBuddy -c 'Print :NSUserTrackingUsageDescription' '#{info_plist_path}' 2>&1", log: false) rescue nil
+        
+        if result.nil? || result.to_s.strip.empty? || result.to_s.include?("Does Not Exist") || result.to_s.include?("Error")
+          UI.important("⚠️ NSUserTrackingUsageDescription이 없습니다. 추가 중...")
+          
+          add_result = sh("/usr/libexec/PlistBuddy -c 'Add :NSUserTrackingUsageDescription string \"#{tracking_description}\"' '#{info_plist_path}' 2>&1", log: false) rescue nil
+          
+          if add_result && !add_result.to_s.include?("Error")
+            verify_result = sh("/usr/libexec/PlistBuddy -c 'Print :NSUserTrackingUsageDescription' '#{info_plist_path}' 2>&1", log: false).strip rescue ""
+            if verify_result == tracking_description
+              UI.success("✅ NSUserTrackingUsageDescription 추가 완료: #{File.basename(info_plist_path)}")
+            else
+              UI.important("⚠️ NSUserTrackingUsageDescription 추가 확인 실패: #{File.basename(info_plist_path)}")
+            end
+          else
+            set_result = sh("/usr/libexec/PlistBuddy -c 'Set :NSUserTrackingUsageDescription \"#{tracking_description}\"' '#{info_plist_path}' 2>&1", log: false) rescue nil
+            if set_result && !set_result.to_s.include?("Error")
+              UI.success("✅ NSUserTrackingUsageDescription 설정 완료: #{File.basename(info_plist_path)}")
+            else
+              UI.important("⚠️ NSUserTrackingUsageDescription 추가/설정 실패: #{File.basename(info_plist_path)}")
+            end
+          end
+        else
+          UI.success("✅ NSUserTrackingUsageDescription이 이미 있습니다: #{File.basename(info_plist_path)}")
+          UI.message("   내용: #{result.strip}")
+        end
+      rescue => e
+        UI.important("⚠️ Info.plist 처리 중 에러 발생: #{File.basename(info_plist_path)} - #{e.message}")
+      end
+    end
+  else
+    UI.user_error!("❌ Info.plist 파일을 찾을 수 없습니다. NSUserTrackingUsageDescription을 추가할 수 없습니다.")
+  end
+  
+  # 최종 검증
+  missing_descriptions = []
+  info_plist_paths.each do |info_plist_path|
+    begin
+      next unless File.exist?(info_plist_path)
+      verify_result = sh("/usr/libexec/PlistBuddy -c 'Print :NSUserTrackingUsageDescription' '#{info_plist_path}' 2>&1", log: false) rescue nil
+      if verify_result.nil? || verify_result.to_s.strip.empty? || verify_result.to_s.include?("Does Not Exist") || verify_result.to_s.include?("Error")
+        missing_descriptions << File.basename(info_plist_path)
+      end
+    rescue => e
+      UI.important("⚠️ 검증 중 에러 발생: #{File.basename(info_plist_path)} - #{e.message}")
+      missing_descriptions << File.basename(info_plist_path)
+    end
+  end
+  
+  if missing_descriptions.any?
+    UI.important("⚠️ 다음 Info.plist 파일들에 NSUserTrackingUsageDescription이 없을 수 있습니다: #{missing_descriptions.join(', ')}")
+    UI.important("⚠️ Config Plugin이 자동으로 추가해야 하지만, 빌드 후 확인이 필요합니다.")
+  else
+    UI.success("✅ 모든 Info.plist 파일에 NSUserTrackingUsageDescription이 확인되었습니다.")
+  end
+  
+  UI.important("=" * 60)
+end
+
+def embed_provisioning_profile!(profile_path, scheme_name = SCHEME)
+  # 프로파일을 프로젝트에 임베드
+  if !profile_path.empty? && File.exist?(profile_path)
+    embedded_profile_path = File.join(IOS_DIR, scheme_name, "embedded.mobileprovision")
+    FileUtils.mkdir_p(File.dirname(embedded_profile_path))
+    FileUtils.cp(profile_path, embedded_profile_path)
+    UI.success("✅ 프로파일 임베드 완료: #{embedded_profile_path}")
+  end
+end
+
+def update_xcode_project_team!(team_id = TEAM_ID)
+  # Team ID 주입
+  update_project_team(
+    path: XCODEPROJ,
+    teamid: team_id
+  )
+end
+
+platform :ios do
+  desc "ONE-TIME: Push 포함 App Store 프로파일 강제(renew) 생성"
+  lane :bootstrap_profiles do
+    prepare_ci!
+
+    api_key = app_store_connect_api_key(
+      key_id:       ENV["APP_STORE_CONNECT_API_KEY_ID"],
+      issuer_id:    ENV["APP_STORE_CONNECT_API_ISSUER_ID"],
+      key_filepath: ENV["APP_STORE_CONNECT_API_KEY_PATH"],
+      duration:     1200,
+      in_house:     false
+    )
+
+    UI.message("🔧 [Checkpoint 3] 프로파일 재발급 흐름 시작...")
+    UI.message("  → 1. Identifier에서 Push 켜짐 확인 필요 (수동)")
+    UI.message("  → 2. match(recreate with force=true) 실행 중...")
+
+    # force + readonly:false 로 새 프로파일 생성/갱신 (Push 포함)
+    match(
+      type: "appstore",
+      readonly: false,
+      force: true,
+      app_identifier: BUNDLE_ID,
+      team_id: TEAM_ID,
+      api_key: api_key,
+      git_url: ENV["MATCH_GIT_URL"],
+      git_basic_authorization: Base64.strict_encode64("#{ENV['MATCH_GIT_USERNAME']}:#{ENV['MATCH_GIT_PASSWORD']}"),
+      keychain_name: "build",
+      keychain_password: KEYCHAIN_PW,
+      git_branch: MATCH_BRANCH,
+      clone_branch_directly: true,
+      shallow_clone: true
+    )
+
+    UI.message("  → 3. 다음부터는 readonly=true로 사용")
+
+    pp_path = lane_context[SharedValues::SIGH_PROFILE_PATH]
+    assert_push_in_profile!(pp_path)
+    
+    UI.success("✅ [Checkpoint 3] 프로파일 재발급 완료 - Push 포함 확인됨")
+  end
+
+  desc "TestFlight 배포 (푸시 포함 프로파일 사용 강제)"
+  lane :beta do
+    prepare_ci!
+
+    api_key = app_store_connect_api_key(
+      key_id:       ENV["APP_STORE_CONNECT_API_KEY_ID"],
+      issuer_id:    ENV["APP_STORE_CONNECT_API_ISSUER_ID"],
+      key_filepath: ENV["APP_STORE_CONNECT_API_KEY_PATH"],
+      duration:     1200,
+      in_house:     false
+    )
+
+    # 3️⃣ 체크포인트: 프로파일 재발급 흐름 확인
+    UI.message("🔍 [Checkpoint 3] 프로파일 사용 (일상 배포: readonly=true)")
+    UI.message("  → 최초 1회: fastlane ios bootstrap_profiles로 Push 포함 프로파일 재생성 필요")
+    UI.message("  → 이후: readonly=true로 유지 (이미 생성된 프로파일 사용)")
+
+    # 일상 배포는 readonly=true (이미 생성된 프로파일 사용)
+    match(
+      type: "appstore",
+      readonly: true,
+      app_identifier: BUNDLE_ID,
+      team_id: TEAM_ID,
+      api_key: api_key,
+      git_url: ENV["MATCH_GIT_URL"],
+      git_basic_authorization: Base64.strict_encode64("#{ENV['MATCH_GIT_USERNAME']}:#{ENV['MATCH_GIT_PASSWORD']}"),
+      keychain_name: "build",
+      keychain_password: KEYCHAIN_PW,
+      git_branch: MATCH_BRANCH,
+      clone_branch_directly: true,
+      shallow_clone: true
+    )
+
+    # 프로파일 정보 수집
+    # 1차: lane_context에서 읽기
+    pp_uuid = (lane_context[SharedValues::SIGH_UDID] || "").to_s.strip
+    pp_path = (lane_context[SharedValues::SIGH_PROFILE_PATH] || "").to_s.strip
+    
+    # 2차: 환경 변수에서 읽기 (점을 언더스코어로 변환)
+    env_key = "sigh_#{BUNDLE_ID.gsub('.', '_')}_appstore"
+    env_path_key = "sigh_#{BUNDLE_ID.gsub('.', '_')}_appstore_profile-path"
+    
+    if pp_uuid.empty?
+      pp_uuid = (ENV[env_key] || "").to_s.strip
+    end
+    if pp_path.empty?
+      pp_path = (ENV[env_path_key] || "").to_s.strip
+    end
+    
+    # 3차: 표준 프로파일 디렉토리에서 UUID로 파일 찾기
+    if pp_path.empty? && !pp_uuid.empty? && pp_uuid.length == 36
+      profiles_dir = File.join(ENV["HOME"] || Dir.home, "Library", "MobileDevice", "Provisioning Profiles")
+      standard_path = File.join(profiles_dir, "#{pp_uuid}.mobileprovision")
+      if File.exist?(standard_path)
+        pp_path = standard_path
+        UI.message("✅ 표준 위치에서 프로파일 발견: #{pp_path}")
+      elsif Dir.exist?(profiles_dir)
+        # 디렉토리 전체 검색
+        found = Dir.glob(File.join(profiles_dir, "*.mobileprovision")).find { |p|
+          begin
+            uuid_from_file = extract_profile_uuid(p)
+            uuid_from_file == pp_uuid
+          rescue
+            false
+          end
+        }
+        if found
+          pp_path = found
+          UI.message("✅ 프로파일 검색 발견: #{pp_path}")
+        end
+      end
+    end
+    
+    UI.message("🔍 match 결과 확인:")
+    UI.message("  - UUID (lane_context): #{lane_context[SharedValues::SIGH_UDID] || '(비어있음)'}")
+    UI.message("  - UUID (env #{env_key}): #{ENV[env_key] || '(비어있음)'}")
+    UI.message("  - 최종 UUID: #{pp_uuid.empty? ? '(비어있음)' : pp_uuid}")
+    UI.message("  - Path (lane_context): #{lane_context[SharedValues::SIGH_PROFILE_PATH] || '(비어있음)'}")
+    UI.message("  - Path (env #{env_path_key}): #{ENV[env_path_key] || '(비어있음)'}")
+    UI.message("  - 최종 Path: #{pp_path.empty? ? '(비어있음)' : pp_path}")
+    
+    # UUID가 없으면 프로파일 디렉토리에서 검색 (match가 설치한 프로파일 찾기)
+    if pp_uuid.empty? || pp_uuid.length != 36
+      profiles_dir = File.join(ENV["HOME"] || Dir.home, "Library", "MobileDevice", "Provisioning Profiles")
+      UI.message("🔍 프로파일 디렉토리 검색: #{profiles_dir}")
+      
+      if Dir.exist?(profiles_dir)
+        # bundle_id로 매칭되는 프로파일 찾기
+        all_profiles = Dir.glob(File.join(profiles_dir, "*.mobileprovision"))
+        UI.message("  - 발견된 프로파일 수: #{all_profiles.length}")
+        
+        found_profile = nil
+        found_uuid = nil
+        
+        all_profiles.each do |profile_path|
+          begin
+            test_uuid = extract_profile_uuid(profile_path)
+            next if test_uuid.empty? || test_uuid.length != 36
+            
+            # 프로파일에서 bundle identifier 확인
+            sh("/usr/bin/security cms -D -i '#{profile_path}' > /tmp/check_profile.plist 2>&1")
+            bundle_ids = sh("/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' /tmp/check_profile.plist 2>&1", log: false).to_s.strip
+            File.delete("/tmp/check_profile.plist") if File.exist?("/tmp/check_profile.plist")
+            
+            # team_id 제거 후 비교 (예: ABC123.com.pickplay.kwcc -> com.pickplay.kwcc)
+            bundle_ids = bundle_ids.split(',').map(&:strip)
+            if bundle_ids.any? { |bid| bid.end_with?(".#{BUNDLE_ID}") || bid == BUNDLE_ID }
+              found_profile = profile_path
+              found_uuid = test_uuid
+              UI.success("✅ 프로파일 발견: UUID=#{found_uuid}, Path=#{found_profile}")
+              break
+            end
+          rescue => e
+            UI.important("⚠️ 프로파일 검사 중 오류 (#{File.basename(profile_path)}): #{e.message}")
+            next
+          end
+        end
+        
+        if found_profile && found_uuid
+          pp_path = found_profile
+          pp_uuid = found_uuid
+        elsif pp_path.empty?
+          UI.user_error!("❌ #{BUNDLE_ID}에 해당하는 프로파일을 찾을 수 없습니다.")
+        end
+      elsif pp_path.empty?
+        UI.user_error!("❌ 프로파일 디렉토리가 존재하지 않습니다: #{profiles_dir}")
+      end
+      
+      # 경로는 있지만 UUID가 없으면 추출
+      if !pp_path.empty? && (pp_uuid.empty? || pp_uuid.length != 36)
+        UI.message("🔄 프로파일 파일에서 UUID 추출 시도...")
+        extracted_uuid = extract_profile_uuid(pp_path)
+        if extracted_uuid.empty? || extracted_uuid.length != 36
+          UI.user_error!("❌ 프로파일에서 UUID 추출 실패. 파일 경로: #{pp_path}")
+        end
+        pp_uuid = extracted_uuid
+        UI.message("✅ 프로파일에서 UUID 추출 성공: #{pp_uuid}")
+      end
+    end
+    
+    # 경로가 없으면 UUID로 구성
+    if pp_path.empty? && !pp_uuid.empty? && pp_uuid.length == 36
+      pp_path = File.join(ENV["HOME"] || Dir.home, "Library", "MobileDevice", "Provisioning Profiles", "#{pp_uuid}.mobileprovision")
+      unless File.exist?(pp_path)
+        UI.user_error!("❌ 예상 위치에 프로파일이 없습니다: #{pp_path}")
+      end
+    end
+    
+    # 1) 매핑 키 타입 보정: Symbol과 String 둘 다 체크
+    mapping = (lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING] || {})
+    mapped_name = (mapping[BUNDLE_ID] || mapping[BUNDLE_ID.to_sym] || "").to_s.strip  # e.g. "match AppStore com.pickplay.kwcc"
+    decoded_name = decode_profile_name(pp_path).strip
+    pp_name = !mapped_name.empty? ? mapped_name : decoded_name
+    
+    UI.success("✅ 프로파일 정보:")
+    UI.success("  - UUID: #{pp_uuid}")
+    UI.success("  - Name: #{pp_name}")
+    
+    assert_push_in_profile!(pp_path)
+
+    # ============================================
+    # 네이티브 프로젝트 재생성 (중요!)
+    # expo prebuild를 실행하여 app.json의 플러그인 설정을 적용 (예: AppDelegate 수정)
+    # ============================================
+    expo_prebuild!(
+      check_firebase: true,
+      setup_att: true
+    )
+
+    # Pods 재설치 (post_install 설정 적용)
+    sh("cd #{IOS_DIR} && pod install")
+    
+    # post_install 후에도 -G 플래그가 남을 수 있으므로 추가 스크럽
+    UI.message("🧽 Additional -G flag scrubbing after pod install...")
+    sh("cd #{IOS_DIR} && " +
+       "find 'Pods/Target Support Files' -name '*.xcconfig' -type f -exec perl -i -pe 's/\\s-G(?=\\s|$)/ /g' {} \\; 2>/dev/null || true && " +
+       "[ -f 'Pods/Pods.xcodeproj/project.pbxproj' ] && " +
+       "perl -i -pe 's/\\s-G(?=\\s|$)/ /g' 'Pods/Pods.xcodeproj/project.pbxproj' 2>/dev/null || true")
+
+    # 빌드 번호 자동 증가는 아래에서 처리 (TestFlight 최신 빌드 번호 고려)
+
+    # Team ID 주입 (타겟 자동서명 사용 안 함)
+    update_xcode_project_team!
+
+    # 🚀 아카이브 — specifier는 반드시 UUID로 고정 (공백 파싱 문제 방지)
+    if pp_uuid.empty? || pp_uuid.length != 36
+      UI.user_error!("유효한 프로비저닝 프로파일 UUID를 찾지 못했습니다. match 결과를 확인하세요.")
+    end
+    specifier = pp_uuid
+    UI.message("📋 Using provisioning profile specifier: #{specifier}")
+    
+    # 2️⃣ 체크포인트: Entitlements와 Capabilities 일치 확인
+    entitlements_files = Dir.glob(File.join(IOS_DIR, "**", "*.entitlements"))
+    if entitlements_files.empty?
+      # Expo는 app.json에서 entitlements 설정하므로 파일이 없을 수 있음 → xcodeproj 직접 확인
+      UI.message("🔍 [Checkpoint 2] No .entitlements file found, checking Xcode project...")
+      
+      begin
+        require 'xcodeproj'
+        project = Xcodeproj::Project.open(XCODEPROJ)
+        project.targets.each do |target|
+          next unless target.name == SCHEME
+          # Push Notifications capability 확인을 위해 entitlements 파일 경로 체크
+          entitlements_path = target.build_configurations.first.build_settings['CODE_SIGN_ENTITLEMENTS']
+          if entitlements_path && File.exist?(File.join(IOS_DIR, entitlements_path))
+            ent_file = File.join(IOS_DIR, entitlements_path)
+            result = sh("/usr/libexec/PlistBuddy -c 'Print :aps-environment' '#{ent_file}' 2>&1", log: false)
+            if result.to_s.strip == "production"
+              UI.success("✅ [Checkpoint 2] aps-environment=production in #{File.basename(ent_file)}")
+            else
+              UI.important("⚠️ [Checkpoint 2] aps-environment not production in #{ent_file}, patching...")
+              sh("/usr/libexec/PlistBuddy -c 'Set :aps-environment production' '#{ent_file}' 2>&1")
+            end
+          end
+        end
+      rescue LoadError
+        UI.important("⚠️ xcodeproj gem 없음 - entitlements는 app.json에서 설정됨")
+      end
+    else
+      entitlements_files.each do |ent_file|
+        UI.message("🔍 [Checkpoint 2] Checking entitlements: #{ent_file}")
+        result = sh("/usr/libexec/PlistBuddy -c 'Print :aps-environment' '#{ent_file}' 2>&1", log: false)
+        if result.to_s.strip.empty? || result.to_s.include?("Does Not Exist")
+          UI.message("  → aps-environment 추가: production")
+          sh("/usr/libexec/PlistBuddy -c 'Add :aps-environment string production' '#{ent_file}' 2>&1", log: false)
+        elsif result.to_s.strip != "production"
+          UI.message("  → aps-environment 수정: #{result.strip} → production")
+          sh("/usr/libexec/PlistBuddy -c 'Set :aps-environment production' '#{ent_file}' 2>&1")
+        else
+          UI.success("  ✅ [Checkpoint 2] aps-environment=production 확인됨")
+        end
+      end
+    end
+    
+    # Xcode 프로젝트에 Push Notifications capability 확인 (xcodeproj로 확인)
+    begin
+      require 'xcodeproj'
+      project = Xcodeproj::Project.open(XCODEPROJ)
+      project.targets.each do |target|
+        next unless target.name == SCHEME
+        # Signing & Capabilities 섹션 확인은 pbxproj 파일 직접 스캔 또는 확인 메시지
+        UI.message("✅ [Checkpoint 2] Xcode project: #{target.name} target found")
+      end
+    rescue => e
+      UI.important("⚠️ Xcode project capability 확인 건너뜀: #{e.message}")
+    end
+    
+    # ✅ 프로파일을 프로젝트에 직접 임베드 (Xcode 인식 확실히 보장)
+    embed_provisioning_profile!(pp_path)
+    
+    # ✅ xcodeproj gem으로 프로젝트 파일 직접 수정 (가장 확실한 방법)
+    begin
+      require 'xcodeproj'
+      project = Xcodeproj::Project.open(XCODEPROJ)
+      
+      project.targets.each do |target|
+        next unless target.name == SCHEME
+        
+        target.build_configurations.each do |config|
+          next unless config.name == "Release"
+          
+          # 프로비저닝 프로파일 UUID 강제 설정
+          config.build_settings['PROVISIONING_PROFILE_SPECIFIER'] = specifier
+          config.build_settings['CODE_SIGN_STYLE'] = 'Manual'
+          config.build_settings['DEVELOPMENT_TEAM'] = TEAM_ID
+          config.build_settings['CODE_SIGN_IDENTITY'] = 'Apple Distribution'
+          
+          UI.success("✅ [Checkpoint 2] #{target.name} (#{config.name}): 프로파일 UUID 설정 완료")
+          UI.message("   → PROVISIONING_PROFILE_SPECIFIER=#{specifier}")
+          UI.message("   → Xcode Signing & Capabilities에 Push Notifications 포함 확인 필요")
+        end
+      end
+      
+      project.save
+      UI.success("✅ Xcode 프로젝트 파일 업데이트 완료")
+    rescue LoadError
+      UI.important("⚠️ xcodeproj gem 없음 - gem install xcodeproj 필요하지만 xcargs로도 진행 가능")
+    rescue => e
+      UI.important("⚠️ 프로젝트 파일 수정 실패 (xcargs로 대체): #{e.message}")
+    end
+    
+    # 🔒 빌드 직전 최종 -G 검증 (xcodeproj로 확인)
+    begin
+      require 'xcodeproj'
+      pods_proj = Xcodeproj::Project.open(File.join(IOS_DIR, "Pods", "Pods.xcodeproj"))
+      tgt = pods_proj.targets.find { |t| t.name == "BoringSSL-GRPC" }
+      if tgt
+        g_pattern = /(^|\s)-G(?=\s|$)/
+        found_g = []
+        tgt.build_phases.grep(Xcodeproj::Project::Object::PBXSourcesBuildPhase).each do |phase|
+          phase.files.each do |bf|
+            next unless bf.settings
+            flags = bf.settings["COMPILER_FLAGS"]
+            next unless flags
+            if (flags.is_a?(String) && flags.match?(g_pattern)) || 
+               (flags.is_a?(Array) && flags.any? { |s| s.to_s.match?(g_pattern) })
+              found_g << bf.file_ref&.path || "unknown"
+            end
+          end
+        end
+        if !found_g.empty?
+          UI.user_error!("❌ 빌드 직전 검증 실패: BoringSSL-GRPC의 #{found_g.size}개 파일에서 -G 플래그 발견: #{found_g.join(', ')}")
+        else
+          UI.success("✅ 빌드 직전 검증 완료: BoringSSL-GRPC에서 -G 플래그 없음")
+        end
+      end
+    rescue LoadError
+      UI.important("⚠️ xcodeproj gem 없음 - 최종 검증 건너뜀")
+    rescue => e
+      UI.important("⚠️ 최종 검증 중 오류: #{e.message}")
+    end
+    
+    # 2) export_options는 이름(Name)만 사용, 없으면 생략 (이미 xcodeproj/xcargs/임베드로 지정됨)
+    export_profiles = {}
+    export_profiles[BUNDLE_ID] = pp_name unless pp_name.empty?
+    
+    # ============================================
+    # 빌드 번호 고정 설정 (TestFlight 업로드를 위해 필수)
+    # TODO: 다음 빌드에서는 18로 변경 필요
+    # ============================================
+    UI.important("=" * 60)
+    UI.important("🔢 [빌드 번호 설정] 빌드 번호 고정: 17")
+    UI.important("=" * 60)
+    
+    new_build_number = "17"
+    
+    begin
+      require 'xcodeproj'
+      UI.message("📖 Xcode 프로젝트 파일 읽기 중...")
+      project = Xcodeproj::Project.open(XCODEPROJ)
+      UI.message("✅ Xcode 프로젝트 파일 읽기 완료")
+      
+      # Xcode 프로젝트에 빌드 번호 설정 (모든 Configuration에 설정)
+      UI.message("💾 Xcode 프로젝트에 빌드 번호 저장 중...")
+      project.targets.each do |target|
+        next unless target.name == SCHEME
+        
+        target.build_configurations.each do |config|
+          old_value = config.build_settings['CURRENT_PROJECT_VERSION'] || "1"
+          config.build_settings['CURRENT_PROJECT_VERSION'] = new_build_number
+          UI.message("   → #{target.name} (#{config.name}): #{old_value} → #{new_build_number}")
+        end
+      end
+      
+      project.save
+      UI.success("✅ [빌드 번호 설정] 완료: → #{new_build_number}")
+      
+      # 저장 후 다시 읽어서 확인
+      verify_project = Xcodeproj::Project.open(XCODEPROJ)
+      verify_project.targets.each do |target|
+        next unless target.name == SCHEME
+        target.build_configurations.each do |config|
+          next unless config.name == "Release"
+          verified = config.build_settings['CURRENT_PROJECT_VERSION']
+          if verified == new_build_number
+            UI.success("✅ 검증 완료: Xcode 프로젝트에 빌드 번호 #{new_build_number} 저장됨")
+          else
+            UI.user_error!("❌ 검증 실패: 저장된 빌드 번호가 다릅니다. 예상: #{new_build_number}, 실제: #{verified}")
+          end
+        end
+      end
+      
+    rescue => e
+      UI.user_error!("❌ [빌드 번호 설정 실패] #{e.message}\n#{e.backtrace.first(10).join("\n")}")
+    end
+    
+    UI.important("=" * 60)
+    UI.important("🎯 최종 빌드 번호: #{new_build_number}")
+    UI.important("=" * 60)
+    
+    # Info.plist 파일에 빌드 번호 직접 설정 (xcargs만으로는 부족할 수 있음)
+    begin
+      info_plist_paths = Dir.glob(File.join(IOS_DIR, "**", "Info.plist")).select do |path|
+        # 메인 앱 타겟의 Info.plist만 (Pods 제외)
+        !path.include?("Pods/") && !path.include?("DerivedData/")
+      end
+      
+      if info_plist_paths.any?
+        info_plist_paths.each do |info_plist_path|
+          UI.message("📝 Info.plist 파일에 빌드 번호 설정: #{File.basename(info_plist_path)}")
+          sh("/usr/libexec/PlistBuddy -c 'Set :CFBundleVersion #{new_build_number}' '#{info_plist_path}' 2>&1")
+          # 확인
+          verify_build = sh("/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' '#{info_plist_path}' 2>&1", log: false).strip
+          if verify_build == new_build_number
+            UI.success("✅ Info.plist 빌드 번호 설정 완료: #{verify_build}")
+          else
+            UI.important("⚠️ Info.plist 빌드 번호 불일치: 예상=#{new_build_number}, 실제=#{verify_build}")
+          end
+        end
+      else
+        UI.important("⚠️ Info.plist 파일을 찾을 수 없습니다. xcargs로만 설정합니다.")
+      end
+    rescue => e
+      UI.important("⚠️ Info.plist 수정 실패: #{e.message}. xcargs로만 설정합니다.")
+    end
+    
+    # 메인 앱 타겟에만 프로비저닝 프로파일 적용 (Pods 제외)
+    # 🔒 xcargs에 BoringSSL-GRPC의 플래그를 명시적으로 $(inherited)로 강제 설정하여 -G 제거
+    # 빌드 번호를 xcargs에도 명시적으로 설정하여 확실히 적용
+    build_app(
+      workspace:     WORKSPACE,
+      scheme:        SCHEME,
+      configuration: "Release",
+      clean:         true,
+      skip_codesigning: false,
+      xcargs: [
+        "DEVELOPMENT_TEAM=#{TEAM_ID}",
+        "CODE_SIGN_STYLE=Manual",
+        "CODE_SIGN_IDENTITY=\"Apple Distribution\"",
+        "PRODUCT_BUNDLE_IDENTIFIER=#{BUNDLE_ID}",
+        "pickplay.PROVISIONING_PROFILE_SPECIFIER=#{specifier}",  # 메인 앱 타겟만 지정
+        "CURRENT_PROJECT_VERSION=#{new_build_number}",  # 빌드 번호 명시적 설정
+        "SWIFT_OPTIMIZATION_LEVEL=-O",
+        # BoringSSL-GRPC 타겟의 플래그를 $(inherited)로 강제 설정하여 -G 제거
+        "BoringSSL-GRPC.OTHER_CFLAGS=$(inherited)",
+        "BoringSSL-GRPC.OTHER_CPLUSPLUSFLAGS=$(inherited)",
+        "BoringSSL-GRPC.OTHER_LDFLAGS=$(inherited)",
+        "BoringSSL-GRPC.WARNING_CFLAGS=$(inherited)"
+      ].compact.join(" "),
+      export_options: export_profiles.empty? ? nil : {
+        provisioningProfiles: export_profiles
+      }
+    )
+    
+    # 빌드 후 검증: 아카이브 내부에 GoogleService-Info.plist가 포함되어 있는지 확인
+    begin
+      archive_path = lane_context[SharedValues::XCODEBUILD_ARCHIVE]
+      if archive_path && Dir.exist?(archive_path)
+        UI.important("=" * 60)
+        UI.important("🔍 [빌드 후 검증] 아카이브 내부 파일 확인 중...")
+        UI.important("=" * 60)
+        
+        # .app 번들 찾기
+        app_bundles = Dir.glob(File.join(archive_path, "**", "*.app"))
+        if app_bundles.any?
+          app_bundle = app_bundles.first
+          google_services_path = File.join(app_bundle, "GoogleService-Info.plist")
+          
+          if File.exist?(google_services_path)
+            UI.success("✅ GoogleService-Info.plist가 앱 번들에 포함되어 있습니다: #{File.basename(app_bundle)}/GoogleService-Info.plist")
+          else
+            UI.user_error!("❌ GoogleService-Info.plist가 앱 번들에 포함되지 않았습니다!")
+            UI.important("💡 Xcode 프로젝트의 'Copy Bundle Resources'에 파일이 추가되었는지 확인하세요.")
+            UI.important("💡 파일 경로: #{google_services_path}")
+          end
+        else
+          UI.important("⚠️ .app 번들을 찾을 수 없습니다: #{archive_path}")
+        end
+        
+        UI.important("=" * 60)
+      end
+    rescue => e
+      UI.important("⚠️ 빌드 후 검증 중 에러 발생: #{e.message}")
+      UI.important("⚠️ 계속 진행합니다...")
+    end
+
+    # TestFlight 업로드
+    upload_to_testflight(
+      api_key: api_key,
+      app_identifier: BUNDLE_ID,
+      skip_waiting_for_build_processing: true,
+      skip_submission: true
+    )
+
+    # (옵션) Firebase App Distribution
+    if ENV["FIREBASE_TOKEN"].to_s.strip != "" && ENV["FIREBASE_APP_ID"].to_s.strip != ""
+      begin
+        firebase_app_distribution(
+          app: ENV["FIREBASE_APP_ID"],
+          groups: "testers",
+          release_notes: "Automated build from GitHub Actions"
+        )
+        UI.success("✅ Firebase App Distribution 업로드 완료")
+      rescue => e
+        UI.important("⚠️ Firebase App Distribution 실패: #{e.message}")
+      end
+    end
+
+    UI.success("✅ TestFlight 업로드 성공")
+  end
+
+  desc "ONE-TIME: Development 프로파일 생성"
+  lane :bootstrap_dev_profiles do
+    prepare_ci!
+
+    api_key = app_store_connect_api_key(
+      key_id:       ENV["APP_STORE_CONNECT_API_KEY_ID"],
+      issuer_id:    ENV["APP_STORE_CONNECT_API_ISSUER_ID"],
+      key_filepath: ENV["APP_STORE_CONNECT_API_KEY_PATH"],
+      duration:     1200,
+      in_house:     false
+    )
+
+    UI.message("🔧 Development 프로파일 생성 중...")
+
+    # Development 프로비저닝 프로파일 생성 (force + readonly:false)
+    # app_store_connect_api_key가 설정한 api_key_path를 match가 자동으로 사용
+    # api_key 파라미터를 전달하면 api_key_path와 충돌하므로 제거
+    match(
+      type: "development",
+      readonly: false,
+      force: true,
+      app_identifier: BUNDLE_ID,
+      team_id: TEAM_ID,
+      git_url: ENV["MATCH_GIT_URL"],
+      git_basic_authorization: Base64.strict_encode64("#{ENV['MATCH_GIT_USERNAME']}:#{ENV['MATCH_GIT_PASSWORD']}"),
+      keychain_name: "build",
+      keychain_password: KEYCHAIN_PW,
+      git_branch: MATCH_BRANCH,
+      clone_branch_directly: true,
+      shallow_clone: true
+    )
+
+    UI.success("✅ Development 프로파일 생성 완료")
+    UI.message("  → 다음부터는 readonly=true로 사용")
+  end
+
+  desc "Dev Client 빌드 (Internal Distribution for debugging)"
+  lane :dev_client do
+    prepare_ci!
+
+    # API 키 파일 경로 확인 (app_store_connect_api_key 호출 전에 확인)
+    api_key_path = ENV["APP_STORE_CONNECT_API_KEY_PATH"]
+    unless api_key_path && File.exist?(api_key_path)
+      UI.user_error!("❌ App Store Connect API 키 파일을 찾을 수 없습니다: #{api_key_path || '(없음)'}")
+    end
+    UI.success("✅ App Store Connect API 키 파일 확인: #{api_key_path}")
+
+    api_key = app_store_connect_api_key(
+      key_id:       ENV["APP_STORE_CONNECT_API_KEY_ID"],
+      issuer_id:    ENV["APP_STORE_CONNECT_API_ISSUER_ID"],
+      key_filepath: ENV["APP_STORE_CONNECT_API_KEY_PATH"],
+      duration:     1200,
+      in_house:     false
+    )
+
+    UI.message("🔧 Dev Client 빌드 시작 (Debug, Internal Distribution)")
+
+    # CI 환경에서 match의 임시 디렉토리 정리 (이전 빌드의 잔여물 방지)
+    # match는 ~/.match 디렉토리를 사용하므로 정리
+    match_workspace = File.expand_path("~/.match")
+    if Dir.exist?(match_workspace)
+      begin
+        UI.message("🧹 match 임시 디렉토리 정리 중: #{match_workspace}")
+        FileUtils.rm_rf(match_workspace)
+      rescue => e
+        UI.important("⚠️  match 임시 디렉토리 정리 실패 (무시하고 계속 진행): #{e.message}")
+      end
+    end
+
+    # Development 프로파일 사용 (readonly=true: 기존 프로파일 사용)
+    # 새로 생성하려면 fastlane ios bootstrap_dev_profiles 실행 필요
+    match(
+      type: "development",
+      readonly: true,
+      app_identifier: BUNDLE_ID,
+      team_id: TEAM_ID,
+      git_url: ENV["MATCH_GIT_URL"],
+      git_basic_authorization: Base64.strict_encode64("#{ENV['MATCH_GIT_USERNAME']}:#{ENV['MATCH_GIT_PASSWORD']}"),
+      keychain_name: "build",
+      keychain_password: KEYCHAIN_PW,
+      git_branch: MATCH_BRANCH,
+      clone_branch_directly: true,
+      shallow_clone: true
+      # api_key는 app_store_connect_api_key가 환경 변수에 설정하므로 별도 전달 불필요
+    )
+
+    mapping = lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING] || {}
+    profile_name = mapping[BUNDLE_ID]
+
+    dotted_uuid_key = "sigh_#{BUNDLE_ID}_development"
+    underscored_uuid_key = "sigh_#{BUNDLE_ID.tr('.', '_')}_development"
+
+    profile_uuid = Actions.lane_context[SharedValues::SIGH_UUID] ||
+                   Actions.lane_context[SharedValues::SIGH_UDID] ||
+                   ENV[dotted_uuid_key] ||
+                   ENV[underscored_uuid_key]
+
+    if profile_uuid.to_s.empty? || profile_uuid.length != 36
+      UI.user_error!("❌ match가 반환한 Development 프로비저닝 프로파일 UUID를 찾을 수 없습니다. fastlane ios bootstrap_dev_profiles 이후 다시 시도하세요.")
+    end
+
+    dotted_path_key = "sigh_#{BUNDLE_ID}_development_profile-path"
+    underscored_path_key = "sigh_#{BUNDLE_ID.tr('.', '_')}_development_profile-path"
+
+    profile_path = ENV[dotted_path_key] ||
+                   ENV[underscored_path_key] ||
+                   Actions.lane_context[SharedValues::SIGH_PROFILE_PATH]
+
+    if profile_path.to_s.empty? || !File.exist?(profile_path)
+      fallback_path = File.expand_path(File.join("~", "Library", "MobileDevice", "Provisioning Profiles", "#{profile_uuid}.mobileprovision"))
+      profile_path = fallback_path if File.exist?(fallback_path)
+    end
+
+    if profile_path.to_s.empty? || !File.exist?(profile_path)
+      UI.user_error!("❌ match가 반환한 Development 프로비저닝 프로파일 경로를 찾을 수 없습니다.")
+    end
+
+    UI.success("✅ Development 프로파일 확인: #{profile_name || 'match Development ' + BUNDLE_ID}")
+    UI.success("   UUID=#{profile_uuid}")
+    UI.success("   PATH=#{profile_path}")
+
+    # ============================================
+    # 네이티브 프로젝트 재생성 (중요!)
+    # expo prebuild를 실행하여 app.json의 googleServicesFile 설정을 적용
+    # 
+    # 참고: GitHub Actions 워크플로우에서 이미 expo prebuild를 실행했을 수 있으므로,
+    # ios/ 디렉토리가 이미 존재하고 AppDelegate가 있다면 건너뛰기
+    # ============================================
+    app_delegate_path = File.join(IOS_DIR, SCHEME, "AppDelegate.mm")
+    if File.exist?(app_delegate_path)
+      app_delegate_content = File.read(app_delegate_path) rescue ""
+      if app_delegate_content.include?('[PickPlay][AdMob] Test Device Identifier')
+        UI.success("✅ [네이티브 프로젝트] AppDelegate에 IDFA 플러그인 코드가 이미 포함되어 있습니다. prebuild 건너뜁니다.")
+      else
+        UI.important("⚠️ [네이티브 프로젝트] AppDelegate에 IDFA 플러그인 코드가 없습니다. prebuild를 실행합니다...")
+        expo_prebuild!(
+          check_firebase: false,
+          setup_att: false
+        )
+      end
+    else
+      UI.important("⚠️ [네이티브 프로젝트] AppDelegate.mm 파일이 없습니다. prebuild를 실행합니다...")
+      expo_prebuild!(
+        check_firebase: false,
+        setup_att: false
+      )
+    end
+
+    # Pods 재설치
+    sh("cd #{IOS_DIR} && pod install")
+    
+    # ============================================
+    # app.json 확인 및 동기화 (중요!)
+    # react-native-google-mobile-ads의 ios_config.sh는 프로젝트 루트의 app.json을 읽습니다
+    # ============================================
+    UI.important("=" * 60)
+    UI.important("🔍 [app.json 동기화] 시작")
+    UI.important("=" * 60)
+    
+    begin
+      src_appjson = File.join(REPO_ROOT, 'app.json')
+      dst_appjson_ios = File.join(IOS_DIR, 'app.json')
+      
+      UI.message("📁 소스 경로 (프로젝트 루트): #{src_appjson}")
+      UI.message("📁 대상 경로 (ios 디렉터리): #{dst_appjson_ios}")
+      
+      unless File.exist?(src_appjson)
+        UI.user_error!("❌ [app.json 동기화 실패] 루트 app.json을 찾을 수 없습니다: #{src_appjson}")
+      end
+      
+      UI.success("✅ [app.json 동기화] 소스 파일 존재 확인: #{src_appjson}")
+      
+      # app.json 내용 검증
+      require 'json'
+      app_json_content = JSON.parse(File.read(src_appjson))
+      
+      # ios_app_id 확인 (두 가지 위치 모두 확인)
+      ios_app_id_value = nil
+      if app_json_content.dig('react-native-google-mobile-ads', 'ios_app_id')
+        ios_app_id_value = app_json_content['react-native-google-mobile-ads']['ios_app_id']
+        UI.success("✅ [app.json 동기화] 루트 레벨에서 ios_app_id 발견: #{ios_app_id_value}")
+      elsif app_json_content.dig('extra', 'react-native-google-mobile-ads', 'ios_app_id')
+        ios_app_id_value = app_json_content['extra']['react-native-google-mobile-ads']['ios_app_id']
+        UI.success("✅ [app.json 동기화] extra.react-native-google-mobile-ads에서 ios_app_id 발견: #{ios_app_id_value}")
+      else
+        UI.user_error!("❌ [app.json 동기화 실패] app.json에서 ios_app_id를 찾을 수 없습니다. react-native-google-mobile-ads.ios_app_id 또는 extra.react-native-google-mobile-ads.ios_app_id가 필요합니다.")
+      end
+      
+      # ios/app.json으로 복사
+      FileUtils.mkdir_p(File.dirname(dst_appjson_ios))
+      FileUtils.cp(src_appjson, dst_appjson_ios)
+      
+      # 복사 확인
+      unless File.exist?(dst_appjson_ios)
+        UI.user_error!("❌ [app.json 동기화 실패] app.json 복사 실패: #{dst_appjson_ios}")
+      end
+      
+      UI.success("✅ [app.json 동기화] 복사 완료: #{dst_appjson_ios}")
+      UI.message("📊 파일 크기: #{File.size(dst_appjson_ios)} bytes")
+      UI.message("🔑 ios_app_id: #{ios_app_id_value}")
+      
+      # 프로젝트 루트의 app.json도 확인 (react-native-google-mobile-ads의 ios_config.sh가 여기서 읽을 수 있음)
+      UI.message("🔍 [app.json 동기화] 프로젝트 루트 app.json 확인 중...")
+      unless File.exist?(src_appjson)
+        UI.user_error!("❌ [app.json 동기화 실패] 프로젝트 루트 app.json이 없습니다: #{src_appjson}")
+      end
+      
+      # 프로젝트 루트의 app.json 내용도 검증
+      root_app_json_content = JSON.parse(File.read(src_appjson))
+      root_ios_app_id = root_app_json_content.dig('react-native-google-mobile-ads', 'ios_app_id') || 
+                        root_app_json_content.dig('extra', 'react-native-google-mobile-ads', 'ios_app_id')
+      
+      if root_ios_app_id
+        UI.success("✅ [app.json 동기화] 프로젝트 루트 app.json에 ios_app_id 확인: #{root_ios_app_id}")
+      else
+        UI.important("⚠️ [app.json 동기화] 프로젝트 루트 app.json에 ios_app_id가 없습니다. 이는 문제가 될 수 있습니다.")
+      end
+      UI.important("=" * 60)
+      UI.important("✅ [app.json 동기화] 완료")
+      UI.important("=" * 60)
+    rescue JSON::ParserError => e
+      UI.user_error!("❌ [app.json 동기화 실패] app.json 파싱 실패: #{e.message}")
+    rescue => e
+      UI.user_error!("❌ [app.json 동기화 실패] #{e.message}\n  스택: #{e.backtrace.first(3).join("\n  ")}")
+    end
+
+    # Module map 경로 수정 (절대 경로 -> $(PODS_ROOT) 상대 경로)
+    # CocoaPods가 절대 경로로 잘못 생성하는 버그 수정
+    # 목적: 빌드 성공 → Archive 성공 → IPA 생성
+    begin
+      require 'xcodeproj'
+      pods_project_path = File.join(IOS_DIR, 'Pods', 'Pods.xcodeproj')
+      if File.exist?(pods_project_path)
+        UI.message("🔧 [빌드 수정] Module map 경로 수정 중... (최종 목표: IPA 생성)")
+        pods_project = Xcodeproj::Project.open(pods_project_path)
+        project_root = File.expand_path('..', IOS_DIR)
+        pods_target_support = File.join(IOS_DIR, 'Pods', 'Target Support Files')
+        fixed_count = 0
+        skipped_count = 0
+        
+        pods_project.targets.each do |target|
+          target_name = target.name
+          correct_path = "$(PODS_ROOT)/Target Support Files/#{target_name}/#{target_name}.modulemap"
+          expected_file = File.join(pods_target_support, target_name, "#{target_name}.modulemap")
+          file_exists = File.exist?(expected_file)
+          
+          target.build_configurations.each do |config|
+            current_modulemap = config.build_settings['MODULEMAP_FILE'].to_s
+            
+            # 이미 올바른 경로인 경우 스킵
+            if current_modulemap == correct_path
+              skipped_count += 1
+              next
+            end
+            
+            # 파일이 존재하면 올바른 경로로 설정
+            if file_exists
+              old_path = current_modulemap.empty? ? '(없음)' : current_modulemap
+              config.build_settings['MODULEMAP_FILE'] = correct_path
+              fixed_count += 1
+              if fixed_count <= 10
+                UI.message("  ✅ [#{fixed_count}] #{target_name}: #{old_path} -> #{correct_path}")
+              end
+            else
+              # 파일이 없는데 잘못된 경로가 설정되어 있으면 제거
+              if !current_modulemap.empty?
+                config.build_settings['MODULEMAP_FILE'] = ""
+                fixed_count += 1
+                if fixed_count <= 10
+                  UI.message("  ⚠️  [#{fixed_count}] #{target_name}: 모듈 맵 파일 없음, 경로 제거")
+                end
+              end
+            end
+          end
+        end
+        
+        # 헤더 파일 경로도 수정 (umbrella header 등)
+        # Pods-pickplay 타겟의 Copy Headers 단계 경로 문제 해결
+        header_fixed_count = 0
+        pods_project.targets.each do |target|
+          target.build_configurations.each do |config|
+            # PUBLIC_HEADERS_FOLDER_PATH, PRIVATE_HEADERS_FOLDER_PATH 체크
+            ['PUBLIC_HEADERS_FOLDER_PATH', 'PRIVATE_HEADERS_FOLDER_PATH'].each do |header_path_key|
+              current_header_path = config.build_settings[header_path_key].to_s
+              
+              # 프로젝트 루트를 포함하는 잘못된 절대 경로 수정
+              if !current_header_path.empty? && current_header_path.include?(project_root) && !current_header_path.include?('$(PODS_ROOT)')
+                # Target Support Files 경로를 $(PODS_ROOT)로 변경
+                new_path = current_header_path.sub(project_root, '$(PODS_ROOT)')
+                config.build_settings[header_path_key] = new_path
+                header_fixed_count += 1
+                if header_fixed_count <= 5
+                  UI.message("  ✅ 헤더 경로 수정 [#{header_fixed_count}] #{target.name}.#{config.name}: #{header_path_key}")
+                end
+              end
+            end
+            
+            # HEADER_SEARCH_PATHS에서 잘못된 경로 수정
+            header_search_paths = Array(config.build_settings['HEADER_SEARCH_PATHS'] || [])
+            modified = false
+            header_search_paths = header_search_paths.map do |path|
+              path_str = path.to_s
+              if path_str.include?(project_root) && path_str.include?('Target Support Files') && !path_str.include?('$(PODS_ROOT)')
+                new_path = path_str.sub(project_root, '$(PODS_ROOT)')
+                modified = true
+                new_path
+              else
+                path
+              end
+            end
+            
+            if modified
+              config.build_settings['HEADER_SEARCH_PATHS'] = header_search_paths.uniq
+              header_fixed_count += 1
+            end
+          end
+        end
+        
+        # 빌드 단계(Build Phase)에서 Copy Headers의 output 경로도 수정
+        # Pods-pickplay 타겟의 Copy Headers 단계 출력 경로 문제 해결
+        pods_project.targets.each do |target|
+          next unless target.name == 'Pods-pickplay'
+          
+          # Copy Files 빌드 단계 찾기 (Copy Headers는 Copy Files의 일종)
+          target.build_phases.each do |phase|
+            if phase.is_a?(Xcodeproj::Project::Object::PBXCopyFilesBuildPhase)
+              # 출력 경로가 프로젝트 루트로 잘못 설정된 경우 수정
+              if phase.dst_path && phase.dst_path.to_s.include?(project_root) && !phase.dst_path.to_s.include?('$(PODS_ROOT)')
+                new_dst_path = phase.dst_path.to_s.sub(project_root, '$(PODS_ROOT)')
+                phase.dst_path = new_dst_path
+                header_fixed_count += 1
+                UI.message("  ✅ Copy Files 단계 출력 경로 수정: #{target.name}")
+              end
+              
+              # 각 파일 참조의 출력 경로도 확인
+              phase.files.each do |file|
+                if file.file_ref && file.file_ref.path
+                  # 파일 참조 경로가 프로젝트 루트를 포함하는 경우
+                  file_path = file.file_ref.path.to_s
+                  if file_path.include?('Target Support Files') && !file_path.include?('$(PODS_ROOT)') && !file_path.start_with?('$(PODS_ROOT)')
+                    # 이미 올바른 경로이거나 Xcode가 자동으로 처리할 것으로 예상
+                  end
+                end
+              end
+            end
+            
+            # Headers 빌드 단계 확인
+            if phase.is_a?(Xcodeproj::Project::Object::PBXHeadersBuildPhase)
+              # Headers 빌드 단계의 파일 참조 확인
+              phase.files.each do |file|
+                # Public/Private/Project 헤더 설정 확인
+                if file.settings && file.settings['ATTRIBUTES']
+                  # 헤더 속성은 이미 올바르게 설정되어 있을 것으로 예상
+                end
+              end
+            end
+          end
+          
+          # 빌드 설정에서 추가 경로 확인
+          target.build_configurations.each do |config|
+            # COPY_PHASE_STRIP 체크
+            # PUBLIC_HEADERS_FOLDER_PATH 다시 확인 (이미 위에서 수정했지만)
+            public_headers_path = config.build_settings['PUBLIC_HEADERS_FOLDER_PATH'].to_s
+            if public_headers_path.include?(project_root) && !public_headers_path.include?('$(PODS_ROOT)')
+              new_path = public_headers_path.sub(project_root, '$(PODS_ROOT)')
+              config.build_settings['PUBLIC_HEADERS_FOLDER_PATH'] = new_path
+              header_fixed_count += 1
+              UI.message("  ✅ PUBLIC_HEADERS_FOLDER_PATH 수정: #{target.name}.#{config.name}")
+            end
+          end
+        end
+        
+        # PUBLIC_HEADERS_FOLDER_PATH가 잘못된 절대 경로를 사용하는 경우 수정
+        # 예: /Users/runner/work/PickPlay/Pods/Target Support Files/... -> $(PODS_ROOT)/Target Support Files/...
+        pods_project.targets.each do |target|
+          target.build_configurations.each do |config|
+            ['PUBLIC_HEADERS_FOLDER_PATH', 'PRIVATE_HEADERS_FOLDER_PATH'].each do |header_path_key|
+              current_path = config.build_settings[header_path_key].to_s
+              
+              # /Users/runner/work/PickPlay/Pods/ 경로가 포함된 경우 수정
+              if !current_path.empty? && current_path.include?('/Users/runner/work/PickPlay/Pods/') && !current_path.include?('$(PODS_ROOT)')
+                new_path = current_path.sub('/Users/runner/work/PickPlay/Pods/', '$(PODS_ROOT)/')
+                config.build_settings[header_path_key] = new_path
+                header_fixed_count += 1
+                if header_fixed_count <= 5
+                  UI.message("  ✅ [#{header_fixed_count}] #{target.name}.#{config.name}: #{header_path_key} 수정")
+                  UI.message("     이전: #{current_path}")
+                  UI.message("     수정: #{new_path}")
+                end
+              # /Users/runner/work/PickPlay/PickPlay/Target Support Files/ 경로가 포함된 경우 수정
+              elsif !current_path.empty? && current_path.include?('/Users/runner/work/PickPlay/PickPlay/Target Support Files/') && !current_path.include?('$(PODS_ROOT)')
+                new_path = current_path.sub('/Users/runner/work/PickPlay/PickPlay/Target Support Files/', '$(PODS_ROOT)/Target Support Files/')
+                config.build_settings[header_path_key] = new_path
+                header_fixed_count += 1
+                if header_fixed_count <= 5
+                  UI.message("  ✅ [#{header_fixed_count}] #{target.name}.#{config.name}: #{header_path_key} (TSF) 수정")
+                  UI.message("     이전: #{current_path}")
+                  UI.message("     수정: #{new_path}")
+                end
+              end
+            end
+          end
+        end
+
+        # Pods 프로젝트 내 파일 참조가 루트 절대경로를 가리키는 경우 정정
+        # 예: /Users/runner/work/PickPlay/PickPlay/Target Support Files/... -> $(PODS_ROOT)/Target Support Files/...
+        begin
+          wrong_root_prefix = '/Users/runner/work/PickPlay/PickPlay/'
+          wrong_ios_prefix = '/Users/runner/work/ios/'
+          wrong_node_modules_prefixes = [
+            '/Users/runner/work/node_modules/',
+            '/Users/runner/work/PickPlay/node_modules/'
+          ]
+          pods_fixed_files = 0
+          pods_project.files.each do |file_ref|
+            next if file_ref.path.to_s.empty?
+            if file_ref.path.start_with?(wrong_root_prefix + 'Target Support Files/')
+              relative_path = file_ref.path.sub(wrong_root_prefix, '') # 'Target Support Files/...'
+              file_ref.path = File.join('$(PODS_ROOT)', relative_path)
+              # 가능하면 PODS_ROOT 기준으로 해석되도록 source_tree를 '<group>' 대신 'PODS_ROOT'로
+              begin
+                file_ref.source_tree = 'PODS_ROOT'
+              rescue
+                # 호환성 위해 실패해도 무시
+              end
+              pods_fixed_files += 1
+              if pods_fixed_files <= 5
+                UI.message("  ✅ Pods 파일참조 수정 [#{pods_fixed_files}]: #{relative_path}")
+              end
+            elsif file_ref.path.start_with?(wrong_ios_prefix + 'Pods/')
+              relative_path = file_ref.path.sub(wrong_ios_prefix, '') # 'Pods/...'
+              file_ref.path = File.join('$(PODS_ROOT)', relative_path.sub(%r{\APods/}, ''))
+              begin
+                file_ref.source_tree = 'PODS_ROOT'
+              rescue
+              end
+              pods_fixed_files += 1
+              if pods_fixed_files <= 5
+                UI.message("  ✅ Pods 파일참조(iOS prefix) 수정 [#{pods_fixed_files}]: #{relative_path}")
+              end
+            else
+              wrong_node_modules_prefixes.each do |nm_prefix|
+                if file_ref.path.start_with?(nm_prefix)
+                  # $(SRCROOT)/../../node_modules 로 정규화 (Pods 타깃의 SRCROOT가 ios/이므로 한 단계 더 상향)
+                  relative_nm = file_ref.path.sub(nm_prefix, '')
+                  file_ref.path = File.join('$(SRCROOT)', '..', '..', 'node_modules', relative_nm)
+                  begin
+                    file_ref.source_tree = 'SOURCE_ROOT'
+                  rescue
+                  end
+                  pods_fixed_files += 1
+                  if pods_fixed_files <= 5
+                    UI.message("  ✅ node_modules 파일참조 수정 [#{pods_fixed_files}]: #{relative_nm}")
+                  end
+                  break
+                end
+              end
+            end
+          end
+          if pods_fixed_files > 5
+            UI.success("  ✅ Pods 파일참조 총 #{pods_fixed_files}건 수정 (처음 5개만 로그)")
+          end
+        rescue => e
+          UI.important("  ⚠️  Pods 파일참조 수정 중 오류: #{e.message}")
+        end
+
+        # Pods 프로젝트 내 빌드 단계 항목들(file_ref 포함)도 동일 규칙으로 정규화
+        begin
+          wrong_root_prefix = '/Users/runner/work/PickPlay/PickPlay/'
+          wrong_ios_prefix = '/Users/runner/work/ios/'
+          wrong_node_modules_prefixes = [
+            '/Users/runner/work/node_modules/',
+            '/Users/runner/work/PickPlay/node_modules/'
+          ]
+          phases_fixed = 0
+          pods_project.targets.each do |t|
+            t.build_phases.each do |phase|
+              next unless phase.respond_to?(:files)
+              phase.files.each do |bf|
+                next unless bf.respond_to?(:file_ref) && bf.file_ref && bf.file_ref.path
+                p = bf.file_ref.path.to_s
+                if p.start_with?(wrong_root_prefix + 'Target Support Files/')
+                  relative_path = p.sub(wrong_root_prefix, '') # 'Target Support Files/...'
+                  bf.file_ref.path = File.join('$(PODS_ROOT)', relative_path)
+                  begin
+                    bf.file_ref.source_tree = 'PODS_ROOT'
+                  rescue
+                  end
+                  phases_fixed += 1
+                elsif p.start_with?(wrong_ios_prefix + 'Pods/')
+                  relative_path = p.sub(wrong_ios_prefix, '') # 'Pods/...'
+                  bf.file_ref.path = File.join('$(PODS_ROOT)', relative_path.sub(%r{\APods/}, ''))
+                  begin
+                    bf.file_ref.source_tree = 'PODS_ROOT'
+                  rescue
+                  end
+                  phases_fixed += 1
+                else
+                  wrong_node_modules_prefixes.each do |nm_prefix|
+                    if p.start_with?(nm_prefix)
+                      relative_nm = p.sub(nm_prefix, '')
+                      bf.file_ref.path = File.join('$(SRCROOT)', '..', 'node_modules', relative_nm)
+                      begin
+                        bf.file_ref.source_tree = 'SOURCE_ROOT'
+                      rescue
+                      end
+                      phases_fixed += 1
+                      break
+                    end
+                  end
+                end
+              end
+            end
+          end
+          if phases_fixed > 0
+            UI.success("  ✅ Pods 빌드단계 파일참조 총 #{phases_fixed}건 정규화")
+          end
+        rescue => e
+          UI.important("  ⚠️  Pods 빌드단계 파일참조 정규화 중 오류: #{e.message}")
+        end
+
+        # (정석) 우회/심볼릭링크 사용 없이 CocoaPods 표준 구조 유지
+        # 추가 심볼릭 링크 생성 로직 제거
+        
+        # umbrella.h 소스 참조가 절대경로(루트)로 고정된 경우 $(PODS_ROOT) 기준으로 교정
+        begin
+          umbrella_fixed = 0
+          wrong_root_prefix = '/Users/runner/work/PickPlay/PickPlay/'
+          wrong_ios_prefix  = '/Users/runner/work/ios/'
+          headers_dst_fixed = 0
+          pods_project.targets.each do |t|
+            t.build_phases.each do |phase|
+              next unless phase.respond_to?(:files)
+              # 1) Headers/Copy Files 단계의 잘못된 목적지 경로 교정 (TSF로 향하는 경우)
+              if (phase.is_a?(Xcodeproj::Project::Object::PBXHeadersBuildPhase) || phase.is_a?(Xcodeproj::Project::Object::PBXCopyFilesBuildPhase))
+                if phase.respond_to?(:dst_path) && phase.dst_path && phase.dst_path.to_s.include?('Target Support Files')
+                  # 표준: 프레임워크 Headers 폴더로
+                  phase.dst_path = '$(TARGET_BUILD_DIR)/$(WRAPPER_NAME)/Headers'
+                  begin
+                    # Headers 폴더로 복사되도록 서브폴더 스펙 보정 (없어도 무방)
+                    phase.dst_subfolder_spec = '0'
+                  rescue
+                  end
+                  headers_dst_fixed += 1
+                end
+              end
+              # 2) umbrella.h를 TSF로 복사하려는 잘못된 항목 제거 (Copy Files 오염 방지)
+              if phase.is_a?(Xcodeproj::Project::Object::PBXCopyFilesBuildPhase)
+                to_remove = []
+                phase.files.each do |bf|
+                  next unless bf.respond_to?(:file_ref) && bf.file_ref && bf.file_ref.path
+                  p = bf.file_ref.path.to_s
+                  if p.end_with?('-umbrella.h') && p.include?('Target Support Files')
+                    to_remove << bf
+                  end
+                end
+                to_remove.each do |bf|
+                  begin
+                    phase.remove_file_reference(bf.file_ref)
+                  rescue
+                    # fallback: objects 직접 삭제
+                    begin
+                      pods_project.objects.delete(bf)
+                    rescue
+                    end
+                  end
+                end
+                headers_dst_fixed += to_remove.size if to_remove.size > 0
+              end
+              phase.files.each do |bf|
+                next unless bf.respond_to?(:file_ref) && bf.file_ref && bf.file_ref.path
+                path_str = bf.file_ref.path.to_s
+                # Target Support Files 안의 umbrella.h를 절대경로로 가리키면 $(PODS_ROOT) 기준으로 정규화
+                if path_str.include?('Target Support Files') && path_str.end_with?('-umbrella.h') && !path_str.start_with?('$(PODS_ROOT)')
+                  new_path = nil
+                  if path_str.start_with?(wrong_root_prefix)
+                    new_path = File.join('$(PODS_ROOT)', path_str.sub(wrong_root_prefix, '').sub(%r{\ATarget Support Files/}, 'Target Support Files/'))
+                  elsif path_str.start_with?(wrong_ios_prefix + 'Pods/')
+                    new_path = File.join('$(PODS_ROOT)', path_str.sub(wrong_ios_prefix + 'Pods/', ''))
+                  else
+                    # 상대경로('Target Support Files/...') 형태도 $(PODS_ROOT) 기준으로 고정
+                    # 혹시 'Pods/Target Support Files/...' 형태면 'Pods/' 제거 후 부착
+                    relative = path_str.sub(%r{\APods/}, '')
+                    new_path = File.join('$(PODS_ROOT)', relative)
+                  end
+                  bf.file_ref.path = new_path
+                  begin
+                    bf.file_ref.source_tree = 'PODS_ROOT'
+                  rescue
+                  end
+                  umbrella_fixed += 1
+                end
+              end
+            end
+          end
+          if umbrella_fixed > 0
+            UI.success("  ✅ umbrella.h 참조 교정: #{umbrella_fixed}건")
+          end
+          if headers_dst_fixed > 0
+            UI.success("  ✅ Headers/Copy 단계 목적지 경로 교정: #{headers_dst_fixed}건")
+          end
+        rescue => e
+          UI.important("  ⚠️  umbrella.h 참조 교정 중 오류: #{e.message}")
+        end
+        
+        # 3) Pods-pickplay 타겟의 헤더 출력 폴더를 강제로 표준 경로로 설정
+        begin
+          target_override_fixed = 0
+          pods_project.targets.each do |t|
+            next unless t.name == 'Pods-pickplay'
+            t.build_configurations.each do |config|
+              begin
+                config.build_settings['PUBLIC_HEADERS_FOLDER_PATH']  = '$(TARGET_BUILD_DIR)/$(WRAPPER_NAME)/Headers'
+                config.build_settings['PRIVATE_HEADERS_FOLDER_PATH'] = '$(TARGET_BUILD_DIR)/$(WRAPPER_NAME)/PrivateHeaders'
+                target_override_fixed += 1
+              rescue
+              end
+            end
+          end
+          if target_override_fixed > 0
+            UI.success("  ✅ Pods-pickplay 헤더 출력 폴더 표준화: #{target_override_fixed}건")
+          end
+        rescue => e
+          UI.important("  ⚠️  Pods-pickplay 헤더 출력 폴더 표준화 중 오류: #{e.message}")
+        end
+        
+        # 4) 모든 Pod 타겟에서 'Target Support Files'로 향하는 헤더 출력 빌드세팅을 일괄 교정
+        begin
+          header_settings_fixed = 0
+          pods_project.targets.each do |t|
+            t.build_configurations.each do |config|
+              ['PUBLIC_HEADERS_FOLDER_PATH', 'PRIVATE_HEADERS_FOLDER_PATH'].each do |key|
+                val = config.build_settings[key].to_s
+                next if val.empty?
+                if val.include?('Target Support Files')
+                  if key == 'PUBLIC_HEADERS_FOLDER_PATH'
+                    config.build_settings[key] = '$(TARGET_BUILD_DIR)/$(WRAPPER_NAME)/Headers'
+                  else
+                    config.build_settings[key] = '$(TARGET_BUILD_DIR)/$(WRAPPER_NAME)/PrivateHeaders'
+                  end
+                  header_settings_fixed += 1
+                end
+              end
+            end
+          end
+          if header_settings_fixed > 0
+            UI.success("  ✅ 헤더 출력 빌드세팅 정규화: #{header_settings_fixed}건")
+          end
+        rescue => e
+          UI.important("  ⚠️  헤더 출력 빌드세팅 정규화 중 오류: #{e.message}")
+        end
+        
+        # 5) Pods-pickplay 헤더 단계에서 umbrella.h 항목을 강제로 재참조(안전망)
+        begin
+          enforced = 0
+          pods_target = pods_project.targets.find { |t| t.name == 'Pods-pickplay' }
+          if pods_target
+            # 올바른 파일 참조 준비
+            desired_rel = 'Target Support Files/Pods-pickplay/Pods-pickplay-umbrella.h'
+            desired_path = File.join('$(PODS_ROOT)', desired_rel)
+            tsf_group = pods_project.main_group.find_subpath('Target Support Files/Pods-pickplay', true)
+            file_ref = tsf_group.files.find { |f| f.path.to_s == desired_path }
+            file_ref ||= tsf_group.new_reference(desired_path)
+            begin
+              file_ref.source_tree = 'PODS_ROOT'
+            rescue
+            end
+
+            # Headers 단계 찾기
+            headers_phase = pods_target.build_phases.find { |ph| ph.is_a?(Xcodeproj::Project::Object::PBXHeadersBuildPhase) }
+            if headers_phase
+              # 기존 잘못된 umbrella.h 항목 제거
+              to_remove = []
+              headers_phase.files.each do |bf|
+                next unless bf.file_ref && bf.file_ref.path
+                p = bf.file_ref.path.to_s
+                if p.end_with?('Pods-pickplay-umbrella.h') && !p.start_with?('$(PODS_ROOT)')
+                  to_remove << bf
+                end
+              end
+              to_remove.each do |bf|
+                begin
+                  headers_phase.remove_file_reference(bf.file_ref)
+                rescue
+                  begin
+                    pods_project.objects.delete(bf)
+                  rescue
+                  end
+                end
+              end
+
+              # 올바른 참조가 없으면 추가
+              unless headers_phase.files.any? { |bf| bf.file_ref && bf.file_ref.path.to_s == desired_path }
+                headers_phase.add_file_reference(file_ref, true)
+                enforced += 1
+              end
+            end
+          end
+          if enforced > 0
+            UI.success("  ✅ Pods-pickplay umbrella.h 강제 재참조: #{enforced}건")
+          end
+        rescue => e
+          UI.important("  ⚠️  Pods-pickplay umbrella 재참조 보강 중 오류: #{e.message}")
+        end
+        
+        # 6) 모든 Pod 타겟에 대해 umbrella.h 및 node_modules 헤더 경로 전역 보정
+        begin
+          general_umbrella_fixed = 0
+          node_modules_headers_fixed = 0
+          wrong_root_prefix = '/Users/runner/work/PickPlay/PickPlay/'
+          wrong_ios_prefix  = '/Users/runner/work/ios/'
+          wrong_node_modules_prefixes = [
+            '/Users/runner/work/node_modules/',
+            '/Users/runner/work/PickPlay/node_modules/'
+          ]
+          pods_project.targets.each do |t|
+            t.build_phases.each do |phase|
+              next unless phase.respond_to?(:files)
+              # 잘못된 CopyFiles의 umbrella 항목 제거
+              if phase.is_a?(Xcodeproj::Project::Object::PBXCopyFilesBuildPhase)
+                to_remove = []
+                phase.files.each do |bf|
+                  next unless bf.file_ref && bf.file_ref.path
+                  p = bf.file_ref.path.to_s
+                  if p.end_with?('-umbrella.h') && p.include?('Target Support Files')
+                    to_remove << bf
+                  end
+                end
+                to_remove.each do |bf|
+                  begin
+                    phase.remove_file_reference(bf.file_ref)
+                  rescue
+                    begin
+                      pods_project.objects.delete(bf)
+                    rescue
+                    end
+                  end
+                end
+                general_umbrella_fixed += to_remove.size if to_remove.size > 0
+              end
+              # Headers 단계/모든 파일참조에 대해 경로 보정
+              phase.files.each do |bf|
+                next unless bf.file_ref && bf.file_ref.path
+                p = bf.file_ref.path.to_s
+                # umbrella.h가 TSF 절대/상대 경로면 $(PODS_ROOT) 기준으로
+                if p.end_with?('-umbrella.h') && p.include?('Target Support Files') && !p.start_with?('$(PODS_ROOT)')
+                  rel = p.dup
+                  if rel.start_with?(wrong_root_prefix)
+                    rel = rel.sub(wrong_root_prefix, '')
+                  elsif rel.start_with?(wrong_ios_prefix + 'Pods/')
+                    rel = rel.sub(wrong_ios_prefix + 'Pods/', '')
+                  else
+                    rel = rel.sub(%r{\APods/}, '')
+                  end
+                  rel = rel.sub(%r{\ATarget Support Files/}, 'Target Support Files/')
+                  bf.file_ref.path = File.join('$(PODS_ROOT)', rel)
+                  begin
+                    bf.file_ref.source_tree = 'PODS_ROOT'
+                  rescue
+                  end
+                  general_umbrella_fixed += 1
+                end
+                # node_modules 헤더 절대경로를 $(PROJECT_DIR)/node_modules 로 교정
+                wrong_node_modules_prefixes.each do |nm_prefix|
+                  if p.start_with?(nm_prefix)
+                    rel_nm = p.sub(nm_prefix, '')
+                    bf.file_ref.path = File.join('$(SRCROOT)', '..', '..', 'node_modules', rel_nm)
+                    begin
+                      bf.file_ref.source_tree = 'SOURCE_ROOT'
+                    rescue
+                    end
+                    node_modules_headers_fixed += 1
+                    break
+                  end
+                end
+              end
+            end
+          end
+          if general_umbrella_fixed > 0
+            UI.success("  ✅ 모든 Pod 타겟 umbrella/Copy 보정: #{general_umbrella_fixed}건")
+          end
+          if node_modules_headers_fixed > 0
+            UI.success("  ✅ node_modules 헤더 경로 보정: #{node_modules_headers_fixed}건")
+          end
+        rescue => e
+          UI.important("  ⚠️  전역 umbrella/node_modules 보정 중 오류: #{e.message}")
+        end
+        
+        # 7) 'Target Support Files' 및 node_modules 그룹의 그룹 경로/소스 트리 보정
+        begin
+          groups_fixed = 0
+          pods_project.groups.each do |grp|
+            next unless grp.respond_to?(:path)
+            gp = grp.path
+            next unless gp.is_a?(String)
+            new_gp = gp.dup
+            updated = false
+            # Target Support Files 그룹을 PODS_ROOT 기준 상대경로로 고정
+            if new_gp.include?('Target Support Files')
+              # 절대 경로나 '.../Pods/' 접두어 제거
+              if new_gp.start_with?('/Users/')
+                idx = new_gp.index('Target Support Files/')
+                new_gp = new_gp[idx..-1] if idx
+                updated = true
+              end
+              if new_gp.start_with?('Pods/')
+                new_gp = new_gp.sub(%r{\APods/}, '')
+                updated = true
+              end
+              # 혹시 여전히 중간 경로가 있으면 'Target Support Files/...' 부터로 절단
+              unless new_gp.start_with?('Target Support Files/')
+                if (idx2 = new_gp.index('Target Support Files/'))
+                  new_gp = new_gp[idx2..-1]
+                  updated = true
+                end
+              end
+              if updated
+                grp.path = new_gp
+              end
+              begin
+                if grp.respond_to?(:source_tree)
+                  grp.source_tree = 'PODS_ROOT'
+                else
+                  # Some group-like may not expose source_tree setter; ignore
+                end
+              rescue
+              end
+              groups_fixed += 1
+            end
+            # node_modules 그룹은 프로젝트 루트 기준으로
+            if new_gp.include?('/node_modules/')
+              idxnm = new_url = nil
+              idxnm = new_gp.index('node_modules')
+              if idxnm
+                new_url = new_gp[idxnm..-1]
+                grp.path = new_url
+                begin
+                  grp.source_tree = 'SOURCE_ROOT'
+                rescue
+                end
+                groups_fixed += 1
+              end
+            end
+          end
+          UI.success("  ✅ 그룹 경로/sourceTree 보정: #{groups_fixed}건")
+        rescue => e
+          UI.important("  ⚠️  그룹 보정 단계 오류: #{e.message}")
+        end
+        
+        # 7-ADD) react-native-webview 전용 헤더 경로/소스 트리 강제 보정
+        begin
+          wv_fixed = 0
+          wv_target = pods_project.targets.find { |t| t.name == 'react-native-webview' }
+          if wv_target
+            desired_umbrella = '$(PODS_ROOT)/Target Support Files/react-native-webview/react-native-webview-umbrella.h'
+            desired_module_h = '$(SRCROOT)/../../node_modules/react-native-webview/apple/RNCWebViewModule.h'
+            desired_manager_h = '$(SRCROOT)/../../node_modules/react-native-webview/apple/RNCWebViewManager.h'
+            desired_impl_h = '$(SRCROOT)/../../node_modules/react-native-webview/apple/RNCWebViewImpl.h'
+            wv_target.build_phases.each do |phase|
+              next unless phase.respond_to?(:files)
+              phase.files.each do |bf|
+                next unless bf.file_ref && bf.file_ref.path
+                p = bf.file_ref.path.to_s
+                if p.end_with?('react-native-webview-umbrella.h') && p != desired_umbrella
+                  bf.file_ref.path = desired_umbrella
+                  begin
+                    bf.file_ref.source_tree = 'PODS_ROOT'
+                  rescue
+                  end
+                  wv_fixed += 1
+                elsif p.end_with?('RNCWebViewModule.h') && p != desired_module_h
+                  bf.file_ref.path = desired_module_h
+                  begin
+                    bf.file_ref.source_tree = 'SOURCE_ROOT'
+                  rescue
+                  end
+                  wv_fixed += 1
+                elsif p.end_with?('RNCWebViewManager.h') && p != desired_manager_h
+                  bf.file_ref.path = desired_manager_h
+                  begin
+                    bf.file_ref.source_tree = 'SOURCE_ROOT'
+                  rescue
+                  end
+                  wv_fixed += 1
+                elsif p.end_with?('RNCWebViewImpl.h') && p != desired_impl_h
+                  bf.file_ref.path = desired_impl_h
+                  begin
+                    bf.file_ref.source_tree = 'SOURCE_ROOT'
+                  rescue
+                  end
+                  wv_fixed += 1
+                end
+              end
+            end
+          end
+          if wv_fixed > 0
+            UI.success("  ✅ react-native-webview 헤더 경로 표준화: #{wv_fixed}건")
+          end
+        rescue => e
+          UI.important("  ⚠️  react-native-webview 헤더 경로 보정 중 오류: #{e.message}")
+        end
+        
+        pods_project.save
+        total_fixed = fixed_count + header_fixed_count
+        UI.success("✅ [빌드 수정] Module map 경로 수정 완료 (수정: #{fixed_count}개, 이미 올바름: #{skipped_count}개)")
+        if header_fixed_count > 0
+          UI.success("✅ [빌드 수정] 헤더 경로 수정 완료 (수정: #{header_fixed_count}개)")
+        end
+
+        # (정석) 메인 프로젝트 경로 우회 수정 제거
+        
+        UI.message("  → 다음 단계: 빌드 성공 → Archive → IPA 생성")
+      else
+        UI.important("⚠️ Pods.xcodeproj 파일을 찾을 수 없습니다: #{pods_project_path}")
+      end
+    rescue LoadError => e
+      UI.important("⚠️ xcodeproj gem 없음 - Module map 경로 수정 건너뜀")
+      UI.important("  설치: gem install xcodeproj")
+    rescue => e
+      UI.important("⚠️ Module map 경로 수정 실패: #{e.class}: #{e.message}")
+      UI.important("  스택: #{e.backtrace.first(5).join("\n  ")}")
+    end
+
+    # Team ID 주입
+    update_xcode_project_team!
+
+    # 프로파일을 프로젝트에 임베드
+    embed_provisioning_profile!(profile_path)
+
+    # Xcode 프로젝트에 Development 프로파일 설정 (Debug)
+    begin
+      require 'xcodeproj'
+      project = Xcodeproj::Project.open(XCODEPROJ)
+      
+      project.targets.each do |target|
+        next unless target.name == SCHEME
+        
+        target.build_configurations.each do |config|
+          next unless config.name == "Debug"  # Dev client는 Debug 설정
+          
+          config.build_settings['PROVISIONING_PROFILE_SPECIFIER'] = profile_uuid
+          config.build_settings['CODE_SIGN_STYLE'] = 'Manual'
+          config.build_settings['DEVELOPMENT_TEAM'] = TEAM_ID
+          config.build_settings['CODE_SIGN_IDENTITY'] = 'Apple Development'
+          
+          UI.success("✅ #{target.name} (#{config.name}): Development 프로파일 설정 완료")
+        end
+      end
+      
+      project.save
+      UI.success("✅ Xcode 프로젝트 파일 업데이트 완료")
+    rescue LoadError
+      UI.important("⚠️ xcodeproj gem 없음 - xcargs로 대체")
+    rescue => e
+      UI.important("⚠️ 프로젝트 파일 수정 실패 (xcargs로 대체): #{e.message}")
+    end
+
+    # (정석) CocoaPods 표준 구조 사용: ExpoModulesProvider.swift 참조 표준화
+    begin
+      require 'xcodeproj'
+      project = Xcodeproj::Project.open(XCODEPROJ)
+      app_target = project.targets.find { |t| t.name == SCHEME }
+      if app_target
+        # ExpoModulesProvider.swift를 $(PODS_ROOT) 기준으로 참조 (PODS_ROOT는 CocoaPods가 xcconfig로 설정)
+        desired_path = '$(PODS_ROOT)/Target Support Files/Pods-pickplay/ExpoModulesProvider.swift'
+        source_phase = app_target.source_build_phase
+        unless source_phase.files.any? { |bf| bf.file_ref && bf.file_ref.path == desired_path }
+          group = project.main_group.find_subpath('Pods/Target Support Files/Pods-pickplay', true)
+          file_ref = group.files.find { |f| f.path == desired_path }
+          file_ref ||= group.new_reference(desired_path)
+          app_target.add_file_references([file_ref]) if file_ref
+        end
+        
+        # react-native-google-mobile-ads의 ios_config.sh는 기본적으로 PROJECT_DIR(=ios 디렉터리)에서
+        # app.json을 탐색하며, 상위 디렉터리로 최대 2번만 올라갑니다.
+        # PROJECT_DIR을 임의로 덮어쓰면 탐색 범위가 잘못 지정되어 app.json을 찾지 못하므로
+        # Xcode가 제공하는 기본 PROJECT_DIR 값을 그대로 사용합니다.
+        UI.message("ℹ️ [RNGoogleMobileAds] PROJECT_DIR는 Xcode 기본값을 사용합니다 (별도 수정 없음)")
+      end
+      project.save
+      UI.success("✅ ExpoModulesProvider.swift 참조 표준화 완료")
+    rescue => e
+      UI.important("⚠️ ExpoModulesProvider 설정 중 오류: #{e.message}")
+    end
+
+    # Dev Client 빌드 (Debug, Internal Distribution)
+    # IPA 파일을 프로젝트 루트에 생성하도록 output_directory 지정
+    project_root = File.expand_path('..', __dir__)
+    output_directory = project_root
+    
+    # 참고: PROJECT_DIR는 Xcode가 설정하므로 환경변수로 덮어쓰지 않습니다
+    # app.json 동기화는 pod install 직후에 이미 수행되었습니다
+    
+    # Archive와 IPA Export를 한 번에 수행
+    # 만약 Archive는 성공하지만 IPA Export에서 실패한다면,
+    # skip_package_ipa: true로 설정하여 Archive만 수행할 수 있습니다
+    build_app(
+      workspace:     WORKSPACE,
+      scheme:        SCHEME,
+      configuration: "Debug",  # Debug 빌드
+      clean:         true,
+      skip_codesigning: false,
+      export_method: "development",  # Internal distribution
+      output_directory: output_directory,  # IPA 파일을 프로젝트 루트에 생성
+      xcargs: [
+        "DEVELOPMENT_TEAM=#{TEAM_ID}",
+        "CODE_SIGN_STYLE=Manual",
+        "CODE_SIGN_IDENTITY=\"Apple Development\"",
+        "PRODUCT_BUNDLE_IDENTIFIER=#{BUNDLE_ID}",
+        "pickplay.PROVISIONING_PROFILE_SPECIFIER=#{profile_uuid}",
+      ].compact.join(" "),
+      export_options: {
+        method: "development",
+        provisioningProfiles: {
+          BUNDLE_ID => profile_uuid
+        }
+      }
+    )
+    
+    # 생성된 IPA 파일 확인
+    ipa_files = Dir.glob(File.join(output_directory, "*.ipa"))
+    if ipa_files.any?
+      UI.success("✅ IPA 파일 생성 완료: #{ipa_files.first}")
+    else
+      UI.important("⚠️ IPA 파일을 찾을 수 없습니다. output_directory: #{output_directory}")
+      # .app 파일이 생성되었는지 확인
+      app_files = Dir.glob(File.join(output_directory, "*.app"))
+      if app_files.any?
+        UI.important("⚠️ .app 파일은 발견되었지만 IPA 파일이 없습니다: #{app_files.first}")
+        UI.important("⚠️ development export_method는 때때로 IPA 대신 .app만 생성할 수 있습니다.")
+      end
+      # 전체 디렉토리에서 IPA 파일 검색
+      all_ipa_files = Dir.glob(File.join(File.expand_path('..', __dir__), "**", "*.ipa"))
+      if all_ipa_files.any?
+        UI.success("✅ 다른 위치에서 IPA 파일 발견: #{all_ipa_files.first}")
+      else
+        UI.important("⚠️ 전체 프로젝트에서 IPA 파일을 찾을 수 없습니다.")
+        UI.important("⚠️ Fastlane 빌드 로그를 확인하여 실제 생성 위치를 확인하세요.")
+      end
+    end
+
+    UI.success("✅ Dev Client 빌드 성공")
+    UI.message("📱 빌드된 IPA 파일을 다운로드하여 설치하세요.")
+    UI.message("📱 설치 후 'expo start --dev-client'로 Metro 서버를 실행하세요.")
+  end
+end
+
+## 주의: 아래의 간단 beta lane은 중복 정의 방지를 위해 제거되었습니다.

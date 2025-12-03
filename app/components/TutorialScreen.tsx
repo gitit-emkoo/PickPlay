@@ -1,7 +1,7 @@
 import LottieView from 'lottie-react-native';
 import React, { useState } from 'react';
 import { Dimensions, Image, ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import colors from '../styles/colors';
+import colors from '../../src/styles/colors';
 
 const { width, height } = Dimensions.get('window');
 

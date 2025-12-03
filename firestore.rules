@@ -1,3 +1,11 @@
+// --- PickPlay Firestore Rules ---
+// App Version: 3.0 (Anima Code Update)
+// Last Updated: 2025-10-13
+// - 'answers'와 'logs' 컬렉션에 대한 보안 규칙을 추가하여 Anima Code 기능을 지원합니다.
+// - 투표 저장 문제 해결을 위해 시뮬레이터 관련 필드 제거
+// - 푸쉬로그 컬렉션을 위한 규칙 업데이트
+// - votes(집계로그)삭제
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -26,24 +34,68 @@ service cloud.firestore {
       // 관리자는 모든 사용자 데이터 읽기 가능 (관리자 페이지용)
       allow read: if isAdmin();
     }
+    
+    // [강화] answers 컬렉션 규칙 (Anima Code)
+    // 2025-10-09: rewarded 필드 도입에 따른 규칙 보완
+    match /answers/{answerDocId} {
+      // 문서 ID에서 uid와 questionId를 분리하는 함수
+      function getUid() { return answerDocId.split('_')[0]; }
+      function getQuestionId() { return answerDocId.split('_')[1]; }
 
-    match /votes/{id} {
-      // 읽기는 공개 (집계/실시간 반영용)
-      allow read: if true;
+      // 본인만 자신의 답변을 읽을 수 있음 (집계를 위해 모든 인증된 사용자가 읽기 가능)
+      allow read: if signedIn();
 
-      // 쓰기는 본인 uid로만, 그리고 필드/타입 검증 + 유효한 questionId만 허용
-      allow create: if signedIn()
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.keys().hasOnly(['uid','questionId','optionIndex','timestamp'])
-        && request.resource.data.optionIndex in [0, 1]
-        && request.resource.data.questionId is string
+      // 생성 규칙: 아래 모든 조건을 만족해야 함
+      allow create: if signedIn() 
+        // 1. 인증된 사용자가 본인 문서에만 쓸 수 있는가?
+        && request.auth.uid == getUid()
+        // 2. 문서 ID와 내용의 uid, questionId가 모두 일치하는가?
+        && request.resource.data.uid == getUid()
+        && request.resource.data.question_id == getQuestionId()
+        // 3. 데이터 스키마와 타입이 정확한가?
+        //    rewarded 필드를 신규로 허용 (광고 시청 후 보상 완료 플래그)
+        && request.resource.data.keys().hasOnly(['uid', 'question_id', 'selected_option_index', 'selected_option_text', 'tags', 'answeredAt', 'rewarded'])
         && request.resource.data.uid is string
-        && request.resource.data.timestamp is string
-        && exists(/databases/$(database)/documents/questions/$(request.resource.data.questionId));
+        && request.resource.data.question_id is string
+        && request.resource.data.selected_option_index in [0, 1]
+        && request.resource.data.selected_option_text is string
+        && request.resource.data.tags is list
+        && (request.resource.data.rewarded == null || request.resource.data.rewarded is bool)
+        && request.resource.data.answeredAt == request.time  // 서버 타임스탬프 검증
+        // 4. 존재하는 질문에 대한 답변인가?
+        && exists(/databases/$(database)/documents/questions/$(getQuestionId()));
 
-      // 관리자는 투표 데이터 수정/삭제 가능 (필요시)
-      allow update, delete: if isAdmin(); 
+      // 업데이트 규칙: 보상 완료 플래그(rewarded)만 본인이 true로 갱신 가능
+      // - 다른 필드는 변경/추가/삭제 불가
+      allow update: if signedIn() && request.auth.uid == getUid()
+        && resource.data.diff(request.resource.data).changedKeys().hasOnly(['rewarded'])
+        && resource.data.diff(request.resource.data).addedKeys().size() == 0
+        && resource.data.diff(request.resource.data).removedKeys().size() == 0
+        && request.resource.data.rewarded is bool;
+
+      // 삭제/기타 변경은 관리자만 가능
+      allow delete: if isAdmin();
+    }
+
+    // [강화] logs 컬렉션 규칙 (Anima Code)
+    match /logs/{logId} {
+      // 생성: 본인만, 그리고 정해진 스키마/타입으로만 가능
+      allow create: if signedIn() 
+        && request.auth.uid == request.resource.data.uid
+        && request.resource.data.keys().hasOnly(['uid', 'action', 'details', 'createdAt'])
+        && request.resource.data.uid is string
+        && request.resource.data.action is string
+        && request.resource.data.details is map;
       
+      // 로그는 관리자만 읽을 수 있고, 수정/삭제는 불가능
+      allow read: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    // votes 컬렉션은 더 이상 쓰지 않습니다(경고 제거를 위해 쓰기 차단)
+    match /votes/{id} {
+      allow read: if true;
+      allow create, update, delete: if false;
     }
     // Expo 푸시 토큰 저장 컬렉션
     // 앱 클라이언트가 자신의 문서만 읽기/쓰기 가능
@@ -51,5 +103,17 @@ service cloud.firestore {
       allow read, write: if signedIn() && request.auth.uid == uid;
       allow read: if isAdmin(); // 관리자 읽기 권한 추가
     }
+    
+    // config 컬렉션은 모든 사용자가 읽을 수 있음 (쓰기는 불가)
+		match /config/{document=**} {
+  		allow read: if true;
+  		allow write: if isAdmin(); // 관리자만 쓰기 가능
+    }
+    // 푸시 로그 컬렉션
+    match /push_logs/{logId} {
+      allow read: if isAdmin(); // 관리자만 읽기 가능
+      allow write: if false; // 서버에서만 쓰기 (Cloud Functions/Run)
+    }
+    
   }
 }

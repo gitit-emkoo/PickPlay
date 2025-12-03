@@ -4,6 +4,21 @@
     "appVersionSource": "remote"
   },
   "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "buildConfiguration": "Debug",
+        "credentialsSource": "remote",
+        "cocoapods": "1.15.2"
+      },
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+      }
+    },
     "simple": {
       "distribution": "internal",
       "android": {
@@ -23,6 +38,10 @@
       "autoIncrement": true,
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+      },
+      "ios": {
+        "buildConfiguration": "Release",
+        "cocoapods": "1.15.2"
       }
     }
   },

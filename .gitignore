@@ -3,6 +3,11 @@
 # dependencies
 node_modules/
 
+# iOS build outputs (never commit)
+ios/Pods/
+ios/build/
+**/DerivedData/
+
 # Expo
 .expo/
 dist/
@@ -36,6 +41,13 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+
+# Markdown files (documentation)
+*.md
+!README.md
+
+# Fastfile backup
+fastlane/Fastfile.backup
 
 app-example
 firebase-service-account.json

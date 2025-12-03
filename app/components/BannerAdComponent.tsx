@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, StyleSheet, Text, View } from 'react-native';
-import { getBannerAdUnitId, isExpoGo } from '@/app/services/banner-ads';
-import colors from '../styles/colors';
+import { getBannerAdUnitId, isExpoGo } from '../../src/services/banner-ads';
+import colors from '../../src/styles/colors';
 
 interface BannerAdComponentProps {
   style?: any;

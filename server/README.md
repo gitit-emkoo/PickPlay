@@ -5,7 +5,7 @@
 - 이 디렉터리는 Cloud Functions/Run에서 호출 가능한 HTTP 엔드포인트를 제공합니다.
 
 ## 로컬 실행
-```
+```bash
 # Windows PowerShell (프로젝트 루트에서)
 cd pickplay
 node .\server\index.js
@@ -20,8 +20,68 @@ node .\server\index.js
 - Cloud Run: Buildpack으로 Node.js 자동 감지
 - Cloud Functions 2세대(HTTP): 소스 루트 `pickplay/server`, 엔트리포인트는 `index.js` 기본 export(app)
 
-3) 엔드포인트
-- POST `/broadcast/daily` with JSON `{ "title": "...", "body": "..." }`
+## API 엔드포인트
+
+### 1. GET `/health`
+서버 상태 확인
+```json
+Response: { "ok": true, "time": "2025-01-15T10:00:00Z" }
+```
+
+### 2. POST `/broadcast/daily` (자동 스케줄러 전용)
+Cloud Scheduler가 매일 호출하는 엔드포인트
+- Firestore `config/pushScheduler` 설정을 읽어서 발송
+- 설정이 `isEnabled: false`면 발송하지 않음
+
+```json
+Request: (Body 없음 - Firestore 설정 사용)
+Response: { "ok": true, "sent": 150, "type": "scheduled" }
+```
+
+### 3. POST `/broadcast/custom` (수동 발송)
+관리자 페이지에서 수동으로 푸시 발송
+- 모든 사용자에게 발송
+
+```json
+Request: {
+  "title": "중요 공지",
+  "body": "앱 업데이트가 있습니다"
+}
+Response: { "ok": true, "sent": 150, "type": "manual" }
+```
+
+### 4. POST `/broadcast/test` (테스트 발송)
+플랫폼 필터링 또는 특정 사용자에게만 발송
+
+**플랫폼 필터링 (iOS만)**
+```json
+Request: {
+  "title": "iOS 테스트",
+  "body": "iOS 사용자만 받습니다",
+  "platform": "ios"
+}
+Response: { "ok": true, "sent": 50, "type": "test", "platform": "ios" }
+```
+
+**플랫폼 필터링 (Android만)**
+```json
+Request: {
+  "title": "Android 테스트",
+  "body": "Android 사용자만 받습니다",
+  "platform": "android"
+}
+Response: { "ok": true, "sent": 100, "type": "test", "platform": "android" }
+```
+
+**특정 사용자에게만**
+```json
+Request: {
+  "title": "개인 테스트",
+  "body": "특정 사용자만 받습니다",
+  "uids": ["user123", "user456"]
+}
+Response: { "ok": true, "sent": 2, "type": "test", "platform": "all" }
+```
 
 ## Cloud Scheduler 설정
 - 지역: `asia-northeast3` (Seoul 권장)
