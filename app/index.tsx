@@ -15,12 +15,30 @@ import * as WebBrowser from 'expo-web-browser';
 import LottieView from 'lottie-react-native';
 import BannerAdComponent from './components/BannerAdComponent';
 import { createRewardedInterstitial, attachRewardedInterstitial } from '../src/services/ads';
+import PermissionIntroScreen from './components/PermissionIntroScreen';
+import MaintenanceScreen from './components/MaintenanceScreen';
+import UpdateModal from './components/UpdateModal';
+import { getServiceStatusConfig, getAppVersionConfig, ServiceStatusConfig, AppVersionConfig } from '../src/services/config';
+import { isVersionBelowMinimum, isVersionBelowCurrent } from '../src/utils/version';
+import Constants from 'expo-constants';
 
 export default function App() {
   // 화면 흐름 상태
   const [showSplash, setShowSplash] = useState(true);
+  const [showPermissionIntro, setShowPermissionIntro] = useState(false);
+  const [permissionIntroChecked, setPermissionIntroChecked] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [tutorialChecked, setTutorialChecked] = useState(false);
+
+  // 서비스 점검 상태
+  const [serviceStatus, setServiceStatus] = useState<ServiceStatusConfig | null>(null);
+  const [checkingServiceStatus, setCheckingServiceStatus] = useState(true);
+
+  // 업데이트 상태
+  const [updateConfig, setUpdateConfig] = useState<AppVersionConfig | null>(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [isForceUpdate, setIsForceUpdate] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState('');
 
   const [user, setUser] = useState<{ uid: string } | null>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
@@ -52,10 +70,89 @@ export default function App() {
   const rewardedAdRef = useRef<any>(null);
 
 
-  // 스플래시 완료 후 튜토리얼 확인
+  // 서비스 점검 상태 체크 (앱 시작 시 최우선)
+  useEffect(() => {
+    const checkServiceStatus = async () => {
+      try {
+        const status = await getServiceStatusConfig();
+        setServiceStatus(status);
+        setCheckingServiceStatus(false);
+      } catch (error) {
+        console.error('[App] 서비스 상태 체크 실패:', error);
+        // 에러 발생 시 정상 상태로 간주
+        setServiceStatus({ status: 'normal', title: '', message: '' });
+        setCheckingServiceStatus(false);
+      }
+    };
+
+    checkServiceStatus();
+  }, []);
+
+  // 업데이트 체크
+  useEffect(() => {
+    const checkUpdate = async () => {
+      if (checkingServiceStatus) return; // 서비스 상태 체크 완료 후 실행
+      if (serviceStatus?.status === 'maintenance') return; // 점검 중이면 업데이트 체크 스킵
+
+      try {
+        const config = await getAppVersionConfig();
+        if (!config) return;
+
+        setUpdateConfig(config);
+        const currentVersion = Constants.expoConfig?.version || '0.0.0';
+        console.log('[Update] 현재 버전:', currentVersion);
+        console.log('[Update] 최신 버전:', config.currentVersion);
+        console.log('[Update] 최소 필수 버전:', config.minRequiredVersion);
+
+        // 강제 업데이트 체크
+        if (isVersionBelowMinimum(currentVersion, config.minRequiredVersion)) {
+          console.log('[Update] 강제 업데이트 필요');
+          setIsForceUpdate(true);
+          setUpdateMessage(config.updateMessage);
+          setShowUpdateModal(true);
+          return;
+        }
+
+        // 선택 업데이트 체크 (한 번 무시한 버전은 다시 안 띄움)
+        if (isVersionBelowCurrent(currentVersion, config.currentVersion)) {
+          const dismissedKey = `dismissedUpdate_for_${config.currentVersion}`;
+          const dismissed = await AsyncStorage.getItem(dismissedKey);
+          
+          if (!dismissed) {
+            console.log('[Update] 선택 업데이트 안내');
+            setIsForceUpdate(false);
+            setUpdateMessage(config.updateMessage);
+            setShowUpdateModal(true);
+          }
+        }
+      } catch (error) {
+        console.error('[App] 업데이트 체크 실패:', error);
+      }
+    };
+
+    checkUpdate();
+  }, [checkingServiceStatus, serviceStatus]);
+
+  // 스플래시 완료 후 권한 안내 화면 확인
   const handleSplashFinish = async () => {
     setShowSplash(false);
     
+    // 권한 안내 화면을 본 적이 있는지 확인
+    const hasSeenPermissionIntro = await AsyncStorage.getItem('hasSeenPermissionIntro');
+    if (!hasSeenPermissionIntro) {
+      setShowPermissionIntro(true);
+      return;
+    }
+
+    // 권한 안내를 이미 봤다면 튜토리얼 체크로 진행
+    await handlePermissionIntroComplete();
+  };
+
+  // 권한 안내 화면 완료
+  const handlePermissionIntroComplete = async () => {
+    setShowPermissionIntro(false);
+    setPermissionIntroChecked(true);
+
     // 튜토리얼을 본 적이 있는지 확인
     const hasSeenTutorial = await AsyncStorage.getItem('hasSeenTutorial');
     if (!hasSeenTutorial) {
@@ -74,6 +171,15 @@ export default function App() {
       // 에러가 발생해도 튜토리얼은 닫기
       setShowTutorial(false);
     }
+  };
+
+  // 업데이트 모달 닫기 (선택 업데이트만)
+  const handleUpdateDismiss = async () => {
+    if (updateConfig) {
+      const dismissedKey = `dismissedUpdate_for_${updateConfig.currentVersion}`;
+      await AsyncStorage.setItem(dismissedKey, 'true');
+    }
+    setShowUpdateModal(false);
   };
 
   useEffect(() => {
@@ -395,13 +501,34 @@ export default function App() {
     return <SplashScreen onFinish={handleSplashFinish} />;
   }
 
-  // 2. 튜토리얼 화면 (첫 방문자만)
+  // 2. 서비스 점검 화면 (최우선, 점검 중이면 여기서 멈춤)
+  if (checkingServiceStatus) {
+    return <LoadingScreen />;
+  }
+
+  if (serviceStatus?.status === 'maintenance') {
+    return (
+      <MaintenanceScreen
+        title={serviceStatus.title}
+        message={serviceStatus.message}
+        linkText={serviceStatus.linkText}
+        linkUrl={serviceStatus.linkUrl}
+      />
+    );
+  }
+
+  // 3. 권한 안내 화면 (첫 방문자만)
+  if (showPermissionIntro && !permissionIntroChecked) {
+    return <PermissionIntroScreen onFinish={handlePermissionIntroComplete} />;
+  }
+
+  // 4. 튜토리얼 화면 (첫 방문자만)
   if (showTutorial) {
     return <TutorialScreen onFinish={handleTutorialFinish} />;
   }
 
-  // 3. 튜토리얼 체크 완료 전까지 로딩
-  if (!tutorialChecked) {
+  // 5. 튜토리얼 체크 완료 전까지 로딩
+  if (!tutorialChecked || !permissionIntroChecked) {
     return <LoadingScreen />;
   }
 
@@ -665,6 +792,14 @@ export default function App() {
           </View>
         </View>
       )}
+
+      {/* 업데이트 모달 */}
+      <UpdateModal
+        visible={showUpdateModal}
+        isForce={isForceUpdate}
+        message={updateMessage}
+        onDismiss={isForceUpdate ? undefined : handleUpdateDismiss}
+      />
 
         </View>
   );
