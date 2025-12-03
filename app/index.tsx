@@ -598,7 +598,7 @@ export default function App() {
           {/* 푸터 (구분선) */}
           <View style={{ backgroundColor: colors.background, paddingVertical: 12, paddingHorizontal: 24, borderTopWidth: 1, borderTopColor: colors.border, alignItems: 'center', marginTop: 8 }}>
             <Text style={{ fontSize: 12, color: colors.textLight, textAlign: 'center', lineHeight: 16 }}>
-              © 2025 PickPlay{`\n`}KWCC Co., Ltd. | Emkoo{`\n`}907, Dongtan-daero 646-2{`\n`}Hwaseong-si, Gyeonggi-do, Republic of Korea{`\n`}e-mail: cokwcc@gmail.com{`\n`}tel: +82-10-4857-4876{`\n`}version: 1.0.0
+              © 2025 PickPlay{`\n`}KWCC Co., Ltd. | Emkoo{`\n`}907, Dongtan-daero 646-2{`\n`}Hwaseong-si, Gyeonggi-do, Republic of Korea{`\n`}e-mail: cokwcc@gmail.com{`\n`}tel: +82-10-4857-4876{`\n`}version: 2.0.0
           </Text>
             <View style={{ marginTop: 12, flexDirection: 'row', alignItems: 'center', gap: 16 }}>
               <TouchableOpacity onPress={() => openLink('https://pickplay.waveon.me/pages/1757994427672')} activeOpacity={0.7}><Text style={{ fontSize: 12, color: colors.primary }}>개인정보처리방침</Text></TouchableOpacity>
