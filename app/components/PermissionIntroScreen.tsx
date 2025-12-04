@@ -59,7 +59,7 @@ export default function PermissionIntroScreen({ onFinish }: PermissionIntroScree
         {/* 광고 추적 허용 */}
         <View style={styles.permissionCard}>
           <View style={styles.iconContainer}>
-            <View style={[styles.iconCircle, { backgroundColor: '#FF4444' }]}>
+            <View style={[styles.iconCircle, { backgroundColor: '#0060CD' }]}>
               <Text style={styles.iconText}>📄</Text>
             </View>
           </View>
@@ -75,14 +75,14 @@ export default function PermissionIntroScreen({ onFinish }: PermissionIntroScree
         {/* 알림 */}
         <View style={styles.permissionCard}>
           <View style={styles.iconContainer}>
-            <View style={[styles.iconCircle, { backgroundColor: '#FF4444' }]}>
+            <View style={[styles.iconCircle, { backgroundColor: '#0060CD' }]}>
               <Text style={styles.iconText}>🔔</Text>
             </View>
           </View>
           <View style={styles.textContainer}>
             <Text style={styles.cardTitle}>알림</Text>
             <Text style={styles.cardDescription}>
-              무료 테마 혜택과 중요한 소식을{'\n'}
+              특별 이벤트 및 중요한 소식을{'\n'}
               알려드려요.
             </Text>
           </View>

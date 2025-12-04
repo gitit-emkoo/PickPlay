@@ -9,20 +9,49 @@ interface UpdateModalProps {
   onDismiss?: () => void;
 }
 
-const APP_STORE_URL = 'https://apps.apple.com/app/id6751875842';
-const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.pickplay.kwcc';
+// iOS App Store URL (딥링크 우선, 실패 시 웹 URL)
+const APP_STORE_DEEP_LINK = 'itms-apps://itunes.apple.com/app/id6751875842';
+const APP_STORE_WEB_URL = 'https://apps.apple.com/app/id6751875842';
+
+// Android Play Store URL (딥링크 우선, 실패 시 웹 URL)
+const PLAY_STORE_DEEP_LINK = 'market://details?id=com.pickplay.kwcc';
+const PLAY_STORE_WEB_URL = 'https://play.google.com/store/apps/details?id=com.pickplay.kwcc';
 
 export default function UpdateModal({ visible, isForce, message, onDismiss }: UpdateModalProps) {
   if (!visible) return null;
 
   const handleUpdate = async () => {
-    const url = Platform.OS === 'ios' ? APP_STORE_URL : PLAY_STORE_URL;
     try {
-      const canOpen = await Linking.canOpenURL(url);
-      if (canOpen) {
-        await Linking.openURL(url);
+      let deepLink: string;
+      let webUrl: string;
+
+      if (Platform.OS === 'ios') {
+        deepLink = APP_STORE_DEEP_LINK;
+        webUrl = APP_STORE_WEB_URL;
       } else {
-        console.error('[Update] 스토어 링크를 열 수 없습니다:', url);
+        deepLink = PLAY_STORE_DEEP_LINK;
+        webUrl = PLAY_STORE_WEB_URL;
+      }
+
+      // 딥링크 시도 (앱에서 직접 스토어 앱 열기)
+      try {
+        const canOpenDeepLink = await Linking.canOpenURL(deepLink);
+        if (canOpenDeepLink) {
+          await Linking.openURL(deepLink);
+          console.log(`[Update] 스토어 딥링크 열기 성공: ${deepLink}`);
+          return;
+        }
+      } catch (deepLinkError) {
+        console.warn('[Update] 딥링크 열기 실패, 웹 URL로 폴백:', deepLinkError);
+      }
+
+      // 딥링크 실패 시 웹 URL로 폴백
+      const canOpenWeb = await Linking.canOpenURL(webUrl);
+      if (canOpenWeb) {
+        await Linking.openURL(webUrl);
+        console.log(`[Update] 스토어 웹 URL 열기 성공: ${webUrl}`);
+      } else {
+        console.error('[Update] 스토어 링크를 열 수 없습니다:', webUrl);
       }
     } catch (error) {
       console.error('[Update] 스토어 링크 열기 실패:', error);
