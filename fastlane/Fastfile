@@ -916,13 +916,13 @@ platform :ios do
     
     # ============================================
     # 빌드 번호 고정 설정 (TestFlight 업로드를 위해 필수)
-    # TODO: 다음 빌드에서는 18로 변경 필요
+    # 릴리즈마다 new_build_number를 수동으로 증가시켜 관리
     # ============================================
     UI.important("=" * 60)
-    UI.important("🔢 [빌드 번호 설정] 빌드 번호 고정: 18")
+    UI.important("🔢 [빌드 번호 설정] 빌드 번호 고정: 20")
     UI.important("=" * 60)
     
-    new_build_number = "18"
+    new_build_number = "20"
     
     begin
       require 'xcodeproj'

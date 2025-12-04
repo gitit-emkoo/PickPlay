@@ -1,7 +1,7 @@
 {
   "name": "pickplay",
   "slug": "pickplay",
-  "version": "1.2.0",
+  "version": "2.0.2",
   "extra": {
     "eas": {
       "projectId": "f0389889-654e-4120-8839-8b795ff4b641"
@@ -24,6 +24,7 @@
   "ios": {
     "supportsTablet": true,
     "bundleIdentifier": "com.pickplay.kwcc",
+    "buildNumber": "20",
     "googleServicesFile": "./GoogleService-Info.plist",
     "infoPlist": {
       "GADApplicationIdentifier": "ca-app-pub-2555567440328829~5483134579",
@@ -32,6 +33,7 @@
   },
   "android": {
     "package": "com.pickplay.kwcc",
+    "versionCode": 13,
     "googleServicesFile": "./google-services.json",
     "adaptiveIcon": {
       "foregroundImage": "./assets/images/adaptive-icon.png",
