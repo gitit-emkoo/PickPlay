@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, StyleSheet, Text, View } from 'react-native';
-import { getBannerAdUnitId, isExpoGo } from '../../src/services/banner-ads';
+import { getBannerAdUnitId, isExpoGo, getBannerAdRequestOptions } from '../../src/services/banner-ads';
 import colors from '../../src/styles/colors';
+import PickPlayBanner from './PickPlayBanner';
 
 interface BannerAdComponentProps {
   style?: any;
@@ -10,12 +11,29 @@ interface BannerAdComponentProps {
 export default function BannerAdComponent({ style }: BannerAdComponentProps) {
   const [isAdLoaded, setAdLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const [showCustomBanner, setShowCustomBanner] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [requestOptions, setRequestOptions] = useState<{ requestNonPersonalizedAdsOnly: boolean }>({
+    requestNonPersonalizedAdsOnly: true,
+  });
 
   const retryTimerRef = useRef<any>(null);
   const retryAttemptRef = useRef(0);
 
   const adUnitId = useMemo(() => getBannerAdUnitId(), []);
+
+  // 광고 추적 권한 상태 확인
+  useEffect(() => {
+    const loadRequestOptions = async () => {
+      try {
+        const options = await getBannerAdRequestOptions();
+        setRequestOptions(options);
+      } catch (error) {
+        console.error('[BannerAd] 권한 확인 실패:', error);
+      }
+    };
+    loadRequestOptions();
+  }, []);
 
   // Expo Go 또는 네이티브 모듈 로드 실패 시 더미 UI 렌더링
   if (isExpoGo() || !adUnitId) {
@@ -34,6 +52,7 @@ export default function BannerAdComponent({ style }: BannerAdComponentProps) {
         // 포그라운드 복귀 시 즉시 재시도
         retryAttemptRef.current = 0;
         setHasError(false);
+        setShowCustomBanner(false); // 재시도 시 커스텀 배너 숨김
         setReloadKey((v) => v + 1);
       }
     });
@@ -72,24 +91,52 @@ export default function BannerAdComponent({ style }: BannerAdComponentProps) {
           key={reloadKey}
           unitId={adUnitId}
           size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-          requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+          requestOptions={requestOptions}
           onAdLoaded={() => {
             console.log('🎯 배너 광고 로드 완료');
             if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
             retryAttemptRef.current = 0;
             setAdLoaded(true);
             setHasError(false);
+            setShowCustomBanner(false); // 광고 로드 시 커스텀 배너 숨김
           }}
           onAdFailedToLoad={(error: any) => {
             console.error('❌ 배너 광고 로드 실패:', error?.code || error);
             setHasError(true);
             setAdLoaded(false);
-            scheduleRetry();
+            
+            // no-fill 오류인 경우 커스텀 배너 표시
+            const errorCode = String(error?.code || error?.message || '');
+            const errorMessage = String(error?.message || '');
+            const isNoFillError = 
+              errorCode.toLowerCase().includes('no-fill') || 
+              errorCode.toLowerCase().includes('no_fill') ||
+              errorMessage.toLowerCase().includes('no-fill') ||
+              errorMessage.toLowerCase().includes('no_fill') ||
+              errorCode === '3' || // AdMob ERROR_CODE_NO_FILL = 3
+              error?.code === '3';
+            
+            if (isNoFillError) {
+              console.log('🎨 광고 재고 부족 - PickPlay 커스텀 배너 표시');
+              setShowCustomBanner(true);
+              // 커스텀 배너 표시 시 재시도 중단
+              if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+            } else {
+              // 다른 오류인 경우 재시도 계속
+              scheduleRetry();
+            }
           }}
         />
 
+        {/* no-fill 오류 시 커스텀 배너 표시 */}
+        {showCustomBanner && (
+          <View style={styles.customBannerContainer}>
+            <PickPlayBanner />
+          </View>
+        )}
+        
         {/* 에러 오버레이(공간 유지 + 사용자 안내). 재시도는 백그라운드에서 진행 */}
-        {hasError && (
+        {hasError && !showCustomBanner && (
           <View style={styles.errorOverlay} pointerEvents="none">
             <Text style={styles.errorText}>광고를 불러오지 못했습니다. 잠시 후 다시 시도합니다…</Text>
           </View>
@@ -142,6 +189,15 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 12,
     color: colors.textLight,
+  },
+  customBannerContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   dummyContainer: {
     width: '100%',

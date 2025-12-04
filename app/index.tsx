@@ -14,7 +14,7 @@ import colors from '../src/styles/colors';
 import * as WebBrowser from 'expo-web-browser';
 import LottieView from 'lottie-react-native';
 import BannerAdComponent from './components/BannerAdComponent';
-import { createRewardedInterstitial, attachRewardedInterstitial } from '../src/services/ads';
+import { createRewardedInterstitial, attachRewardedInterstitial, initAds } from '../src/services/ads';
 import PermissionIntroScreen from './components/PermissionIntroScreen';
 import MaintenanceScreen from './components/MaintenanceScreen';
 import UpdateModal from './components/UpdateModal';
@@ -184,6 +184,12 @@ export default function App() {
 
   useEffect(() => {
     loadData();
+    
+    // AdMob 초기화
+    initAds().catch((error) => {
+      console.error('[App] AdMob 초기화 실패:', error);
+    });
+    
     // watchAuth가 실패해도 앱이 계속 실행되도록 에러 처리
     try {
       const unsub = watchAuth((user) => {
@@ -204,29 +210,47 @@ export default function App() {
     if (!user || !question || userChoice === null) return;
 
     console.log('🎬 보상형 광고 초기화 시작');
-    const ad = createRewardedInterstitial();
-    rewardedAdRef.current = ad;
+    
+    let unsubscribe: (() => void) | null = null;
+    
+    const setupAd = async () => {
+      try {
+        const ad = await createRewardedInterstitial();
+        rewardedAdRef.current = ad;
 
-    const unsubscribe = attachRewardedInterstitial(ad, {
-      onLoaded: () => {
-        console.log('✅ 광고 로드 완료');
-        setAdLoaded(true);
-        setIsLoadingAd(false);
-      },
-      onEarned: async () => {
-        console.log('🎁 광고 시청 완료 - 보상 지급 시작');
-        await handleAdWatchComplete();
-      },
-      onClosed: () => {
-        console.log('❌ 광고 닫힘');
-        setAdLoaded(false);
-        setIsLoadingAd(false);
+        unsubscribe = attachRewardedInterstitial(ad, {
+          onLoaded: () => {
+            console.log('✅ 광고 로드 완료');
+            setAdLoaded(true);
+            setIsLoadingAd(false);
+          },
+          onEarned: async () => {
+            console.log('🎁 광고 시청 완료 - 보상 지급 시작');
+            await handleAdWatchComplete();
+          },
+          onClosed: () => {
+            console.log('❌ 광고 닫힘');
+            setAdLoaded(false);
+            setIsLoadingAd(false);
+          },
+          onFailedToLoad: (error: any) => {
+            console.error('❌ 보상형 광고 로드 실패:', error);
+            setAdLoaded(false);
+            setIsLoadingAd(false);
+          }
+        });
+      } catch (error) {
+        console.error('❌ 보상형 광고 초기화 실패:', error);
       }
-    });
+    };
+    
+    setupAd();
 
     return () => {
-      console.log('🔌 광고 리스너 해제');
-      unsubscribe();
+      if (unsubscribe) {
+        console.log('🔌 광고 리스너 해제');
+        unsubscribe();
+      }
     };
   }, [user, question, userChoice]);
 
