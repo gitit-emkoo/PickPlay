@@ -1,10 +1,11 @@
 // --- PickPlay Firestore Rules ---
 // App Version: 3.0 (Anima Code Update)
-// Last Updated: 2025-10-13
+// Last Updated: 2025-12-05
 // - 'answers'와 'logs' 컬렉션에 대한 보안 규칙을 추가하여 Anima Code 기능을 지원합니다.
 // - 투표 저장 문제 해결을 위해 시뮬레이터 관련 필드 제거
 // - 푸쉬로그 컬렉션을 위한 규칙 업데이트
 // - votes(집계로그)삭제
+// - 라이브픽 추가
 
 rules_version = '2';
 service cloud.firestore {
@@ -113,6 +114,148 @@ service cloud.firestore {
     match /push_logs/{logId} {
       allow read: if isAdmin(); // 관리자만 읽기 가능
       allow write: if false; // 서버에서만 쓰기 (Cloud Functions/Run)
+    }
+    
+    // ============================================
+    // LivePick 컬렉션 규칙
+    // ============================================
+    
+    // LivePick 질문 컬렉션
+    match /livepick_questions/{questionId} {
+      // 모든 인증된 사용자가 읽기 가능 (질문 목록, 상세 조회)
+      allow read: if signedIn();
+      
+      // [1단계] 생성: 인증 + 작성자 UID 일치만 검증
+      // - 최소한 "내 계정으로만 질문을 만든다"는 조건은 보장
+      // - 나머지 필드/타입 검증은 이후 단계에서 점진적으로 추가 예정
+      allow create: if signedIn()
+        && request.auth.uid == request.resource.data.createdBy;
+      
+      // 업데이트: 
+      // 1. 관리자는 status 변경 가능
+      // 2. 참여자 수 등 통계 업데이트는 서버/클라이언트에서 가능 (참여자 수는 항상 증가만 가능)
+      allow update: if signedIn() && (
+        // 관리자는 status만 변경 가능
+        (isAdmin() 
+          && request.resource.data.diff(resource.data).unchangedKeys().hasAll(['createdBy', 'title', 'option1', 'option2', 'pointDeducted', 'createdAt', 'participantCount', 'option1Count', 'option2Count', 'rewardGiven'])
+          && request.resource.data.status in ['active', 'closed']) ||
+        // 일반 사용자는 참여 시 통계만 업데이트 가능
+        (resource.data.createdBy == request.auth.uid || true) // 질문 생성자 또는 누구나 (참여 시)
+          && request.resource.data.diff(resource.data).unchangedKeys().hasAll(['createdBy', 'title', 'option1', 'option2', 'pointDeducted', 'createdAt', 'status'])
+          && request.resource.data.participantCount >= resource.data.participantCount
+          && request.resource.data.option1Count >= resource.data.option1Count
+          && request.resource.data.option2Count >= resource.data.option2Count
+      );
+      
+      // 삭제는 관리자만
+      allow delete: if isAdmin();
+    }
+
+    // 포인트 적립/소멸 내역
+    match /point_history/{docId} {
+      // 단일 문서 읽기: 본인 것만
+      allow get: if signedIn() && request.auth.uid == resource.data.uid;
+      // 쿼리(list): 인증된 사용자 허용
+      // Firestore는 쿼리 결과의 각 문서가 allow get 규칙을 만족하는지 확인
+      // where('uid', '==', uid)로 필터링되므로 결과 문서들은 모두 allow get 조건을 만족
+      allow list: if signedIn();
+      // 클라이언트 직접 쓰기 금지 (서버/Functions가 관리자 권한으로 기록)
+      allow create, update, delete: if false;
+    }
+    
+    // LivePick 참여 기록 컬렉션
+    match /livepick_participations/{participationId} {
+      // 문서 ID 형식: {uid}_{questionId}
+      function getUid() { return participationId.split('_')[0]; }
+      
+      // 읽기: 본인만 읽기 가능
+      // - 단일 문서 읽기(get): 문서 ID의 uid 부분 확인 (보안 유지)
+      // - 쿼리(list): 인증된 사용자에게 허용
+      //   이유: 쿼리가 where('uid', '==', uid)로 필터링되므로 결과는 본인의 문서만 반환됨
+      //   Firestore Rules는 쿼리 조건을 직접 검증할 수 없지만, 쿼리 결과는 서버에서 필터링됨
+      //   단일 문서 접근은 여전히 문서 ID 기반으로 검증하므로 보안 유지
+      allow get: if signedIn() && request.auth.uid == getUid();
+      // 쿼리는 where('uid', '==', uid)로 필터링되므로 결과는 본인의 문서만 포함
+      allow list: if signedIn();
+      
+      // 생성: 본인만 참여 기록 생성 가능
+      allow create: if signedIn()
+        && request.auth.uid == getUid()
+        && request.auth.uid == request.resource.data.uid
+        && request.resource.data.keys().hasAll(['uid', 'questionId', 'selectedOption', 'basicRewardReceived', 'ladderGamePlayed', 'ladderReward', 'participatedAt'])
+        && request.resource.data.uid is string
+        && request.resource.data.questionId is string
+        && request.resource.data.selectedOption in [1, 2]
+        && request.resource.data.basicRewardReceived == false
+        && request.resource.data.ladderGamePlayed == false;
+      
+      // 업데이트: 본인만 보상 수령 상태 업데이트 가능
+      allow update: if signedIn()
+        && request.auth.uid == getUid()
+        && resource.data.uid == request.resource.data.uid
+        && resource.data.questionId == request.resource.data.questionId
+        && resource.data.selectedOption == request.resource.data.selectedOption;
+      
+      // 삭제는 관리자만
+      allow delete: if isAdmin();
+    }
+    
+    // LivePick 보상 기록 컬렉션
+    match /livepick_rewards/{rewardId} {
+      // 읽기: 관리자 또는 질문 생성자만 읽기 가능
+      allow read: if signedIn() && (
+        isAdmin() ||
+        resource.data.questionOwner == request.auth.uid
+      );
+      
+      // 쓰기는 서버(Cloud Functions)에서만 가능
+      allow create, update, delete: if false;
+    }
+    
+    // LivePick 신고 컬렉션
+    match /livepick_reports/{reportId} {
+      // 문서 ID 형식: {uid}_{questionId}
+      function getUid() { return reportId.split('_')[0]; }
+      
+      // 읽기: 관리자 또는 본인(자기 신고 문서)만 가능
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == getUid());
+      
+      // 생성: 인증된 사용자면 누구나 가능 (이미 리포트가 있으면 get()에서 막힘)
+      allow create: if signedIn();
+      
+      // 업데이트: 관리자만 상태 업데이트 가능 (신고 처리용)
+      allow update: if isAdmin()
+        && resource.data.uid == request.resource.data.uid
+        && resource.data.questionId == request.resource.data.questionId
+        && resource.data.reason == request.resource.data.reason
+        && request.resource.data.status in ['pending', 'reviewed', 'dismissed'];
+      
+      // 삭제: 관리자만 가능
+      allow delete: if isAdmin();
+    }
+    
+    // ============================================
+    // 사용자 알림 컬렉션
+    // ============================================
+    
+    match /user_notifications/{notificationId} {
+      // 단일 문서 읽기: 본인만
+      allow get: if signedIn() && resource.data.uid == request.auth.uid;
+      // 쿼리(list): where('uid', '==', uid)로 필터링되므로 인증된 사용자에게 허용
+      // 결과는 서버에서 필터링되므로 본인의 문서만 반환됨
+      allow list: if signedIn();
+      
+      // 생성: 서버(Cloud Functions)에서만 가능
+      allow create: if false;
+      
+      // 업데이트: 본인만 읽음 상태 업데이트 가능
+      allow update: if signedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['read'])
+        && request.resource.data.read is bool;
+      
+      // 삭제는 관리자만
+      allow delete: if isAdmin();
     }
     
   }

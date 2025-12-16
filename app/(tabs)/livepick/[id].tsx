@@ -1,0 +1,1267 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, TextInput, InteractionManager, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import colors from '../../../src/styles/colors';
+import { LivePickQuestion } from '../../../src/types/livepick';
+import ParticipateModal from '../../components/livepick/ParticipateModal';
+import LadderGame from '../../components/livepick/LadderGame';
+import RewardModal from '../../components/livepick/RewardModal';
+import { watchAuth } from '../../../src/services/firebase';
+import { createRewardedInterstitial, attachRewardedInterstitial } from '../../../src/services/ads';
+import { 
+  getLivePickQuestion, 
+  subscribeLivePickQuestion,
+  participateInLivePick,
+  receiveBasicReward,
+  receiveLadderReward,
+  getParticipation,
+  getTodayParticipationCount,
+  reportLivePickQuestion,
+  hasReportedLivePickQuestion,
+} from '../../../src/services/livepick';
+
+// 임시 더미 데이터 (나중에 백엔드 연동)
+const getDummyQuestion = (id: string): LivePickQuestion | null => {
+  const questions: LivePickQuestion[] = [
+    {
+      id: '1',
+      createdBy: 'user1',
+      title: '오늘 저녁 뭐 먹을까?',
+      option1: '파스타',
+      option2: '치킨',
+      category: '일상',
+      tags: ['일상'],
+      participantCount: 15,
+      option1Count: 9,
+      option2Count: 6,
+      pointDeducted: 10,
+      rewardGiven: false,
+      createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      status: 'active',
+    },
+    {
+      id: '2',
+      createdBy: 'user2',
+      title: '주말 계획은?',
+      option1: '집에서 쉬기',
+      option2: '외출하기',
+      category: '일상',
+      tags: ['일상'],
+      participantCount: 32,
+      option1Count: 19,
+      option2Count: 13,
+      pointDeducted: 10,
+      rewardGiven: false,
+      createdAt: new Date(Date.now() - 1 * 60 * 60 * 1000),
+      status: 'active',
+    },
+  ];
+  return questions.find(q => q.id === id) || null;
+};
+
+export default function QuestionDetailScreen() {
+  const router = useRouter();
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const [user, setUser] = useState<{ uid: string } | null>(null);
+  const [question, setQuestion] = useState<LivePickQuestion | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedOption, setSelectedOption] = useState<1 | 2 | null>(null);
+  const [hasParticipated, setHasParticipated] = useState(false);
+  const [todayParticipationCount, setTodayParticipationCount] = useState(0);
+  
+  // 모달 상태
+  const [showParticipateModal, setShowParticipateModal] = useState(false);
+  const [showLadderGame, setShowLadderGame] = useState(false);
+  const [showRewardModal, setShowRewardModal] = useState(false);
+  const [rewardPoints, setRewardPoints] = useState(0);
+  const [isLadderReward, setIsLadderReward] = useState(false);
+  
+  // 광고 관련 상태
+  const [adLoaded, setAdLoaded] = useState(false);
+  const [isLoadingAd, setIsLoadingAd] = useState(false);
+  const rewardedAdRef = useRef<any>(null);
+  const earnedRewardRef = useRef(false); // 광고 보상 획득 여부
+  
+  // 신고 관련 상태
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [selectedReportReason, setSelectedReportReason] = useState<'spam' | 'inappropriate' | 'violence' | 'harassment' | 'other' | null>(null);
+  const [reportDescription, setReportDescription] = useState('');
+  const [isReporting, setIsReporting] = useState(false);
+  const [hasReported, setHasReported] = useState(false);
+
+  // 참여 기록 확인 함수
+  const checkParticipation = async (uid: string, questionId?: string) => {
+    const targetQuestionId = questionId || id;
+    if (!targetQuestionId) {
+      setHasParticipated(false);
+      setSelectedOption(null);
+      return;
+    }
+    try {
+      console.log(`🔍 [LivePick] 참여 기록 확인: questionId=${targetQuestionId}, uid=${uid}`);
+      const participation = await getParticipation(uid, targetQuestionId);
+      if (participation) {
+        console.log(`✅ [LivePick] 참여 기록 발견: questionId=${targetQuestionId}`);
+        setHasParticipated(true);
+        setSelectedOption(participation.selectedOption);
+      } else {
+        console.log(`ℹ️ [LivePick] 참여 기록 없음: questionId=${targetQuestionId}`);
+        setHasParticipated(false);
+        setSelectedOption(null);
+      }
+    } catch (error) {
+      console.error('❌ 참여 기록 확인 실패:', error);
+      setHasParticipated(false);
+      setSelectedOption(null);
+    }
+  };
+
+  // 오늘 참여 횟수 확인
+  const checkTodayParticipationCount = async (uid: string) => {
+    try {
+      const count = await getTodayParticipationCount(uid);
+      setTodayParticipationCount(count);
+    } catch (error) {
+      console.error('오늘 참여 횟수 확인 실패:', error);
+    }
+  };
+
+  // 사용자 인증 확인
+  useEffect(() => {
+    const unsubscribe = watchAuth((user) => {
+      setUser(user);
+      if (user && id) {
+        checkParticipation(user.uid, id);
+        checkTodayParticipationCount(user.uid);
+        // 신고 여부 확인
+        hasReportedLivePickQuestion(user.uid, id)
+          .then(setHasReported)
+          .catch(() => setHasReported(false));
+      }
+    });
+    return unsubscribe;
+  }, [id]);
+
+  // 질문 데이터 로드 및 실시간 구독
+  useEffect(() => {
+    if (!id) return;
+
+    // 질문 ID가 변경되면 상태 초기화 (다른 질문으로 이동할 때)
+    setLoading(true);
+    setHasParticipated(false);
+    setSelectedOption(null);
+    setShowParticipateModal(false);
+    setShowLadderGame(false);
+    setShowRewardModal(false);
+    
+    // 초기 데이터 로드
+    getLivePickQuestion(id).then((data) => {
+      setQuestion(data);
+      setLoading(false);
+    });
+
+    // 실시간 구독
+    const unsubscribe = subscribeLivePickQuestion(id, (updatedQuestion) => {
+      setQuestion(updatedQuestion);
+      setLoading(false);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [id]);
+
+  // 질문 ID 또는 사용자 변경 시 참여 기록 확인
+  useEffect(() => {
+    if (!user || !id) {
+      setHasParticipated(false);
+      setSelectedOption(null);
+      setHasReported(false);
+      return;
+    }
+    checkParticipation(user.uid, id);
+    hasReportedLivePickQuestion(user.uid, id)
+      .then(setHasReported)
+      .catch(() => setHasReported(false));
+  }, [id, user]);
+
+  // 광고 초기화
+  useEffect(() => {
+    if (!user || !question) {
+      // 조건이 맞지 않으면 광고 상태 초기화
+      setAdLoaded(false);
+      rewardedAdRef.current = null;
+      earnedRewardRef.current = false;
+      return;
+    }
+
+    console.log('🎬 [LivePick] 보상형 광고 초기화 시작 (테스트 광고 ID 사용)');
+    
+    let unsubscribe: (() => void) | null = null;
+    let retryCount = 0;
+    const MAX_RETRIES = 3;
+    
+    const setupAd = async (isRetry = false) => {
+      try {
+        // 메인 화면과 동일한 함수 사용
+        const ad = await createRewardedInterstitial();
+        rewardedAdRef.current = ad;
+        earnedRewardRef.current = false; // 광고 새로 로드 시 플래그 초기화
+
+        unsubscribe = attachRewardedInterstitial(ad, {
+          onLoaded: () => {
+            setAdLoaded(true);
+            setIsLoadingAd(false);
+            retryCount = 0;
+            earnedRewardRef.current = false;
+          },
+          onEarned: async () => {
+            earnedRewardRef.current = true;
+            
+            // 참여 기록 생성 (보상은 사다리 게임 후)
+            if (user && question && selectedOption !== null && !hasParticipated) {
+              try {
+                await participateInLivePick(user.uid, question.id, selectedOption);
+                setHasParticipated(true);
+                const newCount = await getTodayParticipationCount(user.uid);
+                setTodayParticipationCount(newCount);
+              } catch (error) {
+                console.error('❌ [LivePick] 참여 기록 생성 실패:', error);
+              }
+            }
+          },
+          onClosed: () => {
+            const shouldShowLadder = earnedRewardRef.current;
+            setAdLoaded(false);
+            setIsLoadingAd(false);
+            
+            // 보상을 획득했다면 사다리 게임 모달 표시
+            if (shouldShowLadder) {
+              // 광고 view controller 완전 해제 대기 (iOS)
+              setTimeout(() => {
+                setShowLadderGame(true);
+                earnedRewardRef.current = false;
+              }, 800);
+            }
+          },
+          onFailedToShow: (error: any) => {
+            console.error('❌ [LivePick] 광고 표시 실패:', error?.message);
+            setAdLoaded(false);
+            setIsLoadingAd(false);
+            Alert.alert('광고 오류', `광고를 표시할 수 없습니다: ${error?.message || '알 수 없는 오류'}`);
+          },
+          onFailedToLoad: (error: any) => {
+            console.error(`❌ [LivePick] 광고 로드 실패 (${retryCount + 1}/${MAX_RETRIES}):`, error?.message);
+            setAdLoaded(false);
+            setIsLoadingAd(false);
+            
+            if (retryCount < MAX_RETRIES) {
+              retryCount++;
+              setTimeout(() => setupAd(true), retryCount * 1000);
+            }
+          }
+        });
+      } catch (error) {
+        console.error('❌ [LivePick] 보상형 광고 초기화 실패:', error);
+        if (retryCount < MAX_RETRIES) {
+          retryCount++;
+          setTimeout(() => {
+            setupAd(true);
+          }, retryCount * 1000);
+        }
+      }
+    };
+    
+    setupAd();
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [user, question]);
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>라이브픽</Text>
+          <View style={styles.placeholder} />
+        </View>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>질문을 불러오는 중...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!question) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>라이브픽</Text>
+          <View style={styles.placeholder} />
+        </View>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>질문을 찾을 수 없습니다.</Text>
+        </View>
+      </View>
+    );
+  }
+
+  const option1Percent = question.participantCount > 0
+    ? Math.round((question.option1Count / question.participantCount) * 100)
+    : 0;
+  const option2Percent = question.participantCount > 0
+    ? 100 - option1Percent
+    : 0;
+  const hasVotes = question.participantCount > 0;
+
+  const handleOptionSelect = async (option: 1 | 2) => {
+    // 사용자 확인
+    if (!user) {
+      Alert.alert('오류', '로그인이 필요합니다.');
+      return;
+    }
+
+    // 질문 생성자는 자신의 질문에 참여할 수 없음
+    if (!question) {
+      return;
+    }
+    
+    if (question.createdBy === user.uid) {
+      Alert.alert('알림', '자신이 만든 질문에는 참여할 수 없습니다.');
+      return;
+    }
+
+    // 이미 참여한 질문인지 확인
+    if (hasParticipated) {
+      Alert.alert('알림', '이미 참여한 질문입니다.');
+      return;
+    }
+
+    // 일일 참여 제한 체크 (4회/일)
+    try {
+      const latestCount = await getTodayParticipationCount(user.uid);
+      
+      if (latestCount >= 4) {
+        Alert.alert(
+          '참여 제한',
+          '오늘은 이미 4개의 질문에 참여하셨습니다.\n내일 다시 시도해주세요!'
+        );
+        return;
+      }
+      
+      // 최신 참여 횟수 업데이트
+      setTodayParticipationCount(latestCount);
+    } catch (error) {
+      console.error('오늘 참여 횟수 확인 실패:', error);
+    }
+
+    setSelectedOption(option);
+    setShowParticipateModal(true);
+  };
+
+  // 10P 받기 선택 (명령문: 즉시 보상 10P)
+  const handleReceiveBasicReward = async () => {
+    if (!user || !question || selectedOption === null) return;
+
+    setShowParticipateModal(false);
+    
+    try {
+      // 1. 참여 기록 생성
+      await participateInLivePick(user.uid, question.id, selectedOption);
+      
+      // 2. 기본 보상(10P) 지급
+      await receiveBasicReward(user.uid, question.id);
+
+      // 3. 참여 상태 업데이트
+      setHasParticipated(true);
+      
+      // 4. 오늘 참여 횟수 다시 확인
+      const newCount = await getTodayParticipationCount(user.uid);
+      setTodayParticipationCount(newCount);
+      
+      // 5. 보상 모달 표시
+      setRewardPoints(10);
+      setIsLadderReward(false);
+      setShowRewardModal(true);
+
+      console.log('✅ 기본 보상 지급 완료 (10P)');
+    } catch (error: any) {
+      console.error('❌ 보상 지급 실패:', error);
+      const errorMessage = error?.message || '보상 지급에 실패했습니다.';
+      
+      if (errorMessage.includes('이미 참여')) {
+        setHasParticipated(true);
+        Alert.alert('알림', '이미 참여한 질문입니다.');
+      } else {
+        Alert.alert('오류', errorMessage);
+      }
+    }
+  };
+
+  // 광고 시청 후 게임하기 선택
+  const handleWatchAd = async () => {
+    // 모달을 먼저 닫기
+    setShowParticipateModal(false);
+    
+    // iOS 모달이 완전히 dismiss되기를 충분히 대기
+    // React Native Modal의 fade 애니메이션(350ms) + iOS view controller dismiss 완료 대기
+    // iOS에서는 모달이 완전히 해제되기까지 최대 800ms 정도 걸릴 수 있음
+    await new Promise<void>((resolve) => {
+      // 먼저 InteractionManager로 애니메이션 완료 대기
+      InteractionManager.runAfterInteractions(() => {
+        // iOS 모달 dismiss 완료를 위한 추가 대기
+        // fade 애니메이션(350ms) + view controller 해제 시간(400ms) = 총 750ms
+        setTimeout(() => {
+          resolve();
+        }, 800);
+      });
+    });
+    
+    if (!rewardedAdRef.current) {
+      console.log('⏳ [LivePick] 광고 객체가 없음');
+      Alert.alert('광고 준비 중', '광고를 불러오는 중입니다. 잠시만 기다려주세요.');
+      setIsLoadingAd(true);
+      return;
+    }
+
+    console.log(`🎬 [LivePick] 광고 표시 시도 - adLoaded 상태: ${adLoaded}`);
+    
+    // 광고가 아직 로드되지 않은 경우, 최대 5초간 대기
+    if (!adLoaded) {
+      console.log('⏳ [LivePick] 광고가 아직 로드되지 않음 - 로드 완료 대기 중...');
+      setIsLoadingAd(true);
+      
+      // 로드 완료까지 대기 (최대 5초)
+      let waitedTime = 0;
+      const checkInterval = setInterval(() => {
+        waitedTime += 500;
+        
+        if (adLoaded || waitedTime >= 5000) {
+          clearInterval(checkInterval);
+          setIsLoadingAd(false);
+          
+          if (adLoaded && rewardedAdRef.current) {
+            console.log(`✅ [LivePick] 광고 로드 완료 (${waitedTime}ms 대기)`);
+            try {
+              rewardedAdRef.current.show();
+              console.log('✅ [LivePick] 광고 표시 시작 (로드 완료 후)');
+            } catch (error: any) {
+              console.error('❌ [LivePick] 광고 표시 실패:', error?.message);
+              Alert.alert('광고 오류', error?.message || '광고를 표시할 수 없습니다.');
+            }
+          } else {
+            Alert.alert('광고 로드 실패', '광고를 불러오는 데 시간이 걸리고 있습니다.');
+          }
+        }
+      }, 500);
+      
+      return;
+    }
+    
+    // 광고가 이미 로드된 경우 표시
+    if (!rewardedAdRef.current) {
+      Alert.alert('광고 오류', '광고 객체가 준비되지 않았습니다.');
+      return;
+    }
+    
+    try {
+      console.log('🎬 [LivePick] 광고 표시 시작');
+      rewardedAdRef.current.show();
+      console.log('✅ [LivePick] 광고 표시 호출 완료');
+    } catch (error: any) {
+      const errorMessage = error?.message || '';
+      const isViewControllerError = errorMessage.includes('already presenting another view controller');
+      
+      if (isViewControllerError) {
+        // 모달이 아직 닫히지 않음 - 500ms 후 재시도
+        console.warn('⚠️ [LivePick] 모달 닫힘 대기 중, 재시도...');
+        setTimeout(() => {
+          try {
+            rewardedAdRef.current?.show();
+          } catch (retryError: any) {
+            console.error('❌ [LivePick] 광고 표시 재시도 실패:', retryError?.message);
+            Alert.alert('광고 오류', '광고를 표시할 수 없습니다. 잠시 후 다시 시도해주세요.');
+            setAdLoaded(false);
+          }
+        }, 500);
+      } else {
+        console.error('❌ [LivePick] 광고 표시 실패:', errorMessage);
+        Alert.alert('광고 오류', errorMessage || '광고를 표시할 수 없습니다.');
+        setAdLoaded(false);
+      }
+    }
+  };
+
+  // 사다리 게임 결과 처리
+  const handleLadderResult = async (points: number) => {
+    if (!user || !question || selectedOption === null) return;
+
+    console.log('🎯 [LivePick] 사다리 게임 결과:', points, 'P');
+    
+    try {
+      // 참여 기록이 없으면 생성 (이미 onEarned에서 생성되었을 수 있음)
+      if (!hasParticipated) {
+        await participateInLivePick(user.uid, question.id, selectedOption);
+        setHasParticipated(true);
+        const newCount = await getTodayParticipationCount(user.uid);
+        setTodayParticipationCount(newCount);
+      }
+      
+      // 사다리 게임 보상 지급
+      await receiveLadderReward(user.uid, question.id, points);
+      console.log('✅ [LivePick] 사다리 게임 보상 지급 완료:', points, 'P');
+      
+      // 사다리 게임 모달 닫기 (2초 후)
+      setTimeout(() => {
+        setShowLadderGame(false);
+        // 보상 모달 표시 (모달 닫힌 후 500ms)
+        setTimeout(() => {
+          setRewardPoints(points);
+          setIsLadderReward(true);
+          setShowRewardModal(true);
+        }, 500);
+      }, 2000);
+    } catch (error: any) {
+      console.error('❌ [LivePick] 보상 지급 실패:', error);
+      const errorMessage = error?.message || '보상 지급에 실패했습니다.';
+      
+      setTimeout(() => {
+        setShowLadderGame(false);
+        if (errorMessage.includes('이미')) {
+          Alert.alert('알림', '이미 보상을 받으셨습니다.');
+        } else {
+          Alert.alert('오류', errorMessage);
+        }
+      }, 2000);
+    }
+  };
+
+  // 보상 모달 닫기
+  const handleRewardModalClose = () => {
+    setShowRewardModal(false);
+  };
+
+  // 신고 버튼 클릭
+  const handleReportPress = () => {
+    if (!user) {
+      Alert.alert('오류', '로그인이 필요합니다.');
+      return;
+    }
+
+    if (question && question.createdBy === user.uid) {
+      Alert.alert('알림', '자신이 만든 질문은 신고할 수 없습니다.');
+      return;
+    }
+
+    if (hasReported) {
+      Alert.alert('알림', '이미 신고한 질문입니다.');
+      return;
+    }
+
+    setShowReportModal(true);
+  };
+
+  // 신고 제출
+  const handleReportSubmit = async () => {
+    if (!user || !question || !selectedReportReason) {
+      Alert.alert('오류', '신고 사유를 선택해주세요.');
+      return;
+    }
+
+    setIsReporting(true);
+
+    try {
+      await reportLivePickQuestion(
+        user.uid,
+        question.id,
+        selectedReportReason,
+        reportDescription.trim() || undefined
+      );
+
+      Alert.alert('신고 완료', '신고가 접수되었습니다. 검토 후 조치하겠습니다.', [
+        {
+          text: '확인',
+          onPress: () => {
+            setShowReportModal(false);
+            setSelectedReportReason(null);
+            setReportDescription('');
+          },
+        },
+      ]);
+    } catch (error: any) {
+      console.error('❌ 신고 실패:', error);
+      const errorMessage = error?.message || '신고 처리에 실패했습니다.';
+      Alert.alert('오류', errorMessage);
+    } finally {
+      setIsReporting(false);
+    }
+  };
+
+  const selectedOptionText = selectedOption === 1 ? question.option1 : selectedOption === 2 ? question.option2 : '';
+
+  return (
+    <View style={styles.container}>
+      {/* 헤더 */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.push('/(tabs)/livepick')}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>라이브픽</Text>
+        <View style={styles.placeholder} />
+      </View>
+
+      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+        {/* 질문 제목 */}
+        <Text style={styles.questionTitle}>{question.title}</Text>
+
+        {/* 참여자 수 */}
+        <View style={styles.participantInfo}>
+          <Ionicons name="people" size={20} color={colors.primary} />
+          <Text style={styles.participantText}>{question.participantCount}명 참여 중</Text>
+        </View>
+
+        {/* 일일 참여 제한 표시 */}
+        {user && (
+          <View style={[
+            styles.dailyLimitInfo,
+            todayParticipationCount >= 4 && styles.dailyLimitInfoWarning
+          ]}>
+            <View style={styles.dailyLimitContent}>
+              <Ionicons 
+                name={todayParticipationCount >= 4 ? "alert-circle" : "time"} 
+                size={18} 
+                color={todayParticipationCount >= 4 ? colors.warning : colors.textSecondary} 
+              />
+            <Text style={[
+                styles.dailyLimitText,
+                todayParticipationCount >= 4 && styles.dailyLimitTextWarning
+              ]}>
+                오늘 남은 참여: {Math.max(0, 50 - todayParticipationCount)}/50회
+              </Text>
+            </View>
+            {todayParticipationCount >= 4 && (
+              <Text style={styles.dailyLimitWarning}>
+                내일 다시 참여하실 수 있습니다
+              </Text>
+            )}
+          </View>
+        )}
+
+        {/* 선택지 */}
+        <View style={styles.optionsContainer}>
+          {/* 선택지 1 */}
+          <TouchableOpacity
+            style={[
+              styles.optionCard,
+              selectedOption === 1 && styles.optionCardSelected,
+              hasParticipated && styles.optionCardDisabled,
+            ]}
+            onPress={() => handleOptionSelect(1)}
+            disabled={hasParticipated}
+            activeOpacity={0.7}
+          >
+            <Text style={[
+              styles.optionText,
+              selectedOption === 1 && styles.optionTextSelected,
+            ]}>
+              {question.option1}
+            </Text>
+            {hasParticipated && (
+              <Text style={[styles.optionPercent, styles.optionPercentLeft]}>{option1Percent}%</Text>
+            )}
+          </TouchableOpacity>
+
+          {/* 선택지 2 */}
+          <TouchableOpacity
+            style={[
+              styles.optionCard,
+              selectedOption === 2 && styles.optionCardSelected,
+              (hasParticipated || (user && question && question.createdBy === user.uid)) && styles.optionCardDisabled,
+            ]}
+            onPress={() => handleOptionSelect(2)}
+            disabled={!!(hasParticipated || (user && question && question.createdBy === user.uid))}
+            activeOpacity={0.7}
+          >
+            <Text style={[
+              styles.optionText,
+              selectedOption === 2 && styles.optionTextSelected,
+            ]}>
+              {question.option2}
+            </Text>
+            {hasParticipated && (
+              <Text style={[styles.optionPercent, styles.optionPercentRight]}>{option2Percent}%</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* 결과 바 (참여 후에만 표시) */}
+        {hasParticipated && (
+          <View style={[styles.resultBar, !hasVotes && styles.resultBarEmpty]}>
+            {hasVotes && (
+              <View style={[styles.resultFill, { width: `${option1Percent}%` }]} />
+            )}
+          </View>
+        )}
+
+        {/* 참여 안내 */}
+        {!hasParticipated && !selectedOption && (
+          <View style={styles.infoBox}>
+            <Ionicons name="information-circle" size={20} color={colors.primary} />
+            <Text style={styles.infoText}>
+              {user && question && question.createdBy === user.uid
+                ? '자신이 만든 질문에는 참여할 수 없습니다.'
+                : '선택지를 클릭하여 참여하세요.\n참여 후 10P를 받거나 광고 시청 후 추가 보상을 받을 수 있습니다.'}
+            </Text>
+          </View>
+        )}
+
+        {/* 참여 완료 안내 */}
+        {hasParticipated && (
+          <View style={styles.infoBox}>
+            <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+            <Text style={styles.infoText}>
+              참여가 완료되었습니다!
+            </Text>
+          </View>
+        )}
+
+        {/* 신고 버튼 */}
+        {user && question && question.createdBy !== user.uid && (
+          <TouchableOpacity
+            style={[
+              styles.reportButton,
+              hasReported && styles.reportButtonDisabled,
+            ]}
+            onPress={handleReportPress}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="flag-outline" size={20} color={colors.error} />
+            <Text style={styles.reportButtonText}>
+              {hasReported ? '이미 신고한 질문입니다' : '신고하기'}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
+
+      {/* 참여 모달 */}
+      <ParticipateModal
+        visible={showParticipateModal}
+        selectedOption={selectedOptionText}
+        onReceive={handleReceiveBasicReward}
+        onWatchAd={handleWatchAd}
+        onClose={() => {
+          setShowParticipateModal(false);
+          setSelectedOption(null);
+        }}
+        todayParticipationCount={todayParticipationCount}
+      />
+
+      {/* 사다리 게임 모달 */}
+      <Modal
+        visible={showLadderGame}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          console.log('🔙 [LivePick] 사다리 게임 모달 닫기 요청');
+          setShowLadderGame(false);
+        }}
+      >
+        <View style={styles.gameModalOverlay}>
+          <View style={styles.gameModalContainer}>
+            <LadderGame
+              visible={showLadderGame}
+              onResult={handleLadderResult}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* 보상 모달 */}
+      <RewardModal
+        visible={showRewardModal}
+        points={rewardPoints}
+        isLadderReward={isLadderReward}
+        onClose={handleRewardModalClose}
+      />
+
+      {/* 신고 모달 */}
+      <Modal
+        visible={showReportModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isReporting) {
+            Keyboard.dismiss();
+            setShowReportModal(false);
+            setSelectedReportReason(null);
+            setReportDescription('');
+          }
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+            style={styles.modalKeyboardView}
+          >
+            <View style={styles.reportModalContent}>
+              <View style={styles.reportModalHeader}>
+                <Text style={styles.reportModalTitle}>신고하기</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (!isReporting) {
+                      Keyboard.dismiss();
+                      setShowReportModal(false);
+                      setSelectedReportReason(null);
+                      setReportDescription('');
+                    }
+                  }}
+                  disabled={isReporting}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="close" size={24} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                style={styles.reportModalScrollView}
+                contentContainerStyle={styles.reportModalScrollContent}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                    <Text style={styles.reportModalSubtitle}>신고 사유를 선택해주세요</Text>
+
+                    {/* 신고 사유 선택 */}
+                    <View style={styles.reportReasonContainer}>
+                      {[
+                        { value: 'spam', label: '스팸 또는 광고' },
+                        { value: 'inappropriate', label: '부적절한 내용' },
+                        { value: 'violence', label: '폭력적 또는 혐오적 내용' },
+                        { value: 'harassment', label: '괴롭힘 또는 혐오 발언' },
+                        { value: 'other', label: '기타' },
+                      ].map((reason) => (
+                        <TouchableOpacity
+                          key={reason.value}
+                          style={[
+                            styles.reportReasonOption,
+                            selectedReportReason === reason.value && styles.reportReasonOptionSelected,
+                          ]}
+                          onPress={() => {
+                            setSelectedReportReason(reason.value as any);
+                            Keyboard.dismiss();
+                          }}
+                          disabled={isReporting}
+                          activeOpacity={0.7}
+                        >
+                          <Text
+                            style={[
+                              styles.reportReasonText,
+                              selectedReportReason === reason.value && styles.reportReasonTextSelected,
+                            ]}
+                          >
+                            {reason.label}
+                          </Text>
+                          {selectedReportReason === reason.value && (
+                            <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                          )}
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    {/* 추가 설명 입력 */}
+                    <View style={styles.reportDescriptionContainer}>
+                      <Text style={styles.reportDescriptionLabel}>추가 설명 (선택사항)</Text>
+                      <TextInput
+                        style={styles.reportDescriptionInput}
+                        placeholder="상세한 신고 사유를 입력해주세요"
+                        placeholderTextColor={colors.textLight}
+                        value={reportDescription}
+                        onChangeText={setReportDescription}
+                        multiline
+                        numberOfLines={4}
+                        maxLength={200}
+                        editable={!isReporting}
+                        blurOnSubmit={true}
+                        returnKeyType="done"
+                      />
+                      <Text style={styles.reportDescriptionCount}>
+                        {reportDescription.length}/200
+                      </Text>
+                    </View>
+
+                    {/* 신고 제출 버튼 */}
+                    <TouchableOpacity
+                      style={[
+                        styles.reportSubmitButton,
+                        (!selectedReportReason || isReporting) && styles.reportSubmitButtonDisabled,
+                      ]}
+                      onPress={() => {
+                        Keyboard.dismiss();
+                        handleReportSubmit();
+                      }}
+                      disabled={!selectedReportReason || isReporting}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.reportSubmitButtonText}>
+                        {isReporting ? '신고 중...' : '신고 제출'}
+                      </Text>
+                    </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  header: {
+    paddingTop: 60,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    backgroundColor: colors.background,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  backButton: {
+    padding: 4,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  placeholder: {
+    width: 32,
+  },
+  content: {
+    flex: 1,
+  },
+  contentContainer: {
+    padding: 20,
+  },
+  questionTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  participantInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+  },
+  participantText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  dailyLimitInfo: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  dailyLimitInfoWarning: {
+    backgroundColor: '#FFF4E6',
+    borderColor: colors.warning,
+  },
+  dailyLimitContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  dailyLimitText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    flexShrink: 1,
+  },
+  dailyLimitTextWarning: {
+    color: colors.warning,
+    fontWeight: '700',
+  },
+  dailyLimitWarning: {
+    fontSize: 12,
+    color: colors.warning,
+    marginTop: 6,
+    textAlign: 'center',
+  },
+  optionsContainer: {
+    gap: 16,
+    marginBottom: 24,
+  },
+  optionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.border,
+    minHeight: 80,
+    justifyContent: 'center',
+  },
+  optionCardSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  optionCardDisabled: {
+    opacity: 0.7,
+  },
+  optionText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  optionTextSelected: {
+    color: 'white',
+  },
+  optionPercent: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.primary,
+    marginTop: 8,
+  },
+  resultBar: {
+    height: 12,
+    backgroundColor: colors.accent,
+    borderRadius: 6,
+    marginBottom: 24,
+    overflow: 'hidden',
+    flexDirection: 'row',
+  },
+  resultBarEmpty: {
+    backgroundColor: colors.border,
+  },
+  resultFill: {
+    height: '100%',
+    backgroundColor: colors.primary,
+  },
+  optionPercentLeft: {
+    color: colors.primary,
+  },
+  optionPercentRight: {
+    color: colors.accent,
+  },
+  infoBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 8,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  errorText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  gameModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  gameModalContainer: {
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    padding: 12,
+    width: '90%',
+    maxWidth: 500,
+    maxHeight: '85%', // 한 화면에 맞게 높이 제한
+    alignItems: 'center',
+  },
+  reportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 24,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.error,
+  },
+  reportButtonDisabled: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    opacity: 0.8,
+  },
+  reportButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.error,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalKeyboardView: {
+    width: '100%',
+    maxWidth: 500,
+  },
+  reportModalContent: {
+    backgroundColor: colors.background,
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxHeight: '85%',
+  },
+  reportModalScrollView: {
+    maxHeight: 450,
+  },
+  reportModalScrollContent: {
+    paddingBottom: 8,
+  },
+  reportModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  reportModalTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  reportModalSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 20,
+  },
+  reportReasonContainer: {
+    gap: 12,
+    marginBottom: 24,
+  },
+  reportReasonOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  reportReasonOptionSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  reportReasonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: colors.text,
+  },
+  reportReasonTextSelected: {
+    color: 'white',
+    fontWeight: '700',
+  },
+  reportDescriptionContainer: {
+    marginBottom: 24,
+  },
+  reportDescriptionLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  reportDescriptionInput: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 14,
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  reportDescriptionCount: {
+    fontSize: 12,
+    color: colors.textLight,
+    textAlign: 'right',
+    marginTop: 4,
+  },
+  reportSubmitButton: {
+    backgroundColor: colors.error,
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reportSubmitButtonDisabled: {
+    opacity: 0.5,
+  },
+  reportSubmitButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: 'white',
+  },
+});

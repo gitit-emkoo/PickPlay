@@ -48,6 +48,27 @@ export interface UserData {
   nickname: string;
 }
 
+// 포인트 적립/소멸 내역
+export type PointHistoryReason =
+  | 'basic_reward'
+  | 'ladder_reward'
+  | 'creator_reward'
+  | 'top_reward'
+  | 'majority_reward'
+  | 'ad_bonus'
+  | 'livepick_question_creation'
+  | 'manual'
+  | 'etc';
+
+export interface PointHistory {
+  id: string;
+  uid: string;
+  amount: number; // 적립은 양수, 소멸/차감은 음수
+  reason: PointHistoryReason;
+  description?: string;
+  createdAt: FirebaseFirestoreTypes.Timestamp | Date;
+}
+
 
 // --- 기존 타입 정의 (유지) ---
 
