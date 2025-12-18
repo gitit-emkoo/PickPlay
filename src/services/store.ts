@@ -6,8 +6,9 @@ import { ensureAnonymousAuth } from './firebase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getDeviceUID } from './firebase';
 import { currentDateKey } from '../utils/date';
-import functions from '@react-native-firebase/functions';
+import functionsModule from '@react-native-firebase/functions';
 import { scheduleStreakNotification } from './notifications';
+import { recordPointHistory } from './pointHistory';
 // AsyncStorage는 더 이상 직접 사용하지 않으므로 제거 (필요 시 UI단에서만 사용)
 
 // --- 데이터 로더 (앱 시작 시 호출) ---
@@ -149,6 +150,12 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
     streakCount: 0,
     lastAnswerDate: 0,
     nickname: generateRandomNickname(),
+    tutorial: {
+      mainAnswered: false,
+      livepickParticipated: false,
+      livepickCreated: false,
+      rewardGiven500: false,
+    },
   };
 
   await userRef.set(newUserData);
@@ -274,7 +281,11 @@ const generateTagsWithAI = async (question: Question, selectedOptionText: string
     // 약간의 딜레이를 주어 토큰이 전파되도록 함
     await new Promise(resolve => setTimeout(resolve, 100));
     
-    const generateTags = functions().httpsCallable('generateTags');
+    // 서울 리전에 배포된 Callable 함수 URL로 직접 호출
+    const functions = functionsModule();
+    const generateTags = functions.httpsCallableFromUrl(
+      'https://asia-northeast3-today-balance-fa0a5.cloudfunctions.net/generateTags'
+    );
     const result = await generateTags({
       questionId: question.question_id,
       selectedText: selectedOptionText,
@@ -869,10 +880,21 @@ export async function rewardWithMajority(
   const multiplier = streakCount >= 31 ? 3 : streakCount >= 11 ? 2 : 1;
   const totalPoints = base * multiplier;
   
+  const majorityText = myIsMajority ? '다수' : '소수';
+  const multiplierText = multiplier > 1 ? ` (${multiplier}배 적용)` : '';
+  
   const userRef = firestore().collection('users').doc(uid);
   await userRef.update({
     points: firestore.FieldValue.increment(totalPoints)
   });
+
+  // 포인트 내역 기록
+  try {
+    const description = `${majorityText} 선택 ${base}P${multiplierText}`;
+    await recordPointHistory(uid, totalPoints, 'majority_reward', description);
+  } catch (e) {
+    console.warn('[Points] 포인트 내역 기록 실패(무시 가능):', (e as any)?.message || e);
+  }
 
   // 오늘 보상 수령 완료 표시
   try {
@@ -881,8 +903,6 @@ export async function rewardWithMajority(
     console.warn('[Answer] rewarded 플래그 업데이트 실패(무시 가능):', (e as any)?.message || e);
   }
   
-  const majorityText = myIsMajority ? '다수' : '소수';
-  const multiplierText = multiplier > 1 ? ` (${multiplier}배 적용)` : '';
   console.log(`[Points] 포인트 지급 완료: ${majorityText} ${base}P${multiplierText} = 총 ${totalPoints}P`);
 
   return { base, multiplier, totalPoints, myIsMajority, agg };

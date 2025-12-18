@@ -10,6 +10,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import appCheck from '@react-native-firebase/app-check';
 import { getApp, initializeApp, getApps } from '@react-native-firebase/app';
+import firestore from '@react-native-firebase/firestore';
 
 import NotificationBootstrap from './components/NotificationBootstrap';
 import LoadingScreen from './components/LoadingScreen';
@@ -205,6 +206,13 @@ export default function RootLayout() {
     (async () => {
       // 0. Firebase 초기화 확인 (빠른 체크)
       const initResult = await initializeFirebaseIfNeeded();
+      if (__DEV__) {
+        try {
+          firestore().setLogLevel('debug');
+        } catch (e) {
+          console.warn('[Debug] Firestore setLogLevel failed (ignored):', (e as any)?.message || e);
+        }
+      }
       if (!initResult) {
         // 초기화 실패 시에도 앱은 계속 진행 (백그라운드에서 재시도)
         console.warn('[RootLayout] Firebase 초기화 확인 실패 - 백그라운드에서 재시도');
@@ -350,7 +358,7 @@ export default function RootLayout() {
         <StatusBar style="dark" />
         <NotificationBootstrap />
         <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         </Stack>
       </SafeAreaView>
     </SafeAreaProvider>

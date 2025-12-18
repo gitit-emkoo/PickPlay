@@ -46,6 +46,36 @@ export interface UserData {
   streakCount: number;
   lastAnswerDate: number; // YYYYMMDD 형식의 숫자
   nickname: string;
+
+  // --- 튜토리얼 필드 ---
+  tutorial?: {
+    mainAnswered: boolean; // 메인 질문에 답변했는지
+    livepickParticipated: boolean; // 라이브픽 질문에 참여했는지
+    livepickCreated: boolean; // 라이브픽 질문을 생성했는지
+    rewardGiven500: boolean; // 500P 보상을 받았는지
+  };
+}
+
+// 포인트 적립/소멸 내역
+export type PointHistoryReason =
+  | 'basic_reward'
+  | 'ladder_reward'
+  | 'creator_reward'
+  | 'top_reward'
+  | 'majority_reward'
+  | 'ad_bonus'
+  | 'livepick_question_creation'
+  | 'tutorial_reward'
+  | 'manual'
+  | 'etc';
+
+export interface PointHistory {
+  id: string;
+  uid: string;
+  amount: number; // 적립은 양수, 소멸/차감은 음수
+  reason: PointHistoryReason;
+  description?: string;
+  createdAt: FirebaseFirestoreTypes.Timestamp | Date;
 }
 
 
