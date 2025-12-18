@@ -10,9 +10,11 @@ import SplashScreen from '../splash';
 import TutorialScreen from '../components/TutorialScreen';
 import NotificationModal from '../components/NotificationModal';
 import AnimaCodeRevealModal from '../components/AnimaCodeRevealModal';
+import TutorialTooltip from '../components/TutorialTooltip';
 import colors from '../../src/styles/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { subscribeUnreadCount } from '../../src/services/notificationsList';
+import { getTutorialStatus, updateTutorialProgress } from '../../src/services/tutorial';
 import * as WebBrowser from 'expo-web-browser';
 import LottieView from 'lottie-react-native';
 import BannerAdComponent from '../components/BannerAdComponent';
@@ -60,6 +62,7 @@ export default function HomeScreen() {
   const [rewardCompleted, setRewardCompleted] = useState(false);
   const [showRewardInfoModal, setShowRewardInfoModal] = useState(false);
   const [showRewardDoneModal, setShowRewardDoneModal] = useState(false);
+  const [showLivePickGuideModal, setShowLivePickGuideModal] = useState(false);
   const [lastRewardMultiplier, setLastRewardMultiplier] = useState<number | null>(null);
   
   // 애니마코드 팝업 상태
@@ -74,6 +77,15 @@ export default function HomeScreen() {
   // 알림 관련 상태
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  // 튜토리얼 관련 상태
+  const [tutorialStatus, setTutorialStatus] = useState<{
+    mainAnswered: boolean;
+    livepickParticipated: boolean;
+    livepickCreated: boolean;
+    rewardGiven500: boolean;
+    allCompleted: boolean;
+  } | null>(null);
 
 
   // 서비스 점검 상태 체크 (앱 시작 시 최우선)
@@ -287,6 +299,14 @@ export default function HomeScreen() {
       const data = await ensureUser(user.uid);
       setUserData(data);
       
+      // 튜토리얼 상태 로드
+      try {
+        const status = await getTutorialStatus(user.uid);
+        setTutorialStatus(status);
+      } catch (e) {
+        console.warn('[Tutorial] 튜토리얼 상태 로드 실패:', e);
+      }
+      
       const q = getTodayQuestionForUser(data);
       setQuestion(q);
 
@@ -394,6 +414,18 @@ export default function HomeScreen() {
         const result = await aggregate(question.question_id);
         setAgg(result);
         console.log('✅ 백그라운드 투표 처리 완료');
+        
+        // 튜토리얼 상태 업데이트 (메인 질문 답변)
+        try {
+          await updateTutorialProgress(user.uid, 'mainAnswered');
+          // 튜토리얼 상태 다시 로드
+          const updatedStatus = await getTutorialStatus(user.uid);
+          if (updatedStatus) {
+            setTutorialStatus(updatedStatus);
+          }
+        } catch (e) {
+          console.warn('[Tutorial] 메인 질문 답변 튜토리얼 업데이트 실패:', e);
+        }
         
         // 애니마코드 팝업 표시 체크
         const newTotalSelections = updatedUserData.totalSelections;
@@ -666,7 +698,18 @@ export default function HomeScreen() {
 
           {/* 질문 카드 */}
           {question ? (
-          <View style={{ backgroundColor: colors.surface, borderRadius: 20, padding: 24, marginBottom: 24, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 4 }}>
+          <View style={{ backgroundColor: colors.surface, borderRadius: 20, padding: 24, marginBottom: 24, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 4, position: 'relative' }}>
+            {/* 튜토리얼 말풍선 (메인 질문 안내) - 튜토리얼 미완료 시 표시 */}
+            {tutorialStatus && !tutorialStatus.mainAnswered && userChoice === null && (
+              <TutorialTooltip
+                title="튜토리얼 하기!"
+                message="보상 : 500P!"
+                position="bottom"
+                style={{ top: -50, left: 100, right: 20 }}
+                color="#FF5722"
+                blink={true}
+              />
+            )}
             <Text style={{ fontSize: 20, fontWeight: '700', color: colors.primary, textAlign: 'center', lineHeight: 28, marginBottom: 24 }}>
               Q. 나의 <Text style={{ color: colors.accent }}>{(question as any).text ?? (question as any).question_text} 취향은?</Text>
           </Text>
@@ -739,22 +782,32 @@ export default function HomeScreen() {
         </TouchableOpacity>
 
           {/* 보상 받기 버튼 (광고 연동 전 플레이스홀더) */}
-            {userChoice !== null && !rewardCompleted && (
-              <TouchableOpacity onPress={handleGrantReward} style={{
-                  marginTop: 8,
-                  alignSelf: 'center',
-                  backgroundColor: (() => { const m = getStreakMultiplier(userData?.streakCount); return m === 3 ? '#8e44ad' : m === 2 ? '#2ecc71' : colors.primary; })(),
-              borderRadius: 12,
-              paddingVertical: 16,
-              paddingHorizontal: 32,
-                  shadowColor: (() => { const m = getStreakMultiplier(userData?.streakCount); return m === 3 ? '#8e44ad' : m === 2 ? '#2ecc71' : colors.primary; })(),
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.25,
-              shadowRadius: 8,
-              elevation: 6,
-            }}>
-              <Text style={{ fontSize: 18, color: 'white', fontWeight: '700', textAlign: 'center' }}>🎁 보상 받기</Text>
-          </TouchableOpacity>
+            {tutorialStatus && tutorialStatus.mainAnswered && userChoice !== null && !rewardCompleted && (
+              <View style={{ position: 'relative', alignSelf: 'center' }}>
+                {/* 튜토리얼 말풍선 (보상 받기 안내) */}
+                <TutorialTooltip
+                  message="보상을 받아보세요"
+                  position="bottom"
+                  style={{ top: -40, left: 50, right: 60 }}
+                  width={160}
+                  color="#FF5722"
+                  blink={true}
+                />
+                <TouchableOpacity onPress={handleGrantReward} style={{
+                    marginTop: 8,
+                    backgroundColor: (() => { const m = getStreakMultiplier(userData?.streakCount); return m === 3 ? '#8e44ad' : m === 2 ? '#2ecc71' : colors.primary; })(),
+                borderRadius: 12,
+                paddingVertical: 16,
+                paddingHorizontal: 32,
+                    shadowColor: (() => { const m = getStreakMultiplier(userData?.streakCount); return m === 3 ? '#8e44ad' : m === 2 ? '#2ecc71' : colors.primary; })(),
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.25,
+                shadowRadius: 8,
+                elevation: 6,
+              }}>
+                <Text style={{ fontSize: 18, color: 'white', fontWeight: '700', textAlign: 'center' }}>🎁 보상 받기</Text>
+              </TouchableOpacity>
+              </View>
         )}
 
         {rewardCompleted && !!msg && (
@@ -857,9 +910,68 @@ export default function HomeScreen() {
               />
             </View>
             <Text style={{ fontSize: 18, fontWeight: '700', color: colors.primary, textAlign: 'center', marginBottom: 20 }}>보상이 적립되었습니다.</Text>
-            <TouchableOpacity onPress={() => setShowRewardDoneModal(false)} style={{ backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24 }}>
-              <Text style={{ fontSize: 16, color: 'white', fontWeight: '600', textAlign: 'center' }}>닫기</Text>
+            <TouchableOpacity onPress={() => {
+              setShowRewardDoneModal(false);
+              setShowLivePickGuideModal(true);
+            }} style={{ backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24 }}>
+              <Text style={{ fontSize: 16, color: 'white', fontWeight: '600', textAlign: 'center' }}>확인</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* 라이브픽 안내 팝업 */}
+      {showLivePickGuideModal && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center', zIndex: 1100 }}>
+          <View style={{ backgroundColor: 'white', borderRadius: 20, padding: 28, alignItems: 'center', shadowColor: colors.shadow, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 16, elevation: 8, marginHorizontal: 40 }}>
+            <Text style={{ fontSize: 20, fontWeight: '700', color: colors.primary, textAlign: 'center', marginBottom: 12 }}>애니마코드 생성을 위한{'\n'}선택을 완료했습니다!</Text>
+            <Text style={{ fontSize: 16, color: colors.text, textAlign: 'center', lineHeight: 24, marginBottom: 8 }}>매일 참여해서 나만의{'\n'}애니마코드를 깨워보세요!</Text>
+            {/* 애니마코드 알 애니메이션 */}
+            <View style={{ width: 100, height: 100 }}>
+              <LottieView
+                source={{ uri: 'https://lottie.host/df96f2a7-284f-4197-ba3c-5b8388c46299/ykDKnFMp3l.lottie' }}
+                autoPlay
+                loop={true}
+                style={{ width: 100, height: 100 }}
+              />
+            </View>
+            <View style={{ width: '100%', height: 1, backgroundColor: colors.border, marginBottom: 12 }} />
+            <Text style={{ fontSize: 16, fontWeight: '600', color: colors.accent, textAlign: 'center', lineHeight: 24, marginBottom: 8 }}>지금 핫한 라이브픽에서{'\n'}더 많은 보상을 받아보세요 🎁</Text>
+            
+            <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
+              <TouchableOpacity 
+                onPress={() => setShowLivePickGuideModal(false)} 
+                style={{ 
+                  flex: 1,
+                  backgroundColor: colors.surface, 
+                  borderRadius: 12, 
+                  paddingVertical: 14, 
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  alignItems: 'center'
+                }}
+              >
+                <Text style={{ fontSize: 16, color: colors.text, fontWeight: '600' }}>아니요</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                onPress={() => {
+                  setShowLivePickGuideModal(false);
+                  // 라이브픽 페이지로 이동
+                  if (typeof window !== 'undefined') {
+                    require('expo-router').router.push('/(tabs)/livepick');
+                  }
+                }} 
+                style={{ 
+                  flex: 1,
+                  backgroundColor: colors.primary, 
+                  borderRadius: 12, 
+                  paddingVertical: 14,
+                  alignItems: 'center'
+                }}
+              >
+                <Text style={{ fontSize: 16, color: 'white', fontWeight: '600' }}>예</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       )}

@@ -49,7 +49,7 @@ export default function RewardModal({
           {/* 안내 메시지 */}
           <Text style={styles.message}>
             {isLadderReward
-              ? '축하합니다! 사다리 게임에서 포인트를 획득했어요!'
+              ? '축하합니다! 추가 포인트를를 획득했어요!'
               : '포인트가 정상적으로 적립되었습니다.'}
           </Text>
 

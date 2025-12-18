@@ -4,6 +4,7 @@ import { LivePickQuestion, LivePickParticipation, LivePickReward, LivePickReport
 import { ensureUser } from './store';
 import { ensureAnonymousAuth } from './firebase';
 import { recordPointHistory } from './pointHistory';
+import { updateTutorialProgress } from './tutorial';
 
 // 보상 설정 로드
 const rewardConfig = require('../../assets/data/reward_livepick.json');
@@ -42,7 +43,7 @@ const ensureAuthenticatedUser = async (expectedUid?: string): Promise<string> =>
  * @param option1 선택지 1
  * @param option2 선택지 2
  * @param category 카테고리
- * @returns 생성된 질문 ID
+ * @returns { questionId: 생성된 질문 ID, tutorialCompleted: 튜토리얼 완료 여부 }
  */
 export async function createLivePickQuestion(
   uid: string,
@@ -50,7 +51,7 @@ export async function createLivePickQuestion(
   option1: string,
   option2: string,
   category: '일상' | '연애' | '가치관' | '엔터테인먼트' | '상상'
-): Promise<string> {
+): Promise<{ questionId: string; tutorialCompleted: boolean }> {
   try {
     const authedUid = await ensureAuthenticatedUser(uid);
     console.log('[LivePick][Create] 인증 확인 완료', { uid, authedUid });
@@ -118,8 +119,24 @@ export async function createLivePickQuestion(
       console.warn('[LivePick] 포인트 내역 기록 실패(무시 가능):', (e as any)?.message || e);
     }
 
+    // 튜토리얼 상태 업데이트 (라이브픽 질문 생성)
+    let tutorialCompleted = false;
+    try {
+      const updatedUserData = await updateTutorialProgress(uid, 'livepickCreated');
+      // 3개 미션 모두 완료되고 보상을 받았다면 tutorialCompleted = true
+      if (updatedUserData?.tutorial?.mainAnswered && 
+          updatedUserData?.tutorial?.livepickParticipated && 
+          updatedUserData?.tutorial?.livepickCreated &&
+          updatedUserData?.tutorial?.rewardGiven500) {
+        tutorialCompleted = true;
+        console.log('[LivePick] 🎉 튜토리얼 완료! 500P 보상 지급됨');
+      }
+    } catch (e) {
+      console.warn('[LivePick] 튜토리얼 상태 업데이트 실패(무시 가능):', (e as any)?.message || e);
+    }
+
     console.log(`✅ [LivePick] 질문 생성 완료: ${questionRef.id}`);
-    return questionRef.id;
+    return { questionId: questionRef.id, tutorialCompleted };
   } catch (error: any) {
     console.error('❌ [LivePick] 질문 생성 실패(디버그 포함):', {
       code: error?.code || 'N/A',

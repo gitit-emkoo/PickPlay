@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../../src/styles/colors';
 import { LivePickQuestion } from '../../src/types/livepick';
 import { getLivePickQuestions, getTodayParticipationCount } from '../../src/services/livepick';
 import { watchAuth } from '../../src/services/firebase';
+import { getTutorialStatus } from '../../src/services/tutorial';
+import TutorialTooltip from '../components/TutorialTooltip';
 
 const CATEGORIES: Array<'일상' | '연애' | '가치관' | '엔터테인먼트' | '상상'> = ['일상', '연애', '가치관', '엔터테인먼트', '상상'];
 
@@ -20,17 +22,44 @@ export default function LivePickScreen() {
   const PAGE_SIZE = 20;
   const [todayParticipationCount, setTodayParticipationCount] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState<'전체' | '일상' | '연애' | '가치관' | '엔터테인먼트' | '상상'>('전체');
+  const [tutorialStatus, setTutorialStatus] = useState<{
+    mainAnswered: boolean;
+    livepickParticipated: boolean;
+    livepickCreated: boolean;
+    rewardGiven500: boolean;
+    allCompleted: boolean;
+  } | null>(null);
 
   // 사용자 인증 확인
   useEffect(() => {
-    const unsubscribe = watchAuth((user) => {
+    const unsubscribe = watchAuth(async (user) => {
       setUser(user);
       if (user) {
         checkTodayParticipationCount(user.uid);
+        // 튜토리얼 상태 로드
+        try {
+          const status = await getTutorialStatus(user.uid);
+          setTutorialStatus(status);
+        } catch (e) {
+          console.warn('[Tutorial] 튜토리얼 상태 로드 실패:', e);
+        }
       }
     });
     return unsubscribe;
   }, []);
+
+  // 화면이 포커스될 때마다 튜토리얼 상태 갱신
+  useFocusEffect(
+    React.useCallback(() => {
+      if (user) {
+        getTutorialStatus(user.uid).then(status => {
+          setTutorialStatus(status);
+        }).catch(e => {
+          console.warn('[Tutorial] 튜토리얼 상태 갱신 실패:', e);
+        });
+      }
+    }, [user])
+  );
 
   // 라이브픽 질문 초기 로드
   const loadInitialQuestions = async () => {
@@ -186,6 +215,7 @@ export default function LivePickScreen() {
             </View>
           )}
         </View>
+        <View style={{ position: 'relative' }}>
         <TouchableOpacity
           style={styles.createButton}
           activeOpacity={0.7}
@@ -194,6 +224,18 @@ export default function LivePickScreen() {
           <Ionicons name="add-circle" size={24} color={colors.primary} />
           <Text style={styles.createButtonText}>질문 만들기</Text>
         </TouchableOpacity>
+          {/* 튜토리얼 말풍선 (질문 만들기 안내) - 라이브픽 참여 후 표시 */}
+          {tutorialStatus && tutorialStatus.livepickParticipated && !tutorialStatus.livepickCreated && (
+            <TutorialTooltip
+              message="나만의 라이브픽 질문을 만들어보세요"
+              position="right"
+              style={{ position: 'absolute', top: -10, right: '100%', marginRight: 8 }}
+              width={200}
+              color="#FF5722"
+              blink={true}
+            />
+          )}
+        </View>
       </View>
 
       {/* 카테고리 필터 */}
@@ -284,7 +326,7 @@ export default function LivePickScreen() {
           return (
             <>
               {filteredQuestions.map((question) => (
-                <QuestionCard key={question.id} question={question} />
+            <QuestionCard key={question.id} question={question} />
               ))}
               {hasMore && !loadingMore && (
                 <TouchableOpacity
@@ -307,6 +349,29 @@ export default function LivePickScreen() {
           );
         })()}
       </ScrollView>
+
+      {/* 라이브픽 튜토리얼 말풍선 - 화면 최상단 오버레이로 표시 */}
+      {tutorialStatus && !tutorialStatus.livepickParticipated && (
+        <View
+          pointerEvents="box-none"
+          style={{
+            position: 'absolute',
+            top: 140, // 헤더 + 카테고리 바로 아래 정도
+            left: 0,
+            right: 0,
+            zIndex: 1000,
+            alignItems: 'center',
+          }}
+        >
+          <TutorialTooltip
+            message="라이브픽 질문에 한 번 참여해보세요"
+            position="bottom"
+            style={{}}
+            color="#FF5722"
+            blink={true}
+          />
+        </View>
+      )}
     </View>
   );
 }

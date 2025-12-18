@@ -20,6 +20,7 @@ import {
   reportLivePickQuestion,
   hasReportedLivePickQuestion,
 } from '../../../src/services/livepick';
+import { updateTutorialProgress } from '../../../src/services/tutorial';
 
 // 임시 더미 데이터 (나중에 백엔드 연동)
 const getDummyQuestion = (id: string): LivePickQuestion | null => {
@@ -74,6 +75,7 @@ export default function QuestionDetailScreen() {
   const [showParticipateModal, setShowParticipateModal] = useState(false);
   const [showLadderGame, setShowLadderGame] = useState(false);
   const [showRewardModal, setShowRewardModal] = useState(false);
+  const [showCongratulationModal, setShowCongratulationModal] = useState(false);
   const [rewardPoints, setRewardPoints] = useState(0);
   const [isLadderReward, setIsLadderReward] = useState(false);
   
@@ -402,6 +404,22 @@ export default function QuestionDetailScreen() {
       setIsLadderReward(false);
       setShowRewardModal(true);
 
+      // 튜토리얼 상태 업데이트 (라이브픽 참여)
+      try {
+        const updatedData = await updateTutorialProgress(user.uid, 'livepickParticipated');
+        // 참여 완료 시 축하 팝업 표시 (단, livepickCreated는 아직 안 됨)
+        if (updatedData?.tutorial?.mainAnswered && 
+            updatedData?.tutorial?.livepickParticipated &&
+            !updatedData?.tutorial?.livepickCreated) {
+          // 보상 모달이 닫힌 후 축하 팝업 표시
+          setTimeout(() => {
+            setShowCongratulationModal(true);
+          }, 500);
+        }
+      } catch (e) {
+        console.warn('[Tutorial] 라이브픽 참여 튜토리얼 업데이트 실패:', e);
+      }
+
       console.log('✅ 기본 보상 지급 완료 (10P)');
     } catch (error: any) {
       console.error('❌ 보상 지급 실패:', error);
@@ -418,27 +436,33 @@ export default function QuestionDetailScreen() {
 
   // 광고 시청 후 게임하기 선택
   const handleWatchAd = async () => {
+    console.log('🟢 [LivePick] handleWatchAd 함수 호출됨');
+    console.log('📊 [LivePick] rewardedAdRef.current:', rewardedAdRef.current ? '존재함' : 'null');
+    console.log('📊 [LivePick] adLoaded:', adLoaded);
+    
+    try {
     // 모달을 먼저 닫기
     setShowParticipateModal(false);
+      console.log('✅ [LivePick] 모달 닫기 완료');
     
-    // iOS 모달이 완전히 dismiss되기를 충분히 대기
-    // React Native Modal의 fade 애니메이션(350ms) + iOS view controller dismiss 완료 대기
-    // iOS에서는 모달이 완전히 해제되기까지 최대 800ms 정도 걸릴 수 있음
+      // iOS 모달이 완전히 dismiss되기를 대기 (view controller dismiss 완료)
+      console.log('⏳ [LivePick] 모달 dismiss 대기 시작 (1000ms)...');
     await new Promise<void>((resolve) => {
-      // 먼저 InteractionManager로 애니메이션 완료 대기
-      InteractionManager.runAfterInteractions(() => {
-        // iOS 모달 dismiss 완료를 위한 추가 대기
-        // fade 애니메이션(350ms) + view controller 해제 시간(400ms) = 총 750ms
         setTimeout(() => {
           resolve();
-        }, 800);
+        }, 1000);
       });
-    });
+      console.log('✅ [LivePick] 모달 dismiss 대기 완료');
     
     if (!rewardedAdRef.current) {
       console.log('⏳ [LivePick] 광고 객체가 없음');
       Alert.alert('광고 준비 중', '광고를 불러오는 중입니다. 잠시만 기다려주세요.');
       setIsLoadingAd(true);
+        return;
+      }
+    } catch (error: any) {
+      console.error('❌ [LivePick] handleWatchAd 에러:', error);
+      Alert.alert('오류', '광고를 표시하는 중 오류가 발생했습니다.');
       return;
     }
 
@@ -527,6 +551,13 @@ export default function QuestionDetailScreen() {
       
       // 사다리 게임 보상 지급
       await receiveLadderReward(user.uid, question.id, points);
+
+      // 튜토리얼 상태 업데이트 (라이브픽 참여)
+      try {
+        await updateTutorialProgress(user.uid, 'livepickParticipated');
+      } catch (e) {
+        console.warn('[Tutorial] 라이브픽 참여 튜토리얼 업데이트 실패:', e);
+      }
       console.log('✅ [LivePick] 사다리 게임 보상 지급 완료:', points, 'P');
       
       // 사다리 게임 모달 닫기 (2초 후)
@@ -557,6 +588,11 @@ export default function QuestionDetailScreen() {
   // 보상 모달 닫기
   const handleRewardModalClose = () => {
     setShowRewardModal(false);
+    // 기본 보상 (10P)을 받았고, 사다리 보상이 아닌 경우에만 축하 팝업 표시
+    // (사다리 게임은 광고 시청 후이므로 제외)
+    if (!isLadderReward && rewardPoints === 10) {
+      // 잠시 후 축하 팝업 표시 체크는 이미 기본 보상 함수에서 처리됨
+    }
   };
 
   // 신고 버튼 클릭
@@ -654,11 +690,11 @@ export default function QuestionDetailScreen() {
                 size={18} 
                 color={todayParticipationCount >= 4 ? colors.warning : colors.textSecondary} 
               />
-            <Text style={[
+              <Text style={[
                 styles.dailyLimitText,
                 todayParticipationCount >= 4 && styles.dailyLimitTextWarning
               ]}>
-                오늘 남은 참여: {Math.max(0, 50 - todayParticipationCount)}/50회
+                오늘 남은 참여: {Math.max(0, 4 - todayParticipationCount)}/4회
               </Text>
             </View>
             {todayParticipationCount >= 4 && (
@@ -806,6 +842,51 @@ export default function QuestionDetailScreen() {
         onClose={handleRewardModalClose}
       />
 
+      {/* 축하 팝업 (라이브픽 참여 완료) */}
+      {showCongratulationModal && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center', zIndex: 1100 }}>
+          <View style={{ backgroundColor: 'white', borderRadius: 20, padding: 28, alignItems: 'center', shadowColor: colors.shadow, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 16, elevation: 8, marginHorizontal: 40 }}>
+            <View style={{ width: 60, height: 60, backgroundColor: '#E3F2FD', borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
+              <Ionicons name="trophy" size={32} color={colors.primary} />
+            </View>
+            <Text style={{ fontSize: 20, fontWeight: '700', color: colors.primary, textAlign: 'center', marginBottom: 12 }}>첫 번째 참여와 보상을{'\n'}축하합니다! 🎉</Text>
+            <Text style={{ fontSize: 16, color: colors.text, textAlign: 'center', lineHeight: 24, marginBottom: 24 }}>이제 질문을 생성해 볼까요?</Text>
+            <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
+              <TouchableOpacity 
+                onPress={() => setShowCongratulationModal(false)} 
+                style={{ 
+                  flex: 1,
+                  backgroundColor: colors.surface, 
+                  borderRadius: 12, 
+                  paddingVertical: 14, 
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  alignItems: 'center'
+                }}
+              >
+                <Text style={{ fontSize: 16, color: colors.text, fontWeight: '600' }}>아니요</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                onPress={() => {
+                  setShowCongratulationModal(false);
+                  // 라이브픽 메인 페이지로 이동 (질문 생성 버튼이 있는 곳)
+                  router.push('/(tabs)/livepick');
+                }} 
+                style={{ 
+                  flex: 1,
+                  backgroundColor: colors.primary, 
+                  borderRadius: 12, 
+                  paddingVertical: 14,
+                  alignItems: 'center'
+                }}
+              >
+                <Text style={{ fontSize: 16, color: 'white', fontWeight: '600' }}>예</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
       {/* 신고 모달 */}
       <Modal
         visible={showReportModal}
@@ -946,7 +1027,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
-    paddingTop: 60,
+    paddingTop: 30,
     paddingBottom: 16,
     paddingHorizontal: 20,
     backgroundColor: colors.background,

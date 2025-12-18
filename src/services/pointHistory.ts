@@ -1,13 +1,12 @@
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
-import functionsModule from '@react-native-firebase/functions';
 import { PointHistory, PointHistoryReason } from '../types';
 
 const COLLECTION = 'point_history' as const;
 
 /**
  * 포인트 적립/소멸 내역을 기록하는 함수
- * Cloud Functions의 recordPointHistory를 호출합니다.
+ * Firestore에 직접 기록합니다.
  */
 export async function recordPointHistory(
   uid: string,
@@ -18,29 +17,25 @@ export async function recordPointHistory(
   try {
     console.log(`[PointHistory] 내역 기록 시작:`, { uid, amount, reason, description });
 
-    // 인증 토큰이 포함되도록 보장
+    // 인증 확인
     const currentUser = auth().currentUser;
     if (!currentUser) {
       console.warn('[PointHistory] 인증되지 않은 사용자, 내역 기록 생략');
       return;
     }
 
-    // 약간의 딜레이를 주어 토큰이 전파되도록 함
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Firestore에 직접 기록
+    await firestore()
+      .collection(COLLECTION)
+      .add({
+        uid,
+        amount,
+        reason,
+        description: description || null,
+        createdAt: firestore.FieldValue.serverTimestamp(),
+      });
 
-    const functions = functionsModule();
-    const recordPointHistoryFn = functions.httpsCallableFromUrl(
-      'https://asia-northeast3-today-balance-fa0a5.cloudfunctions.net/recordPointHistory'
-    );
-
-    const result = await recordPointHistoryFn({
-      uid,
-      amount,
-      reason,
-      description: description || null,
-    });
-
-    console.log(`[PointHistory] 내역 기록 완료:`, result.data);
+    console.log(`[PointHistory] 내역 기록 완료`);
   } catch (error: any) {
     console.error(`[PointHistory] 내역 기록 실패:`, error);
     console.error(`[PointHistory] 에러 상세:`, {

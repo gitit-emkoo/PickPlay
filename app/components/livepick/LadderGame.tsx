@@ -1,18 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, Dimensions, TouchableOpacity, Alert } from 'react-native';
-
-const START_OFFSET_Y = 30; // 시작점 오프셋 (높이 줄임)
-import colors from '../../../src/styles/colors';
+import { View, Text, StyleSheet, Animated, Dimensions, TouchableOpacity, Alert, LayoutChangeEvent } from 'react-native';
+import colors from '../../../src/styles/colors'; // 경로가 다를 경우 프로젝트에 맞게 수정하세요
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+// --- 고정 설정값 (수치 통일의 핵심) ---
+const LADDERS = 5;
+const HORIZONTAL_LINES = 5;
+const LINE_HEIGHT = 45; // 가로선 사이의 간격 (높이)
+const BALL_SIZE = 24;
+const VERTICAL_LINE_TOP = 48; // 세로선이 시작되는 top 위치
+const MIN_HORIZONTAL_BRIDGES = 6;
+
 interface LadderGameProps {
   visible: boolean;
-  onResult: (points: number) => void; // 결과 콜백 (보상 포인트)
+  onResult: (points: number) => void;
 }
 
-// 사다리 게임 보상 확률 테이블 (명령문 기준)
-// 10P(70%), 50P(20%), 100P(5%), 200P(3%), 300P(2%)
 const REWARD_PROBABILITIES = [
   { points: 10, probability: 0.7 },
   { points: 50, probability: 0.2 },
@@ -21,265 +25,158 @@ const REWARD_PROBABILITIES = [
   { points: 300, probability: 0.02 },
 ];
 
-// 확률 기반 보상 결정 함수
 const getRewardByProbability = (): number => {
   const random = Math.random();
   let cumulative = 0;
-  
   for (const reward of REWARD_PROBABILITIES) {
     cumulative += reward.probability;
-    if (random <= cumulative) {
-      return reward.points;
-    }
+    if (random <= cumulative) return reward.points;
   }
-  
-  // 기본값 (발생하지 않아야 함)
   return 10;
 };
-
-// 사다리 개수와 가로선 개수 (5개 보상에 맞춰 5개 사다리)
-const LADDERS = 5; // 5개의 사다리 (각 보상 하나씩)
-const HORIZONTAL_LINES = 5; // 5개의 가로선 (한 화면에 맞게 줄임)
-const MIN_HORIZONTAL_BRIDGES = 6; // 최소 가로선(노란색) 개수
 
 export default function LadderGame({ visible, onResult }: LadderGameProps) {
   const [result, setResult] = useState<number | null>(null);
   const [animating, setAnimating] = useState(false);
-  const [selectedLadder, setSelectedLadder] = useState<number>(0); // 선택된 사다리 인덱스
-  const [selectedTopIndex, setSelectedTopIndex] = useState<number | null>(null); // 상단 숫자 선택 인덱스
+  const [selectedTopIndex, setSelectedTopIndex] = useState<number | null>(null);
+  const [containerWidth, setContainerWidth] = useState(0); // 실제 렌더링 너비 저장
+  const [bottomRewards, setBottomRewards] = useState<(number | null)[]>(Array(LADDERS).fill(null)); // 하단 포인트 표시
+  const [winningIndex, setWinningIndex] = useState<number | null>(null); // 당첨된 인덱스
   
-  // 사다리 경로 애니메이션
   const ballPosition = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const ballOpacity = useRef(new Animated.Value(0)).current;
-  const ladderCoverOpacity = useRef(new Animated.Value(1)).current; // 사다리 가림막 투명도
-  
-  // 사다리 구조 (가로선 위치를 미리 결정)
-  // 가로선을 최소 6개 이상 그리고, 인접한 가로선이 겹치지 않게 제한
-  const generateLadderStructure = (): boolean[][] => {
-    const structure: boolean[][] = Array.from({ length: HORIZONTAL_LINES }, () => 
-      Array.from({ length: LADDERS - 1 }, () => false)
-    );
-    
-    // 가로선을 최소 6개 이상 배치
+  const ladderCoverOpacity = useRef(new Animated.Value(1)).current;
+
+  // 사다리 구조 생성 로직 (기존 유지)
+  const generateLadderStructure = () => {
+    const structure = Array.from({ length: HORIZONTAL_LINES }, () => Array(LADDERS - 1).fill(false));
     let bridgeCount = 0;
-    const minBridges = MIN_HORIZONTAL_BRIDGES;
-    
-    // 모든 가능한 위치 수집
-    const allPositions: Array<{ lineIndex: number; position: number }> = [];
-    for (let lineIndex = 0; lineIndex < HORIZONTAL_LINES; lineIndex++) {
-      for (let position = 0; position < LADDERS - 1; position++) {
-        allPositions.push({ lineIndex, position });
-      }
+    const allPositions: { r: number; c: number }[] = [];
+    for (let r = 0; r < HORIZONTAL_LINES; r++) {
+      for (let c = 0; c < LADDERS - 1; c++) allPositions.push({ r, c });
     }
-    
-    // 위치를 랜덤하게 섞기
-    for (let i = allPositions.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [allPositions[i], allPositions[j]] = [allPositions[j], allPositions[i]];
-    }
-    
-    // 최소 개수만큼 가로선 배치 (인접한 가로선이 겹치지 않도록)
-    for (const { lineIndex, position } of allPositions) {
-      if (bridgeCount >= minBridges) break;
-      
-      // 같은 레벨에서 인접한 가로선이 있는지 확인
-      const hasAdjacentLeft = position > 0 && structure[lineIndex][position - 1];
-      const hasAdjacentRight = position < LADDERS - 2 && structure[lineIndex][position + 1];
-      
-      // 인접한 가로선이 없으면 배치 가능
-      if (!hasAdjacentLeft && !hasAdjacentRight) {
-        structure[lineIndex][position] = true;
+    allPositions.sort(() => Math.random() - 0.5);
+
+    for (const { r, c } of allPositions) {
+      if (bridgeCount >= MIN_HORIZONTAL_BRIDGES) break;
+      if (!structure[r][c] && !structure[r][c-1] && !structure[r][c+1]) {
+        structure[r][c] = true;
         bridgeCount++;
       }
     }
-    
-    // 최소 개수에 못 미치면 추가 배치 (조건 완화)
-    if (bridgeCount < minBridges) {
-      for (const { lineIndex, position } of allPositions) {
-        if (bridgeCount >= minBridges) break;
-        if (!structure[lineIndex][position]) {
-          structure[lineIndex][position] = true;
-          bridgeCount++;
-        }
-      }
-    }
-    
     return structure;
   };
-  
-  const ladderStructure = useRef<boolean[][]>(generateLadderStructure()).current;
+
+  const ladderStructure = useRef(generateLadderStructure()).current;
 
   useEffect(() => {
     if (!visible) {
-      // 모달이 닫히면 상태 초기화
       setResult(null);
       setAnimating(false);
-      setSelectedLadder(0);
-       setSelectedTopIndex(null);
-      ballPosition.setValue({ x: 0, y: START_OFFSET_Y });
+      setSelectedTopIndex(null);
+      setBottomRewards(Array(LADDERS).fill(null));
+      setWinningIndex(null);
       ballOpacity.setValue(0);
-       ladderCoverOpacity.setValue(1); // 다시 가려놓기
+      ladderCoverOpacity.setValue(1);
     }
   }, [visible]);
 
+  // 컨테이너 너비가 측정되면 호출
+  const onLayout = (event: LayoutChangeEvent) => {
+    setContainerWidth(event.nativeEvent.layout.width);
+  };
+
   const startAnimation = () => {
-    // 숫자 선택 안 했으면 안내
     if (selectedTopIndex === null) {
-      Alert.alert('안내', '위에서 1~5 중 하나의 숫자를 먼저 선택해 주세요.');
+      Alert.alert('안내', '위에서 숫자를 먼저 선택해 주세요.');
       return;
     }
 
     setAnimating(true);
-    setResult(null);
-    
-    // 확률 기반 보상 결정
     const finalReward = getRewardByProbability();
+    const columnWidth = containerWidth / LADDERS;
     
-    // 사용자가 선택한 상단 위치에서 시작
-    const startLadder = selectedTopIndex;
-    setSelectedLadder(startLadder);
-    
-    // 공 위치 계산을 위한 상수들
-    const ballSize = 24;
-    // ladderContainer는 width: '80%'이고 중앙 정렬됨
-    // 실제 너비를 약간 줄여서 정확한 위치 맞춤 (75px 보정)
-    const ladderAreaWidth = SCREEN_WIDTH * 0.8 - 75; // ladderContainer의 너비 (80%에서 75px 빼기)
-    const columnWidth = ladderAreaWidth / LADDERS; // 각 컬럼의 너비
-    const lineHeight = 28; // 한 칸 세로 이동 간격 (애니메이션 전용)
-
-    // Y 위치 계산용 상수들 (ladderContainer 내부 기준)
-    // 상단 원: top=0, height=40
-    const startPointTop = 0;
-    const startPointHeight = 40;
-    const startPointCenterY = startPointTop + startPointHeight / 2;
-
-    // 세로선: top=48 (시작점 40px + 마진 8px)
-    const verticalLineTop = 48; // 세로선 시작 위치
-
-    // 하단 원: top = verticalLineTop + HORIZONTAL_LINES * lineHeight + 8, height=45
-    const endPointTop = verticalLineTop + HORIZONTAL_LINES * lineHeight + 8;
-    const endPointHeight = 45;
-    const endPointCenterY = endPointTop + endPointHeight / 2;
-    
-    // 공 위치 초기화 (시작점) - ladderContainer 내부 기준으로 계산
-    // 각 컬럼의 중심에 공의 중심이 오도록: 컬럼 시작점 + 컬럼 중심 - 공 크기/2
-    const startX = startLadder * columnWidth + columnWidth / 2 - ballSize / 2;
-    // 시작 위치를 살짝 위로 올려서(10px) 세로선과 더 자연스럽게 맞춤
-    const startY = START_OFFSET_Y + startPointCenterY - ballSize / 2 - 10; // 시작점 원의 중심보다 10px 위에서 시작
-    
+    // 1. 공 초기 위치 설정 (선택한 숫자 바로 아래)
+    const startX = selectedTopIndex * columnWidth + (columnWidth / 2 - BALL_SIZE / 2);
+    const startY = 10; // 상단 영역 안쪽
     ballPosition.setValue({ x: startX, y: startY });
-    ballOpacity.setValue(0);
 
-    // 사다리 가림막 서서히 걷기
-    Animated.timing(ladderCoverOpacity, {
-      toValue: 0,
-      duration: 400,
-      useNativeDriver: false,
-    }).start();
+    Animated.parallel([
+      Animated.timing(ladderCoverOpacity, { toValue: 0, duration: 400, useNativeDriver: false }),
+      Animated.timing(ballOpacity, { toValue: 1, duration: 300, useNativeDriver: false })
+    ]).start();
 
-    // 공이 나타나는 애니메이션 (useNativeDriver: false로 통일)
-    Animated.timing(ballOpacity, {
-      toValue: 1,
-      duration: 300,
-      useNativeDriver: false, // ballPosition과 동일하게 false로 변경
-    }).start();
+    let currentLadder = selectedTopIndex;
 
-    // 사다리를 따라 내려가는 로직
-    // 올바른 사다리 게임 알고리즘: 각 레벨에서 가로선을 만나면 반드시 그 방향으로 이동
-    let currentLadder = startLadder;
-
-    // 사다리 게임 알고리즘: 각 가로선 레벨을 순차적으로 처리
-    // 0번 레벨부터 HORIZONTAL_LINES-1번 레벨까지 처리
     const animateStep = (levelIndex: number) => {
-      // 모든 레벨을 처리 완료 → 하단 결과 포인트까지 마지막 세로 이동
+      // 모든 층을 내려왔을 때: 하단 보상 지점으로 이동
       if (levelIndex >= HORIZONTAL_LINES) {
-        // 현재 컬럼 기준으로 하단 결과 포인트 중심까지 내려가기
-        const finalX = currentLadder * columnWidth + columnWidth / 2 - ballSize / 2;
-        const finalY = START_OFFSET_Y + endPointCenterY - ballSize / 2;
-
+        const finalY = VERTICAL_LINE_TOP + (HORIZONTAL_LINES * LINE_HEIGHT) + 15;
         Animated.timing(ballPosition, {
-          toValue: {
-            x: finalX,
-            y: finalY,
-          },
+          toValue: { x: currentLadder * columnWidth + (columnWidth / 2 - BALL_SIZE / 2), y: finalY },
           duration: 400,
           useNativeDriver: false,
         }).start(() => {
-          // 확률 기반으로 이미 결정된 finalReward 사용
           setResult(finalReward);
           setAnimating(false);
+          setWinningIndex(currentLadder);
           
-          setTimeout(() => {
-            onResult(finalReward);
-          }, 2000);
+          // 하단 포인트 표시 설정: 당첨된 인덱스는 실제 포인트, 나머지는 랜덤
+          const availableRewards = [10, 50, 100, 200, 300];
+          const shuffled = [...availableRewards].sort(() => Math.random() - 0.5);
+          const newBottomRewards: (number | null)[] = Array(LADDERS).fill(null);
+          
+          // 당첨된 인덱스에 실제 포인트 설정
+          newBottomRewards[currentLadder] = finalReward;
+          
+          // 나머지 인덱스에 랜덤 포인트 배치
+          let rewardIndex = 0;
+          for (let i = 0; i < LADDERS; i++) {
+            if (newBottomRewards[i] === null) {
+              newBottomRewards[i] = shuffled[rewardIndex % shuffled.length];
+              rewardIndex++;
+            }
+          }
+          
+          setBottomRewards(newBottomRewards);
+          setTimeout(() => onResult(finalReward), 1500);
         });
         return;
       }
 
-      // 현재 레벨의 Y 위치 계산
-      // verticalLine의 top: 48 (시작점 40px + 마진 8px)
-      // 각 가로선 레벨은 lineContainer의 중심에 위치 (lineHeight 기준)
-      const levelY = START_OFFSET_Y + verticalLineTop + levelIndex * lineHeight + lineHeight / 2 - ballSize / 2;
-      
-      // X 위치 계산 - 컬럼의 중심에 공의 중심이 오도록 (ladderContainer 내부 기준)
-      const currentX = currentLadder * columnWidth + columnWidth / 2 - ballSize / 2;
-      
-      // 먼저 현재 레벨까지 세로로 내려가기
+      // 현재 층의 Y좌표 (가로선이 있는 위치)
+      const targetY = VERTICAL_LINE_TOP + (levelIndex * LINE_HEIGHT) + (LINE_HEIGHT / 2) - (BALL_SIZE / 2);
+      const currentX = currentLadder * columnWidth + (columnWidth / 2 - BALL_SIZE / 2);
+
+      // 세로 이동
       Animated.timing(ballPosition, {
-        toValue: {
-          x: currentX,
-          y: levelY,
-        },
+        toValue: { x: currentX, y: targetY },
         duration: 400,
         useNativeDriver: false,
       }).start(() => {
-        // 현재 레벨에서 가로선 확인
-        // ladderStructure[levelIndex][position]은 position과 position+1 사이의 가로선
-        // currentLadder 위치에서:
-        // - 오른쪽 가로선: ladderStructure[levelIndex][currentLadder] (currentLadder ↔ currentLadder+1)
-        // - 왼쪽 가로선: ladderStructure[levelIndex][currentLadder - 1] (currentLadder-1 ↔ currentLadder)
-        const hasRightBridge = currentLadder < LADDERS - 1 && ladderStructure[levelIndex]?.[currentLadder];
-        const hasLeftBridge = currentLadder > 0 && ladderStructure[levelIndex]?.[currentLadder - 1];
-        
-        if (hasRightBridge) {
-          // 오른쪽 가로선이 있으면 오른쪽으로 이동 (반드시 이동)
-          currentLadder += 1;
-          const moveX = currentLadder * columnWidth + columnWidth / 2 - ballSize / 2;
+        // 가로선 체크
+        const hasRight = currentLadder < LADDERS - 1 && ladderStructure[levelIndex][currentLadder];
+        const hasLeft = currentLadder > 0 && ladderStructure[levelIndex][currentLadder - 1];
+
+        if (hasRight || hasLeft) {
+          if (hasRight) currentLadder++;
+          else currentLadder--;
+
+          const nextX = currentLadder * columnWidth + (columnWidth / 2 - BALL_SIZE / 2);
+          // 가로 이동
           Animated.timing(ballPosition, {
-            toValue: {
-              x: moveX,
-              y: levelY,
-            },
+            toValue: { x: nextX, y: targetY },
             duration: 300,
             useNativeDriver: false,
-          }).start(() => {
-            // 다음 레벨로
-            setTimeout(() => animateStep(levelIndex + 1), 100);
-          });
-        } else if (hasLeftBridge) {
-          // 왼쪽 가로선이 있으면 왼쪽으로 이동 (반드시 이동)
-          currentLadder -= 1;
-          const moveX = currentLadder * columnWidth + columnWidth / 2 - ballSize / 2;
-          Animated.timing(ballPosition, {
-            toValue: {
-              x: moveX,
-              y: levelY,
-            },
-            duration: 300,
-            useNativeDriver: false,
-          }).start(() => {
-            // 다음 레벨로
-            setTimeout(() => animateStep(levelIndex + 1), 100);
-          });
+          }).start(() => animateStep(levelIndex + 1));
         } else {
-          // 가로선 없음 - 바로 다음 레벨로 (세로로만 내려감)
-          setTimeout(() => animateStep(levelIndex + 1), 100);
+          // 가로선 없으면 바로 다음 층으로
+          animateStep(levelIndex + 1);
         }
       });
     };
 
-    // 애니메이션 시작
-    setTimeout(() => animateStep(0), 500);
+    setTimeout(() => animateStep(0), 600);
   };
 
   if (!visible) return null;
@@ -288,353 +185,106 @@ export default function LadderGame({ visible, onResult }: LadderGameProps) {
     <View style={styles.container}>
       <Text style={styles.title}>🎯 사다리 게임</Text>
 
-      {/* 상단 숫자 선택 (1~5) */}
+      {/* 상단 선택 */}
       <View style={styles.topChoicesContainer}>
-        {Array.from({ length: LADDERS }).map((_, index) => {
-          const isSelected = selectedTopIndex === index;
-          return (
-            <TouchableOpacity
-              key={index}
-              style={[
-                styles.topChoiceButton,
-                isSelected && styles.topChoiceButtonSelected,
-              ]}
-              onPress={() => setSelectedTopIndex(index)}
-              activeOpacity={0.8}
-            >
-              <Text
-                style={[
-                  styles.topChoiceText,
-                  isSelected && styles.topChoiceTextSelected,
-                ]}
-              >
-                {index + 1}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+        {Array.from({ length: LADDERS }).map((_, i) => (
+          <TouchableOpacity
+            key={i}
+            style={[styles.topChoiceButton, selectedTopIndex === i && styles.topChoiceButtonSelected]}
+            onPress={() => !animating && setSelectedTopIndex(i)}
+          >
+            <Text style={[styles.topChoiceText, selectedTopIndex === i && styles.topChoiceTextSelected]}>{i + 1}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
-      {/* 사다리 그리기 */}
-      <View style={styles.ladderContainer}>
-        {Array.from({ length: LADDERS }).map((_, ladderIndex) => (
-          <View key={ladderIndex} style={styles.ladderColumn}>
-            {/* 상단 시작점 - 위에 별도 숫자 선택이 있으므로 투명 원으로 정렬만 맞춤 */}
+      {/* 사다리 본체 */}
+      <View style={styles.ladderContainer} onLayout={onLayout}>
+        {Array.from({ length: LADDERS }).map((_, lIdx) => (
+          <View key={lIdx} style={styles.ladderColumn}>
             <View style={styles.startPointEmpty} />
-            
-            {/* 세로선 */}
             <View style={styles.verticalLine} />
-            
-            {/* 가로선과 세로선 조합 */}
-            {Array.from({ length: HORIZONTAL_LINES }).map((_, lineIndex) => {
-              const hasLeftLine = ladderStructure[lineIndex]?.[ladderIndex - 1];
-              const hasRightLine = ladderStructure[lineIndex]?.[ladderIndex];
-              
-              return (
-                <View key={lineIndex} style={styles.lineContainer}>
-                  {hasLeftLine && (
-                    <View style={[styles.horizontalLine, styles.horizontalLineLeft]} />
-                  )}
-                  <View style={styles.verticalSegment} />
-                  {hasRightLine && (
-                    <View style={[styles.horizontalLine, styles.horizontalLineRight]} />
-                  )}
-                </View>
-              );
-            })}
-            
-            {/* 하단 결과 포인트 - 각 사다리에 대응되는 포인트 표시 */}
-            <View style={styles.endPoint}>
-              <Text style={styles.endPointText}>
-                {REWARD_PROBABILITIES[ladderIndex].points}P
+            {Array.from({ length: HORIZONTAL_LINES }).map((_, rIdx) => (
+              <View key={rIdx} style={styles.lineContainer}>
+                {ladderStructure[rIdx][lIdx - 1] && <View style={[styles.horizontalLine, styles.horizontalLineLeft]} />}
+                <View style={styles.verticalSegment} />
+                {ladderStructure[rIdx][lIdx] && <View style={[styles.horizontalLine, styles.horizontalLineRight]} />}
+              </View>
+            ))}
+            <View style={[
+              styles.endPoint,
+              result !== null && winningIndex === lIdx && styles.endPointWinning
+            ]}>
+              <Text style={[
+                styles.endPointText,
+                result !== null && winningIndex === lIdx && styles.endPointTextWinning
+              ]}>
+                {bottomRewards[lIdx] !== null ? `${bottomRewards[lIdx]}P` : '?'}
               </Text>
             </View>
           </View>
         ))}
-        
-        {/* 애니메이션 공 */}
-        <Animated.View
-          style={[
-            styles.ball,
-            {
-              opacity: ballOpacity,
-              transform: [
-                { translateX: ballPosition.x },
-                { translateY: ballPosition.y }, // y 값에 오프셋이 이미 포함됨
-              ],
-            },
-          ]}
-        >
+
+        {/* 공 애니메이션 */}
+        <Animated.View style={[styles.ball, { opacity: ballOpacity, transform: ballPosition.getTranslateTransform() }]}>
           <View style={styles.ballInner} />
         </Animated.View>
 
-        {/* 사다리 가림막 + 안내 텍스트 */}
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.ladderCover,
-            { opacity: ladderCoverOpacity },
-          ]}
-        >
-          <View style={styles.coverMessageContainer}>
-            <Text style={styles.coverMessageText}>
-              1~5 중 한 가지 숫자를 선택한 후{'\n'}시작하기 버튼을 눌러주세요
-            </Text>
-          </View>
+        {/* 가림막 */}
+        <Animated.View pointerEvents="none" style={[styles.ladderCover, { opacity: ladderCoverOpacity }]}>
+          <Text style={styles.coverMessageText}>행운의 숫자를 선택하세요!</Text>
         </Animated.View>
       </View>
 
-      {/* 시작하기 버튼 - 애니메이션이 시작되지 않았을 때만 표시 */}
       {!animating && result === null && (
-        <TouchableOpacity
-          style={styles.startButton}
-          onPress={startAnimation}
-          activeOpacity={0.8}
-        >
+        <TouchableOpacity style={styles.startButton} onPress={startAnimation}>
           <Text style={styles.startButtonText}>시작하기 🎯</Text>
         </TouchableOpacity>
       )}
 
-      {/* 결과 표시 */}
       {result !== null && (
         <View style={styles.resultContainer}>
-          <Text style={styles.resultPoints}>{result}P</Text>
-          <Text style={styles.resultLabel}>획득!</Text>
+          <Text style={styles.resultPoints}>{result}P 획득!</Text>
         </View>
-      )}
-
-      {/* 진행 중 표시 */}
-      {animating && result === null && (
-        <Text style={styles.loadingText}>사다리를 타는 중... ⬇️</Text>
       )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-    alignItems: 'center',
-    width: '100%',
+  container: { padding: 16, alignItems: 'center', width: '100%' },
+  title: { fontSize: 22, fontWeight: '700', color: '#333', marginBottom: 16 },
+  topChoicesContainer: { flexDirection: 'row', width: '85%', marginBottom: 12 },
+  topChoiceButton: { flex: 1, marginHorizontal: 4, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: '#ddd', backgroundColor: '#fff', alignItems: 'center' },
+  topChoiceButtonSelected: { backgroundColor: '#4A90E2', borderColor: '#4A90E2' },
+  topChoiceText: { fontSize: 16, fontWeight: '600', color: '#666' },
+  topChoiceTextSelected: { color: '#fff' },
+  ladderContainer: { flexDirection: 'row', width: '85%', position: 'relative', minHeight: 320 },
+  ladderColumn: { flex: 1, alignItems: 'center' },
+  startPointEmpty: { height: 40, marginBottom: 8 },
+  verticalLine: { 
+    width: 3, 
+    backgroundColor: '#4A90E2', 
+    height: HORIZONTAL_LINES * LINE_HEIGHT + 15, 
+    position: 'absolute', 
+    top: VERTICAL_LINE_TOP, 
+    zIndex: 0 
   },
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: 16,
-  },
-  topChoicesContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '80%', // 사다리와 비슷한 너비
-    alignSelf: 'center', // 중앙 정렬
-    marginBottom: 12,
-  },
-  topChoiceButton: {
-    flex: 1,
-    marginHorizontal: 4,
-    paddingVertical: 8,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  topChoiceButtonSelected: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  topChoiceText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  topChoiceTextSelected: {
-    color: 'white',
-  },
-  ladderContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-    width: '80%', // 화면의 80% 너비만 사용
-    alignSelf: 'center', // 중앙 정렬
-    position: 'relative',
-    minHeight: 280, // 높이 줄임 (600 -> 280)
-  },
-  ladderColumn: {
-    flex: 1,
-    alignItems: 'center',
-    position: 'relative',
-  },
-  startPoint: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-    borderWidth: 2,
-    borderColor: colors.accent,
-  },
-  startPointText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: 'white',
-  },
-  startPointEmpty: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-    // 투명하지만 공간은 차지하도록
-  },
-  verticalLine: {
-    width: 3, // 두께 줄임 (6 -> 3)
-    backgroundColor: colors.primary,
-    height: HORIZONTAL_LINES * 37 + 16, // 높이 계산 (시각적 라인 높이 37 기준)
-    position: 'absolute',
-    top: 48,
-    borderRadius: 2,
-  },
-  lineContainer: {
-    width: '100%',
-    height: 37, // 높이 (시각적 라인 높이 37 기준)
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  verticalSegment: {
-    width: 3, // 두께 줄임 (6 -> 3)
-    height: 37, // 높이 (시각적 라인 높이 37 기준)
-    backgroundColor: colors.primary,
-    borderRadius: 2,
-  },
-  horizontalLine: {
-    position: 'absolute',
-    height: 3, // 두께 줄임 (6 -> 3)
-    backgroundColor: colors.accent,
-    zIndex: 1,
-    borderRadius: 2,
-  },
-  horizontalLineLeft: {
-    width: '100%',
-    right: '50%',
-  },
-  horizontalLineRight: {
-    width: '100%',
-    left: '50%',
-  },
-  endPoint: {
-    width: 45,
-    height: 45,
-    borderRadius: 22.5,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-    borderWidth: 2,
-    borderColor: colors.border,
-  },
-  endPointText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  ball: {
-    position: 'absolute',
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 6,
-    zIndex: 10,
-  },
-  ballInner: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: 'white',
-  },
-  ladderCover: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: colors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  coverMessageContainer: {
-    padding: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  coverMessageText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    textAlign: 'center',
-  },
-  resultContainer: {
-    alignItems: 'center',
-    marginTop: 16,
-    padding: 16,
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: colors.accent,
-  },
-  resultText: {
-    fontSize: 48,
-    marginBottom: 6,
-  },
-  resultPoints: {
-    fontSize: 36,
-    fontWeight: '700',
-    color: colors.accent,
-    marginBottom: 4,
-  },
-  resultLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  loadingText: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginTop: 12,
-    fontWeight: '600',
-  },
-  startButton: {
-    backgroundColor: colors.accent,
-    borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 48,
-    marginTop: 20,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  startButtonText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: 'white',
-  },
+  lineContainer: { width: '100%', height: LINE_HEIGHT, justifyContent: 'center', alignItems: 'center', position: 'relative' },
+  verticalSegment: { width: 3, height: LINE_HEIGHT, backgroundColor: '#4A90E2' },
+  horizontalLine: { position: 'absolute', height: 3, backgroundColor: '#F5A623', width: '100%', zIndex: 1 },
+  horizontalLineLeft: { right: '50%' },
+  horizontalLineRight: { left: '50%' },
+  endPoint: { width: 45, height: 45, borderRadius: 23, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', marginTop: 10, borderWidth: 2, borderColor: '#ddd' },
+  endPointWinning: { borderColor: '#F5A623', borderWidth: 3, backgroundColor: '#FFF9E6' },
+  endPointText: { fontSize: 11, fontWeight: 'bold' },
+  endPointTextWinning: { color: '#F5A623', fontSize: 12, fontWeight: 'bold' },
+  ball: { position: 'absolute', width: BALL_SIZE, height: BALL_SIZE, borderRadius: BALL_SIZE/2, backgroundColor: '#F5A623', zIndex: 10, justifyContent: 'center', alignItems: 'center' },
+  ballInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#fff' },
+  ladderCover: { ...StyleSheet.absoluteFillObject, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', zIndex: 20 },
+  coverMessageText: { fontSize: 15, color: '#888', fontWeight: '500' },
+  startButton: { backgroundColor: '#F5A623', paddingVertical: 15, paddingHorizontal: 40, borderRadius: 30, marginTop: 20 },
+  startButtonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  resultContainer: { marginTop: 20, padding: 15, backgroundColor: '#f0f9ff', borderRadius: 10, borderWidth: 1, borderColor: '#4A90E2' },
+  resultPoints: { fontSize: 24, fontWeight: 'bold', color: '#4A90E2' }
 });
-

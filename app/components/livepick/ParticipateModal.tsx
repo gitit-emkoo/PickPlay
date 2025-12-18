@@ -64,7 +64,10 @@ export default function ParticipateModal({
             {/* 광고 시청 후 게임 버튼 */}
             <TouchableOpacity
               style={[styles.button, styles.gameButton]}
-              onPress={onWatchAd}
+              onPress={() => {
+                console.log('🔵 [ParticipateModal] "광고 보고 더 받기" 버튼 클릭됨');
+                onWatchAd();
+              }}
               activeOpacity={0.7}
             >
               <Ionicons name="gift" size={24} color="white" />

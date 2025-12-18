@@ -150,6 +150,12 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
     streakCount: 0,
     lastAnswerDate: 0,
     nickname: generateRandomNickname(),
+    tutorial: {
+      mainAnswered: false,
+      livepickParticipated: false,
+      livepickCreated: false,
+      rewardGiven500: false,
+    },
   };
 
   await userRef.set(newUserData);

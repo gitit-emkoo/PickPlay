@@ -335,6 +335,7 @@ export const recordPointHistory = functions
       'majority_reward',
       'ad_bonus',
       'livepick_question_creation',
+      'tutorial_reward',
       'manual',
       'etc',
     ];
@@ -485,12 +486,33 @@ export const dailyLivePickRewardScheduler = functions
       }
       
       // 최고 질문에 추가 보상 5,000P 지급
-      if (topQuestionId && maxParticipantCount > 0) {
+      // 주의: 유저 수가 충분히 많아질 때까지 비활성화 (소수 독식 방지)
+      // 활성화 조건: 최고 질문의 참여자 수가 100명 이상일 때만 지급
+      const MIN_PARTICIPANTS_FOR_TOP_REWARD = 100;
+      if (topQuestionId && maxParticipantCount >= MIN_PARTICIPANTS_FOR_TOP_REWARD) {
         const topQuestion = questionRewards.find(r => r.questionId === topQuestionId);
         if (topQuestion) {
           topQuestion.reward += 5000; // 추가 보상
           console.log(`[dailyLivePickRewardScheduler] 최고 질문 추가 보상: ${topQuestionId}, 참여자 수: ${maxParticipantCount}`);
         }
+      } else if (topQuestionId && maxParticipantCount > 0) {
+        console.log(`[dailyLivePickRewardScheduler] 최고 질문 보상 스킵: 참여자 수 부족 (${maxParticipantCount}명 < ${MIN_PARTICIPANTS_FOR_TOP_REWARD}명)`);
+      }
+      
+      // ============================================
+      // 라이브픽 보상 체계 비활성화 (유저 수 부족으로 인한 부담 방지)
+      // 활성화하려면 ENABLE_LIVEPICK_REWARDS를 true로 변경
+      // ============================================
+      const ENABLE_LIVEPICK_REWARDS = false;
+      
+      if (!ENABLE_LIVEPICK_REWARDS) {
+        console.log(`[dailyLivePickRewardScheduler] 라이브픽 보상 체계 비활성화됨. 계산된 보상: ${questionRewards.length}개 질문`);
+        console.log(`[dailyLivePickRewardScheduler] 보상 상세:`, questionRewards.map(r => ({
+          questionId: r.questionId,
+          participantCount: r.participantCount,
+          reward: r.reward
+        })));
+        return; // 보상 지급 없이 종료
       }
       
       // 모든 보상 지급 및 알림 기록 (배치 처리)
@@ -765,6 +787,106 @@ export const sendInactiveUserNotifications = functions
     } catch (error) {
       console.error('[sendInactiveUserNotifications] 오류:', error);
       throw error;
+    }
+  });
+
+/**
+ * 튜토리얼 3개 미션 완료 시 500P를 지급하는 Callable Function
+ */
+export const completeTutorialReward = functions
+  .region('asia-northeast3')
+  .https
+  .onCall(async (data, context) => {
+    // 인증 확인
+    if (!context.auth) {
+      throw new functions.https.HttpsError(
+        'unauthenticated',
+        '사용자가 인증되지 않았습니다.'
+      );
+    }
+
+    const { uid } = data;
+
+    // 파라미터 검증
+    if (!uid) {
+      throw new functions.https.HttpsError(
+        'invalid-argument',
+        '필수 파라미터가 누락되었습니다: uid'
+      );
+    }
+
+    // 본인만 호출 가능
+    if (context.auth.uid !== uid) {
+      throw new functions.https.HttpsError(
+        'permission-denied',
+        '본인의 튜토리얼 보상만 받을 수 있습니다.'
+      );
+    }
+
+    try {
+      const userRef = admin.firestore().collection('users').doc(uid);
+      const userDoc = await userRef.get();
+
+      if (!userDoc.exists) {
+        throw new functions.https.HttpsError(
+          'not-found',
+          '사용자를 찾을 수 없습니다.'
+        );
+      }
+
+      const userData = userDoc.data() as any;
+      const tutorial = userData.tutorial || {
+        mainAnswered: false,
+        livepickParticipated: false,
+        livepickCreated: false,
+        rewardGiven500: false,
+      };
+
+      // 이미 보상을 받았으면 중복 지급 방지
+      if (tutorial.rewardGiven500) {
+        console.log('[completeTutorialReward] 이미 보상을 받은 사용자:', uid);
+        return { success: true, alreadyGiven: true };
+      }
+
+      // 3개 미션이 모두 완료되었는지 확인
+      if (
+        !tutorial.mainAnswered ||
+        !tutorial.livepickParticipated ||
+        !tutorial.livepickCreated
+      ) {
+        throw new functions.https.HttpsError(
+          'failed-precondition',
+          '아직 모든 미션을 완료하지 않았습니다.'
+        );
+      }
+
+      // 포인트 지급 및 튜토리얼 상태 업데이트
+      await userRef.update({
+        points: admin.firestore.FieldValue.increment(500),
+        'tutorial.rewardGiven500': true,
+      });
+
+      // 포인트 내역 기록
+      const historyRef = admin.firestore().collection('point_history').doc();
+      await historyRef.set({
+        uid,
+        amount: 500,
+        reason: 'tutorial_reward',
+        description: '튜토리얼 완료 보상',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      console.log('[completeTutorialReward] 500P 지급 완료', { uid });
+      return { success: true, points: 500 };
+    } catch (error: any) {
+      console.error('[completeTutorialReward] 보상 지급 실패:', error);
+      if (error instanceof functions.https.HttpsError) {
+        throw error;
+      }
+      throw new functions.https.HttpsError(
+        'internal',
+        '보상 지급에 실패했습니다.'
+      );
     }
   });
 

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, Modal } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../../../src/styles/colors';
 import { watchAuth } from '../../../src/services/firebase';
 import { createLivePickQuestion } from '../../../src/services/livepick';
+import { getTutorialStatus } from '../../../src/services/tutorial';
 
 export default function CreateQuestionScreen() {
   const router = useRouter();
@@ -15,7 +16,16 @@ export default function CreateQuestionScreen() {
   const [category, setCategory] = useState<'일상' | '연애' | '가치관' | '엔터테인먼트' | '상상'>('일상');
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showTutorialCompleteModal, setShowTutorialCompleteModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createdQuestionId, setCreatedQuestionId] = useState<string | null>(null);
+  const [tutorialStatus, setTutorialStatus] = useState<{
+    mainAnswered: boolean;
+    livepickParticipated: boolean;
+    livepickCreated: boolean;
+    rewardGiven500: boolean;
+    allCompleted: boolean;
+  } | null>(null);
 
   const CATEGORIES: Array<'일상' | '연애' | '가치관' | '엔터테인먼트' | '상상'> = ['일상', '연애', '가치관', '엔터테인먼트', '상상'];
   
@@ -24,11 +34,33 @@ export default function CreateQuestionScreen() {
 
   // 사용자 인증 확인
   useEffect(() => {
-    const unsubscribe = watchAuth((user) => {
+    const unsubscribe = watchAuth(async (user) => {
       setUser(user);
+      if (user) {
+        // 튜토리얼 상태 로드
+        try {
+          const status = await getTutorialStatus(user.uid);
+          setTutorialStatus(status);
+        } catch (e) {
+          console.warn('[Tutorial] 튜토리얼 상태 로드 실패:', e);
+        }
+      }
     });
     return unsubscribe;
   }, []);
+
+  // 화면이 포커스될 때마다 튜토리얼 상태 갱신
+  useFocusEffect(
+    React.useCallback(() => {
+      if (user) {
+        getTutorialStatus(user.uid).then(status => {
+          setTutorialStatus(status);
+        }).catch(e => {
+          console.warn('[Tutorial] 튜토리얼 상태 갱신 실패:', e);
+        });
+      }
+    }, [user])
+  );
 
   // 포인트 소멸 확인 모달 표시
   const handleSubmitPress = () => {
@@ -62,7 +94,7 @@ export default function CreateQuestionScreen() {
 
     try {
       // Firebase에 질문 생성 (포인트 차감 포함)
-      const questionId = await createLivePickQuestion(
+      const result = await createLivePickQuestion(
         user.uid,
         title.trim(),
         option1.trim(),
@@ -70,23 +102,30 @@ export default function CreateQuestionScreen() {
         category
       );
 
-      console.log('✅ 질문 생성 성공:', questionId);
+      console.log('✅ 질문 생성 성공:', result.questionId);
 
       // 성공적으로 등록되었으므로 입력값 초기화
       setTitle('');
       setOption1('');
       setOption2('');
       setCategory('일상');
+      setCreatedQuestionId(result.questionId);
 
+      // 튜토리얼 완료 시 축하 팝업 표시
+      if (result.tutorialCompleted) {
+        setShowTutorialCompleteModal(true);
+      } else {
+        // 일반 성공 메시지
       Alert.alert('성공', '질문이 등록되었습니다!', [
         {
           text: '확인',
           onPress: () => {
             // 질문 상세 화면으로 이동
-            router.replace(`/(tabs)/livepick/${questionId}`);
+              router.replace(`/(tabs)/livepick/${result.questionId}`);
           },
         },
       ]);
+      }
     } catch (error: any) {
       console.error('❌ 질문 등록 실패:', error);
       
@@ -317,6 +356,52 @@ export default function CreateQuestionScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* 튜토리얼 완료 축하 모달 */}
+      <Modal
+        visible={showTutorialCompleteModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setShowTutorialCompleteModal(false);
+          if (createdQuestionId) {
+            router.replace(`/(tabs)/livepick/${createdQuestionId}`);
+          }
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalIcon}>
+              <Ionicons name="trophy" size={48} color={colors.primary} />
+            </View>
+            <Text style={styles.modalTitle}>축하합니다! 🎉</Text>
+            <Text style={styles.modalMessage}>
+              튜토리얼 완료로 <Text style={styles.modalHighlight}>500P</Text>가 지급되었습니다!{'\n\n'}
+              이제 애니마 코드도 깨워보고 라이브픽으로 보상을 더 받아보세요!
+            </Text>
+            <TouchableOpacity
+              style={{
+                width: '100%',
+                backgroundColor: colors.primary,
+                borderRadius: 12,
+                paddingVertical: 16,
+                paddingHorizontal: 24,
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}
+              onPress={() => {
+                setShowTutorialCompleteModal(false);
+                if (createdQuestionId) {
+                  router.replace(`/(tabs)/livepick/${createdQuestionId}`);
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.modalButtonTextConfirm}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -525,9 +610,10 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   modalButtonTextConfirm: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
   categoryModalContent: {
     backgroundColor: colors.surface,
