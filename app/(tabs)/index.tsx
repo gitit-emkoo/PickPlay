@@ -1,12 +1,11 @@
 ﻿import React, { useEffect, useState, useRef } from 'react';
-import { Alert, ScrollView, Text, TouchableOpacity, View, StyleSheet, Image, Share } from 'react-native';
+import { Alert, ScrollView, Text, TouchableOpacity, View, StyleSheet, Image, Share, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loadData, ensureUser, getTodayQuestionForUser, saveAnswerAndProcessLogic, aggregate, getTodayAnswer, rewardWithMajority } from '../../src/services/store';
 import { Question, UserData } from '../../src/types';
 import { watchAuth } from '../../src/services/firebase';
 import LoadingScreen from '../components/LoadingScreen';
 import ErrorScreen from '../components/ErrorScreen';
-import SplashScreen from '../splash';
 import TutorialScreen from '../components/TutorialScreen';
 import NotificationModal from '../components/NotificationModal';
 import AnimaCodeRevealModal from '../components/AnimaCodeRevealModal';
@@ -25,10 +24,10 @@ import UpdateModal from '../components/UpdateModal';
 import { getServiceStatusConfig, getAppVersionConfig, ServiceStatusConfig, AppVersionConfig } from '../../src/services/config';
 import { isVersionBelowMinimum, isVersionBelowCurrent } from '../../src/utils/version';
 import Constants from 'expo-constants';
+import { useNavigation } from 'expo-router';
 
 export default function HomeScreen() {
   // 화면 흐름 상태
-  const [showSplash, setShowSplash] = useState(true);
   const [showPermissionIntro, setShowPermissionIntro] = useState(false);
   const [permissionIntroChecked, setPermissionIntroChecked] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
@@ -86,6 +85,68 @@ export default function HomeScreen() {
     rewardGiven500: boolean;
     allCompleted: boolean;
   } | null>(null);
+
+  const navigation = useNavigation();
+
+  // 권한/튜토리얼 첫 로드 체크 (스플래시와 분리된 초기 진입 로직)
+  useEffect(() => {
+    const checkIntroAndTutorial = async () => {
+      try {
+        // 1) 권한 안내 노출 여부
+        const hasSeenPermissionIntro = await AsyncStorage.getItem('hasSeenPermissionIntro');
+        if (!hasSeenPermissionIntro) {
+          // 권한 안내 화면을 아직 보지 않은 경우: 권한 인트로부터 시작
+          setShowPermissionIntro(true);
+          return;
+        }
+        setPermissionIntroChecked(true);
+
+        // 2) 튜토리얼 노출 여부
+        const hasSeenTutorial = await AsyncStorage.getItem('hasSeenTutorial');
+        if (!hasSeenTutorial) {
+          setShowTutorial(true);
+        }
+        setTutorialChecked(true);
+      } catch (e) {
+        console.warn('[App] 권한/튜토리얼 초기 체크 실패:', (e as any)?.message || e);
+        // 문제가 있어도 메인 화면은 볼 수 있도록 체크 완료로 처리
+        setPermissionIntroChecked(true);
+        setTutorialChecked(true);
+      }
+    };
+
+    checkIntroAndTutorial();
+  }, []);
+
+  // 권한 안내 / 튜토리얼 시에는 하단 탭 네비게이션 숨기기
+  useEffect(() => {
+    // 탭 네비게이션은 HomeScreen의 부모(Stack)의 부모에 위치
+    const tabNavigator = navigation.getParent()?.getParent();
+    if (!tabNavigator) return;
+
+    const shouldHideTabBar =
+      (showPermissionIntro && !permissionIntroChecked) ||
+      showTutorial;
+
+    if (shouldHideTabBar) {
+      tabNavigator.setOptions({
+        tabBarStyle: {
+          display: 'none',
+        },
+      });
+    } else {
+      tabNavigator.setOptions({
+        tabBarStyle: {
+          backgroundColor: colors.background,
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
+          height: Platform.OS === 'ios' ? 88 : 60,
+          paddingBottom: Platform.OS === 'ios' ? 28 : 8,
+          paddingTop: 8,
+        },
+      });
+    }
+  }, [navigation, showPermissionIntro, permissionIntroChecked, showTutorial]);
 
 
   // 서비스 점검 상태 체크 (앱 시작 시 최우선)
@@ -150,21 +211,6 @@ export default function HomeScreen() {
 
     checkUpdate();
   }, [checkingServiceStatus, serviceStatus]);
-
-  // 스플래시 완료 후 권한 안내 화면 확인
-  const handleSplashFinish = async () => {
-    setShowSplash(false);
-    
-    // 권한 안내 화면을 본 적이 있는지 확인
-    const hasSeenPermissionIntro = await AsyncStorage.getItem('hasSeenPermissionIntro');
-    if (!hasSeenPermissionIntro) {
-      setShowPermissionIntro(true);
-      return;
-    }
-
-    // 권한 안내를 이미 봤다면 튜토리얼 체크로 진행
-    await handlePermissionIntroComplete();
-  };
 
   // 권한 안내 화면 완료
   const handlePermissionIntroComplete = async () => {
@@ -593,12 +639,7 @@ export default function HomeScreen() {
     }
   };
 
-  // 1. 스플래시 화면
-  if (showSplash) {
-    return <SplashScreen onFinish={handleSplashFinish} />;
-  }
-
-  // 2. 서비스 점검 화면 (최우선, 점검 중이면 여기서 멈춤)
+  // 1. 서비스 점검 화면 (최우선, 점검 중이면 여기서 멈춤)
   if (checkingServiceStatus) {
     return <LoadingScreen />;
   }
@@ -793,20 +834,20 @@ export default function HomeScreen() {
                   color="#FF5722"
                   blink={true}
                 />
-                <TouchableOpacity onPress={handleGrantReward} style={{
-                    marginTop: 8,
-                    backgroundColor: (() => { const m = getStreakMultiplier(userData?.streakCount); return m === 3 ? '#8e44ad' : m === 2 ? '#2ecc71' : colors.primary; })(),
-                borderRadius: 12,
-                paddingVertical: 16,
-                paddingHorizontal: 32,
-                    shadowColor: (() => { const m = getStreakMultiplier(userData?.streakCount); return m === 3 ? '#8e44ad' : m === 2 ? '#2ecc71' : colors.primary; })(),
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.25,
-                shadowRadius: 8,
-                elevation: 6,
-              }}>
-                <Text style={{ fontSize: 18, color: 'white', fontWeight: '700', textAlign: 'center' }}>🎁 보상 받기</Text>
-              </TouchableOpacity>
+              <TouchableOpacity onPress={handleGrantReward} style={{
+                  marginTop: 8,
+                  backgroundColor: (() => { const m = getStreakMultiplier(userData?.streakCount); return m === 3 ? '#8e44ad' : m === 2 ? '#2ecc71' : colors.primary; })(),
+              borderRadius: 12,
+              paddingVertical: 16,
+              paddingHorizontal: 32,
+                  shadowColor: (() => { const m = getStreakMultiplier(userData?.streakCount); return m === 3 ? '#8e44ad' : m === 2 ? '#2ecc71' : colors.primary; })(),
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.25,
+              shadowRadius: 8,
+              elevation: 6,
+            }}>
+              <Text style={{ fontSize: 18, color: 'white', fontWeight: '700', textAlign: 'center' }}>🎁 보상 받기</Text>
+          </TouchableOpacity>
               </View>
         )}
 

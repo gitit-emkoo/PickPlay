@@ -15,6 +15,7 @@ import firestore from '@react-native-firebase/firestore';
 import NotificationBootstrap from './components/NotificationBootstrap';
 import LoadingScreen from './components/LoadingScreen';
 import ErrorScreen from './components/ErrorScreen';
+import AppSplashScreen from './splash';
 import { initAds } from '../src/services/ads';
 import { ensureAnonymousAuth } from '../src/services/firebase';
 
@@ -185,6 +186,7 @@ export default function RootLayout() {
   const [firebaseStatus, setFirebaseStatus] = useState<'pending' | 'ready' | 'error'>('pending');
   const [firebaseErrorMessage, setFirebaseErrorMessage] = useState<string>('서비스에 연결하는 중입니다...');
   const [initToken, setInitToken] = useState(0);
+  const [showAppSplash, setShowAppSplash] = useState(true);
 
   // Firebase 초기화 상태를 즉시 확인 (이미 초기화되어 있을 수 있음)
   useEffect(() => {
@@ -331,6 +333,11 @@ export default function RootLayout() {
 
   if (!loaded) {
     return null;
+  }
+
+  // 커스텀 앱 스플래시 (네이티브 스플래시 이후, 탭/메인 화면 렌더링 전에 표시)
+  if (showAppSplash) {
+    return <AppSplashScreen onFinish={() => setShowAppSplash(false)} />;
   }
 
   if (firebaseStatus === 'pending') {
