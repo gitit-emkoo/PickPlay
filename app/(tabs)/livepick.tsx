@@ -62,23 +62,29 @@ export default function LivePickScreen() {
   );
 
   // 라이브픽 질문 초기 로드
-  const loadInitialQuestions = async () => {
+  const loadInitialQuestions = async (isRefresh: boolean = false) => {
     try {
-      setLoading(true);
+      // 새로고침일 때는 상단 스피너(RefreshControl)만 사용하고,
+      // 전체 화면 로딩 인디케이터는 초기 진입 시에만 사용
+      if (!isRefresh) {
+        setLoading(true);
+      }
       const list = await getLivePickQuestions(PAGE_SIZE);
       setQuestions(list);
       setHasMore(list.length === PAGE_SIZE);
     } catch (error) {
       console.error('❌ [LivePick] 질문 목록 초기 로드 실패:', error);
     } finally {
-      setLoading(false);
+      if (!isRefresh) {
+        setLoading(false);
+      }
       setRefreshing(false);
     }
   };
 
   // 첫 마운트 시 질문 목록 로드
   useEffect(() => {
-    loadInitialQuestions();
+    loadInitialQuestions(false);
   }, []);
 
   // 추가 로드 (페이지네이션)
@@ -115,7 +121,7 @@ export default function LivePickScreen() {
   // Pull to refresh
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadInitialQuestions();
+    await loadInitialQuestions(true);
   };
 
   // 시간 포맷팅 함수
@@ -298,7 +304,7 @@ export default function LivePickScreen() {
           />
         }
       >
-        {loading ? (
+        {loading && !refreshing ? (
           <View style={styles.emptyState}>
             <ActivityIndicator size="large" color={colors.primary} />
             <Text style={styles.emptyText}>질문 목록을 불러오는 중...</Text>
