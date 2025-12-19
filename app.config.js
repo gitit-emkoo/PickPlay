@@ -10,7 +10,8 @@ module.exports = {
         projectId: '14d1ecb2-a3c0-4425-ac97-0ec33b289905'
       },
       'react-native-google-mobile-ads': {
-        ios_app_id: 'ca-app-pub-2555567440328829~5483134579'
+        ios_app_id: 'ca-app-pub-2555567440328829~5483134579',
+        android_app_id: 'ca-app-pub-2555567440328829~4208779024'
       }
     },
     orientation: 'portrait',
@@ -70,6 +71,7 @@ module.exports = {
     ]
   },
   'react-native-google-mobile-ads': {
-    ios_app_id: 'ca-app-pub-2555567440328829~5483134579'
+    ios_app_id: 'ca-app-pub-2555567440328829~5483134579',
+    android_app_id: 'ca-app-pub-2555567440328829~4208779024'
   }
 };
