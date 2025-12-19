@@ -34,6 +34,7 @@ module.exports = {
       }
     },
     android: {
+      package: 'com.pickplay.kwcc',
       adaptiveIcon: {
         foregroundImage: './assets/images/adaptive-icon.png',
         backgroundColor: '#ffffff'
