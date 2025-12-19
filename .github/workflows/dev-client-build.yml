@@ -2,17 +2,6 @@ name: iOS Dev Client Build
 
 on:
   workflow_dispatch:
-  push:
-    branches: [release]
-    paths:
-      - 'app/**'
-      - 'app.config.js'
-      - 'app.json'
-      - 'package.json'
-      - 'fastlane/**'
-      - 'plugins/**'
-      - 'GoogleService-Info.plist'
-      - '.github/workflows/dev-client-build.yml'
 
 jobs:
   build-dev-client:
