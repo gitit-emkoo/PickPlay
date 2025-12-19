@@ -27,13 +27,13 @@ export async function checkTrackingPermission(): Promise<boolean> {
   }
 }
 
-// 플랫폼별 광고 단위 ID (실서비스용) - 테스트 기간 동안 주석 처리
-// const AD_UNITS = {
-//   android: 'ca-app-pub-2555567440328829/7893158578',
-//   ios: 'ca-app-pub-2555567440328829/9198215970'
-// };
+// 플랫폼별 광고 단위 ID (실서비스용)
+const AD_UNITS = {
+  android: 'ca-app-pub-2555567440328829/7893158578',
+  ios: 'ca-app-pub-2555567440328829/9198215970'
+};
 
-// 테스트 광고 ID (AdMob 공식 테스트 ID)
+// 테스트 광고 ID (AdMob 공식 테스트 ID) - 개발/디버깅용
 // Rewarded Interstitial 테스트 ID (2024 최신)
 const TEST_AD_UNITS = {
   android: 'ca-app-pub-3940256099942544/5354046379', // Rewarded Interstitial Android
@@ -45,9 +45,6 @@ const TEST_AD_UNITS_ALT = {
   android: 'ca-app-pub-3940256099942544/1033173712', // Rewarded Interstitial Android (대체)
   ios: 'ca-app-pub-3940256099942544/1712485313' // Rewarded Interstitial iOS (대체)
 };
-
-// 테스트 기간 동안 테스트 ID 사용
-const AD_UNITS = TEST_AD_UNITS;
 
 // 더미 광고 객체 (Expo Go용)
 function createExpoGoDummyAd() {
@@ -232,9 +229,9 @@ export async function createRewardedInterstitial() {
     const requestNonPersonalizedAdsOnly = !hasTrackingPermission;
       
     console.log(`🎯 보상형 전면 광고 생성: ${adUnitId}`);
-    console.log(`🔧 모드: 테스트 (테스트 기간)`);
+    console.log(`🔧 모드: 프로덕션`);
     console.log(`📱 플랫폼: ${Platform.OS}`);
-    console.log(`🆔 테스트 광고 ID 사용 중`);
+    console.log(`🆔 실제 광고 ID 사용 중`);
     console.log(`🔐 광고 추적 권한: ${hasTrackingPermission ? '허용' : '거부'}`);
     console.log(`📊 비개인화 광고만 요청: ${requestNonPersonalizedAdsOnly}`);
     

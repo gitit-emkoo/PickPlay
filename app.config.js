@@ -9,7 +9,7 @@ module.exports = {
         projectId: 'f0389889-654e-4120-8839-8b795ff4b641'
       },
       'react-native-google-mobile-ads': {
-        ios_app_id: 'ca-app-pub-3940256099942544~1458002511'
+        ios_app_id: 'ca-app-pub-2555567440328829~5483134579'
       }
     },
     orientation: 'portrait',
@@ -28,9 +28,7 @@ module.exports = {
       bundleIdentifier: 'com.pickplay.kwcc',
       googleServicesFile: './GoogleService-Info.plist',
       infoPlist: {
-        // TODO: 실배포 시 실제 AdMob 앱 ID(아래 주석)로 교체하세요.
-        // 'ca-app-pub-2555567440328829~5483134579'
-        GADApplicationIdentifier: 'ca-app-pub-3940256099942544~1458002511',
+        GADApplicationIdentifier: 'ca-app-pub-2555567440328829~5483134579',
         NSUserTrackingUsageDescription: '이 정보를 사용하여 더 관련성 높은 맞춤형 광고를 제공합니다.'
       }
     },
@@ -70,6 +68,6 @@ module.exports = {
     ]
   },
   'react-native-google-mobile-ads': {
-    ios_app_id: 'ca-app-pub-3940256099942544~1458002511'
+    ios_app_id: 'ca-app-pub-2555567440328829~5483134579'
   }
 };
