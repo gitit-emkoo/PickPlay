@@ -27,7 +27,8 @@
       },
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
-        "NODE_ENV": "development"
+        "NODE_ENV": "development",
+        "EXPO_USE_COMMUNITY_AUTOLINKING": "0"
       }
     },
     "preview": {
