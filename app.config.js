@@ -1,12 +1,13 @@
 module.exports = {
   expo: {
     name: 'pickplay',
-    slug: 'pickplay',
+    slug: 'today-balance',
     scheme: 'pickplay',
-    version: '2.0.2',
+    version: '2.1.0',
+    runtimeVersion: '2.1.0',
     extra: {
       eas: {
-        projectId: 'f0389889-654e-4120-8839-8b795ff4b641'
+        projectId: '14d1ecb2-a3c0-4425-ac97-0ec33b289905'
       },
       'react-native-google-mobile-ads': {
         ios_app_id: 'ca-app-pub-2555567440328829~5483134579'

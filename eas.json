@@ -22,10 +22,12 @@
     "simple": {
       "distribution": "internal",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "credentialsSource": "remote"
       },
       "env": {
-        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "NODE_ENV": "development"
       }
     },
     "preview": {
@@ -42,6 +44,9 @@
       "ios": {
         "buildConfiguration": "Release",
         "cocoapods": "1.15.2"
+      },
+      "android": {
+        "credentialsSource": "remote"
       }
     }
   },
