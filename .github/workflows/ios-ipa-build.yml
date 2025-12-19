@@ -1,10 +1,10 @@
-name: iOS TestFlight Build
+name: iOS IPA Build
 
 on:
   workflow_dispatch:
 
 jobs:
-  ios-testflight:
+  ios-ipa:
     runs-on: macos-14
     timeout-minutes: 60
     
@@ -34,21 +34,6 @@ jobs:
           echo "$ASC_P8" > "$KEY_PATH"
           echo "APP_STORE_CONNECT_API_KEY_PATH=$KEY_PATH" >> $GITHUB_ENV
 
-      - name: Setup Ruby & tools
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: "3.2"
-          bundler-cache: true
-
-      - name: Install Fastlane/CocoaPods/xcodeproj
-        run: |
-          cd "$PROJ_DIR"
-          if [ -f Gemfile ]; then
-            bundle install
-          else
-            gem install fastlane cocoapods xcodeproj --no-document
-          fi
-
       # 프로젝트 디렉토리 확인
       - name: Detect project dir
         id: detect_dir
@@ -63,6 +48,21 @@ jobs:
           echo "PROJ_DIR=$PROJ_DIR" >> $GITHUB_ENV
           echo "project_dir=$PROJ_DIR" >> $GITHUB_OUTPUT
           echo "✅ Detected project directory: $PROJ_DIR"
+
+      - name: Setup Ruby & tools
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+
+      - name: Install Fastlane/CocoaPods/xcodeproj
+        run: |
+          cd "$PROJ_DIR"
+          if [ -f Gemfile ]; then
+            bundle install
+          else
+            gem install fastlane cocoapods xcodeproj --no-document
+          fi
 
       # Clean caches (clean build)
       - name: Clean caches (clean build)
@@ -125,18 +125,7 @@ jobs:
             find ios -name "GoogleService-Info.plist" 2>/dev/null || echo "File not found"
           fi
 
-      # Debug iOS folder
-      - name: Debug iOS folder
-        if: failure()
-        run: |
-          cd "$PROJ_DIR"
-          echo "📁 iOS directory structure:"
-          find ios -type f -name "*.plist" | head -20 || true
-          echo ""
-          echo "📁 ios/pickplay directory:"
-          ls -la ios/pickplay/ 2>/dev/null | head -20 || echo "Directory not found"
-
-      # Cache Pods (Podfile.lock이 없을 수 있으므로 Podfile과 package.json 사용)
+      # Cache Pods
       - name: Cache Pods
         uses: actions/cache@v4
         continue-on-error: true
@@ -202,74 +191,7 @@ jobs:
           
           echo "✅ CocoaPods dependencies installed"
 
-      # Verify React Native Codegen files
-      - name: Verify React Native Codegen files
-        run: |
-          cd "$PROJ_DIR"
-          echo "🔍 Verifying React Native Codegen files..."
-          RN_DIR=$(node --print "require.resolve('react-native/package.json')" | xargs dirname)
-          CODGEN_DIR="$RN_DIR/packages/react-native-codegen"
-          if [ -d "$CODGEN_DIR" ]; then
-            echo "✅ React Native Codegen found: $CODGEN_DIR"
-          else
-            echo "⚠️ React Native Codegen not found at: $CODGEN_DIR"
-          fi
-
-      # Verify post_install cleaned BoringSSL-GRPC
-      - name: Verify post_install cleaned BoringSSL-GRPC
-        run: |
-          cd "$PROJ_DIR/ios"
-          echo "🔍 Verifying BoringSSL-GRPC -G flag removal..."
-          
-          # Pods.xcconfig 파일들에서 -G 플래그 확인
-          XCCONFIG_FILES=$(find Pods/Target\ Support\ Files -name "*.xcconfig" 2>/dev/null | head -10)
-          if [ -z "$XCCONFIG_FILES" ]; then
-            echo "⚠️ No xcconfig files found"
-          else
-            G_FLAG_COUNT=0
-            for file in $XCCONFIG_FILES; do
-              if grep -q " -G" "$file" 2>/dev/null; then
-                echo "⚠️ Found -G flag in: $file"
-                G_FLAG_COUNT=$((G_FLAG_COUNT + 1))
-              fi
-            done
-            if [ $G_FLAG_COUNT -eq 0 ]; then
-              echo "✅ No -G flags found in xcconfig files"
-            else
-              echo "⚠️ Found -G flags in $G_FLAG_COUNT xcconfig file(s)"
-            fi
-          fi
-          
-          # Pods.xcodeproj에서도 확인
-          if [ -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
-            PBXPROJ_G_COUNT=$(grep -c " -G" Pods/Pods.xcodeproj/project.pbxproj 2>/dev/null || echo "0")
-            if [ "$PBXPROJ_G_COUNT" = "0" ]; then
-              echo "✅ No -G flags found in Pods.xcodeproj"
-            else
-              echo "⚠️ Found -G flags in Pods.xcodeproj: $PBXPROJ_G_COUNT occurrences"
-            fi
-          fi
-
-      # Verify C++ standard is gnu++20 for all Pods
-      - name: Verify C++ standard is gnu++20 for all Pods
-        run: |
-          cd "$PROJ_DIR/ios"
-          echo "🔍 Verifying C++ standard is gnu++20 for all Pods..."
-          
-          if [ -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
-            HAS_CXX20=$(grep -E "CLANG_CXX_LANGUAGE_STANDARD|CLANG_CXX_LIBRARY" Pods/Pods.xcodeproj/project.pbxproj | grep -E "gnu\+\+20|c\+\+20" || echo "")
-            
-            if [ -z "$HAS_CXX20" ]; then
-              echo "⚠️ No C++20 standard found in Pods project"
-            else
-              CXX20_COUNT=$(echo "$HAS_CXX20" | grep -icE "(gnu\+\+20|c\+\+20)" || echo "0")
-              echo "✅ Detected C++20 standard in Pods project ($CXX20_COUNT occurrences)"
-            fi
-          else
-            echo "⚠️ Pods.xcodeproj not found"
-          fi
-
-      - name: Fastlane beta (TestFlight)
+      - name: Fastlane build_ipa (IPA only, no TestFlight)
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
@@ -284,25 +206,23 @@ jobs:
         run: |
           cd "$PROJ_DIR"
           if [ -f Gemfile ]; then
-            bundle exec fastlane ios beta
+            bundle exec fastlane ios build_ipa
           else
-            fastlane ios beta
+            fastlane ios build_ipa
           fi
 
-      # 빌드 아티팩트 업로드 (IPA 파일)
-      - name: Find IPA file location
+      # Find IPA file
+      - name: Find IPA file
         id: find_ipa
         run: |
           cd "$PROJ_DIR"
           echo "🔍 IPA 파일 검색 중..."
-          echo "현재 디렉토리: $(pwd)"
-          echo "PROJ_DIR: $PROJ_DIR"
           
-          # 프로젝트 루트에서 검색 (Fastlane이 REPO_ROOT에 생성)
+          # 프로젝트 루트에서 검색
           if ls "$PROJ_DIR"/*.ipa 2>/dev/null | head -1 | read IPA_PATH; then
             echo "✅ IPA 파일 발견 (프로젝트 루트): $IPA_PATH"
             echo "ipa_path=$IPA_PATH" >> $GITHUB_OUTPUT
-          # 상위 디렉토리에서 검색 (Fastlane이 프로젝트 루트에 생성하는 경우)
+          # 상위 디렉토리에서 검색
           elif ls ../*.ipa 2>/dev/null | head -1 | read IPA_PATH; then
             echo "✅ IPA 파일 발견 (상위 디렉토리): $IPA_PATH"
             echo "ipa_path=$IPA_PATH" >> $GITHUB_OUTPUT
@@ -337,127 +257,17 @@ jobs:
             echo "ipa_filename=$(basename "$IPA_PATH")" >> $GITHUB_OUTPUT
           fi
 
-      # IPA 파일에서 GoogleService-Info.plist 포함 여부 확인
-      - name: Verify GoogleService-Info.plist in IPA
-        if: success()
-        run: |
-          cd "$PROJ_DIR"
-          echo "🔍 IPA 파일에서 GoogleService-Info.plist 확인 중..."
-          
-          # IPA 파일 경로 확인
-          IPA_PATH="${{ steps.find_ipa.outputs.ipa_path }}"
-          if [ -z "$IPA_PATH" ]; then
-            echo "⚠️ steps.find_ipa.outputs.ipa_path가 비어있음, 직접 검색 시도..."
-            IPA_PATH=$(find . -name "*.ipa" -type f 2>/dev/null | head -1)
-            if [ -z "$IPA_PATH" ]; then
-              IPA_PATH=$(find .. -name "*.ipa" -type f 2>/dev/null | head -1)
-            fi
-          fi
-          
-          if [ -z "$IPA_PATH" ]; then
-            echo "❌ IPA 파일을 찾을 수 없습니다."
-            exit 1
-          fi
-          
-          echo "IPA 경로: $IPA_PATH"
-          
-          # IPA 파일 존재 확인
-          if [ ! -f "$IPA_PATH" ]; then
-            echo "❌ IPA 파일이 존재하지 않습니다: $IPA_PATH"
-            exit 1
-          fi
-          
-          # 임시 디렉토리 생성
-          EXTRACT_DIR=$(mktemp -d)
-          echo "임시 디렉토리: $EXTRACT_DIR"
-          
-          # IPA 압축 해제
-          echo "IPA 압축 해제 중..."
-          unzip -q "$IPA_PATH" -d "$EXTRACT_DIR" || {
-            echo "⚠️ IPA 압축 해제 실패"
-            rm -rf "$EXTRACT_DIR"
-            exit 1
-          }
-          
-          # GoogleService-Info.plist 검색
-          if [ -d "$EXTRACT_DIR/Payload/pickplay.app" ]; then
-            echo "✅ Payload/pickplay.app 디렉토리 발견"
-            if [ -f "$EXTRACT_DIR/Payload/pickplay.app/GoogleService-Info.plist" ]; then
-              echo "✅ GoogleService-Info.plist가 IPA 번들에 포함되어 있음!"
-              echo "파일 크기: $(stat -f%z "$EXTRACT_DIR/Payload/pickplay.app/GoogleService-Info.plist" 2>/dev/null || stat -c%s "$EXTRACT_DIR/Payload/pickplay.app/GoogleService-Info.plist" 2>/dev/null) bytes"
-              echo "Bundle ID: $(grep -A1 '<key>BUNDLE_ID</key>' "$EXTRACT_DIR/Payload/pickplay.app/GoogleService-Info.plist" | grep '<string>' | sed 's/.*<string>\(.*\)<\/string>.*/\1/')"
-              echo "Project ID: $(grep -A1 '<key>PROJECT_ID</key>' "$EXTRACT_DIR/Payload/pickplay.app/GoogleService-Info.plist" | grep '<string>' | sed 's/.*<string>\(.*\)<\/string>.*/\1/')"
-            else
-              echo "❌ GoogleService-Info.plist가 IPA 번들에 포함되지 않음!"
-              echo "앱 번들 내용:"
-              ls -la "$EXTRACT_DIR/Payload/pickplay.app" | head -30
-              echo ""
-              echo "앱 번들에서 plist 파일 검색:"
-              find "$EXTRACT_DIR/Payload/pickplay.app" -name "*.plist" -type f | head -10
-              rm -rf "$EXTRACT_DIR"
-              exit 1
-            fi
-          else
-            echo "⚠️ Payload/pickplay.app 디렉토리를 찾을 수 없음"
-            echo "압축 해제된 내용:"
-            ls -la "$EXTRACT_DIR" || true
-            echo ""
-            echo "Payload 디렉토리 검색:"
-            find "$EXTRACT_DIR" -type d -name "Payload" || echo "Payload 디렉토리 없음"
-            rm -rf "$EXTRACT_DIR"
-            exit 1
-          fi
-          
-          # 임시 디렉토리 정리
-          rm -rf "$EXTRACT_DIR"
-          echo "✅ IPA 파일 검증 완료"
-
-      - name: Find IPA for upload
-        id: find_ipa_for_upload
-        if: success()
-        run: |
-          cd "$PROJ_DIR"
-          echo "🔍 IPA 파일 검색 중 (업로드용)..."
-          
-          # IPA 파일 경로 확인
-          IPA_PATH="${{ steps.find_ipa.outputs.ipa_path }}"
-          if [ -z "$IPA_PATH" ]; then
-            echo "⚠️ steps.find_ipa.outputs.ipa_path가 비어있음, 직접 검색 시도..."
-            IPA_PATH=$(find . -name "*.ipa" -type f 2>/dev/null | head -1)
-            if [ -z "$IPA_PATH" ]; then
-              IPA_PATH=$(find .. -name "*.ipa" -type f 2>/dev/null | head -1)
-            fi
-          fi
-          
-          if [ -z "$IPA_PATH" ]; then
-            echo "❌ IPA 파일을 찾을 수 없습니다."
-            exit 1
-          fi
-          
-          echo "✅ IPA 파일 발견: $IPA_PATH"
-          echo "📦 IPA 파일 정보:"
-          ls -lh "$IPA_PATH"
-          
-          # 절대 경로로 변환
-          if [[ "$IPA_PATH" != /* ]]; then
-            IPA_PATH=$(realpath "$IPA_PATH" || echo "$(pwd)/$IPA_PATH")
-          fi
-          
-          echo "ipa_path=$IPA_PATH" >> $GITHUB_OUTPUT
-        continue-on-error: false
-
+      # Upload IPA artifact
       - name: Upload IPA artifact
-        if: success() && steps.find_ipa_for_upload.outputs.ipa_path != ''
         uses: actions/upload-artifact@v4
         with:
-          name: testflight-ipa
-          path: ${{ steps.find_ipa_for_upload.outputs.ipa_path }}
+          name: pickplay-ipa
+          path: ${{ steps.find_ipa.outputs.ipa_path }}
           retention-days: 90
           if-no-files-found: error
 
       - name: Success message
         run: |
-          echo "✅ TestFlight 빌드 및 제출 완료!"
-          echo "📱 App Store Connect에서 TestFlight 빌드를 확인하세요."
-          echo "📱 TestFlight에서 테스터에게 배포할 수 있습니다."
+          echo "✅ iOS IPA 빌드 완료!"
+          echo "📱 IPA 파일이 아티팩트로 업로드되었습니다."
 

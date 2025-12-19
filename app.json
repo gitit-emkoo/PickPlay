@@ -33,7 +33,7 @@
   },
   "android": {
     "package": "com.pickplay.kwcc",
-    "versionCode": 13,
+    "versionCode": 14,
     "googleServicesFile": "./google-services.json",
     "adaptiveIcon": {
       "foregroundImage": "./assets/images/adaptive-icon.png",
