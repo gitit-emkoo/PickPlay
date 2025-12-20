@@ -51,9 +51,56 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
       return data;
   }
 
-  // 2. Firestore에 데이터가 없는 경우: AsyncStorage에서 마이그레이션 시도
+  // 2. Firestore에 데이터가 없는 경우: deviceUID로 기존 사용자 복구 시도
   try {
     const deviceUID = await getDeviceUID();
+    
+    // 2-1. deviceUID로 기존 사용자 찾기 (앱 재설치 시 복구)
+    console.log('🔍 [Recovery] deviceUID로 기존 사용자 찾기 시도:', deviceUID);
+    const existingUsersQuery = await firestore()
+      .collection('users')
+      .where('deviceUID', '==', deviceUID)
+      .limit(1)
+      .get();
+    
+    if (!existingUsersQuery.empty) {
+      const existingUserDoc = existingUsersQuery.docs[0];
+      const existingUserData = existingUserDoc.data() as UserData;
+      const existingUID = existingUserDoc.id;
+      
+      console.log(`🔄 [Recovery] 기존 사용자 발견 (${existingUID}), 새 UID(${uid})로 데이터 복사 중...`);
+      
+      // 기존 사용자 데이터를 새 UID로 복사
+      const recoveredUserData = {
+        ...existingUserData,
+        uid, // 새 UID로 업데이트
+        deviceUID, // deviceUID 유지
+        // createdAt은 기존 값 유지 (진행 상태 보존)
+      };
+      
+      // Timestamp 처리
+      if (recoveredUserData.createdAt && typeof (recoveredUserData.createdAt as any).toDate === 'function') {
+        recoveredUserData.createdAt = (recoveredUserData.createdAt as FirebaseFirestoreTypes.Timestamp).toDate() as any;
+      }
+      
+      await userRef.set(recoveredUserData as any);
+      
+      // 기존 사용자 문서에도 새 UID를 deviceUID와 함께 저장 (참조용)
+      await firestore().collection('users').doc(existingUID).update({
+        recoveredToUID: uid,
+        recoveredAt: firestore.FieldValue.serverTimestamp(),
+      } as any);
+      
+      console.log('✅ [Recovery] 사용자 데이터 복구 완료:', uid);
+      return {
+        ...recoveredUserData,
+        createdAt: recoveredUserData.createdAt && typeof (recoveredUserData.createdAt as any).toDate === 'function'
+          ? (recoveredUserData.createdAt as FirebaseFirestoreTypes.Timestamp).toDate()
+          : (recoveredUserData.createdAt as Date),
+      } as UserData;
+    }
+    
+    // 2-2. AsyncStorage에서 마이그레이션 시도 (레거시)
     const legacyDataKey = `userData_${deviceUID}`;
     const legacyDataJSON = await AsyncStorage.getItem(legacyDataKey);
 
@@ -114,6 +161,7 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
       // V2 데이터 구조에 맞게 변환
       const migratedUserData = { // UserData 타입 명시 제거
         uid,
+        deviceUID, // deviceUID 저장 (앱 재설치 시 복구용)
         points: legacyData.points || 0,
         streakCount: legacyData.streakCount || 0,
         lastAnswerDate: typeof legacyData.lastAnswerDate === 'string' && legacyData.lastAnswerDate.includes('-') ? 
@@ -139,8 +187,10 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
 
   // 3. 마이그레이션할 데이터도 없는 경우: 신규 사용자 생성
   console.log('🆕 [V2] 신규 사용자, Firestore에 문서 생성:', uid);
+  const deviceUID = await getDeviceUID();
   const newUserData = {
     uid,
+    deviceUID, // deviceUID 저장 (앱 재설치 시 복구용)
     createdAt: firestore.FieldValue.serverTimestamp(),
     totalSelections: 0,
     characterId: null,
