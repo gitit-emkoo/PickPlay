@@ -158,16 +158,46 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
     let firestoreExistingUID: string | null = null;
     
     try {
+    // deviceUID로 여러 문서가 있을 수 있으므로, 모든 문서를 가져와서 가장 최근 문서 선택
     const existingUsersQuery = await firestore()
       .collection('users')
       .where('deviceUID', '==', deviceUID)
-      .limit(1)
       .get();
     
     if (!existingUsersQuery.empty) {
-      const existingUserDoc = existingUsersQuery.docs[0];
-      firestoreUserData = existingUserDoc.data() as UserData;
-      firestoreExistingUID = existingUserDoc.id;
+      // 여러 문서가 있으면 가장 최근 문서 선택 (createdAt 기준)
+      let latestDoc = existingUsersQuery.docs[0];
+      let latestCreatedAt = latestDoc.data().createdAt;
+      
+      if (existingUsersQuery.size > 1) {
+        console.warn(`⚠️ [Recovery] 같은 deviceUID로 ${existingUsersQuery.size}개의 문서가 발견됨. 가장 최근 문서를 선택합니다.`);
+        
+        for (const doc of existingUsersQuery.docs) {
+          const docData = doc.data();
+          const docCreatedAt = docData.createdAt;
+          
+          // createdAt 비교 (Timestamp 또는 Date)
+          const docTime = docCreatedAt && typeof (docCreatedAt as any).toDate === 'function' 
+            ? (docCreatedAt as FirebaseFirestoreTypes.Timestamp).toDate().getTime()
+            : docCreatedAt instanceof Date 
+              ? docCreatedAt.getTime()
+              : new Date(docCreatedAt).getTime();
+          
+          const latestTime = latestCreatedAt && typeof (latestCreatedAt as any).toDate === 'function'
+            ? (latestCreatedAt as FirebaseFirestoreTypes.Timestamp).toDate().getTime()
+            : latestCreatedAt instanceof Date
+              ? latestCreatedAt.getTime()
+              : new Date(latestCreatedAt).getTime();
+          
+          if (docTime > latestTime) {
+            latestDoc = doc;
+            latestCreatedAt = docCreatedAt;
+          }
+        }
+      }
+      
+      firestoreUserData = latestDoc.data() as UserData;
+      firestoreExistingUID = latestDoc.id;
       
       console.log(`✅ [Recovery] Firestore에서 기존 사용자 발견 (${firestoreExistingUID})`);
       console.log(`📊 [Recovery] Firestore 데이터:`, {
@@ -175,6 +205,7 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
         points: firestoreUserData.points,
         streakCount: firestoreUserData.streakCount,
         totalSelections: firestoreUserData.totalSelections,
+        deviceUID: firestoreUserData.deviceUID,
       });
     } else {
       console.log('ℹ️ [Recovery] Firestore에서 deviceUID로 기존 사용자를 찾지 못했습니다.');

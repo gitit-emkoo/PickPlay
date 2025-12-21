@@ -46,17 +46,31 @@ service cloud.firestore {
       allow create: if signedIn() 
         && request.auth.uid == uid
         && (
-          // 기존 앱: deviceUID 없이 생성
+          // 기존 앱: deviceUID 없이 생성 (신규 사용자만)
           (request.resource.data.keys().hasOnly(['uid', 'nickname', 'points', 'streakCount', 'totalSelections', 'lastAnswerDate', 'createdAt', 'characterId', 'adjective1', 'adjective2', 'tutorial'])
             && request.resource.data.points == 0
             && request.resource.data.streakCount == 0
             && request.resource.data.totalSelections == 0) ||
-          // 새 앱: deviceUID 포함하여 생성
+          // 새 앱: deviceUID 포함하여 생성 (신규 사용자만)
           (request.resource.data.keys().hasOnly(['uid', 'nickname', 'points', 'streakCount', 'totalSelections', 'lastAnswerDate', 'createdAt', 'characterId', 'adjective1', 'adjective2', 'tutorial', 'deviceUID'])
             && request.resource.data.points == 0
             && request.resource.data.streakCount == 0
             && request.resource.data.totalSelections == 0
-            && (request.resource.data.deviceUID == null || request.resource.data.deviceUID is string))
+            && (request.resource.data.deviceUID == null || request.resource.data.deviceUID is string)) ||
+          // 복구 시나리오: deviceUID가 있고 기존 사용자 데이터를 복구하는 경우
+          // (points, streakCount, totalSelections가 0이 아니어도 허용)
+          (request.resource.data.deviceUID is string
+            && request.resource.data.deviceUID.size() > 0
+            && request.resource.data.uid is string
+            && request.resource.data.nickname is string
+            && request.resource.data.points is int
+            && request.resource.data.points >= 0
+            && request.resource.data.streakCount is int
+            && request.resource.data.streakCount >= 0
+            && request.resource.data.totalSelections is int
+            && request.resource.data.totalSelections >= 0
+            && request.resource.data.createdAt != null
+            && request.resource.data.keys().hasAny(['characterId', 'adjective1', 'adjective2', 'tutorial']))
         );
       
       // 업데이트: 필드별 세밀한 권한 제어
