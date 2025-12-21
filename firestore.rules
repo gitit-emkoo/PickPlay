@@ -1,11 +1,12 @@
 // --- PickPlay Firestore Rules ---
 // App Version: 3.0 (Anima Code Update)
-// Last Updated: 2025-12-05
+// Last Updated: 2025-12-21
 // - 'answers'와 'logs' 컬렉션에 대한 보안 규칙을 추가하여 Anima Code 기능을 지원합니다.
 // - 투표 저장 문제 해결을 위해 시뮬레이터 관련 필드 제거
 // - 푸쉬로그 컬렉션을 위한 규칙 업데이트
 // - votes(집계로그)삭제
 // - 라이브픽 추가
+// - eviceUID 저장 추가가
 
 rules_version = '2';
 service cloud.firestore {
@@ -34,11 +35,12 @@ service cloud.firestore {
       allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
       
       // list: 쿼리용 (deviceUID로 복구할 때 사용)
-      // 자신의 문서 또는 deviceUID가 있는 문서는 읽기 가능
+      // 자신의 문서 또는 deviceUID가 있는 문서, 또는 deviceUID가 없는 이전 버전 문서도 읽기 가능
       allow list: if signedIn() && (
         request.auth.uid == uid ||
         isAdmin() ||
-        (resource.data.deviceUID != null && resource.data.deviceUID is string)
+        (resource.data.deviceUID != null && resource.data.deviceUID is string) ||
+        (resource.data.deviceUID == null) // deviceUID가 없는 이전 버전 문서도 허용
       );
       
       // 초기 생성: 기본 필드만 설정 가능
