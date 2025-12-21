@@ -36,9 +36,13 @@ export const loadData = () => {
  * @returns 사용자 데이터
  */
 export const ensureUser = async (uid: string): Promise<UserData> => {
+  console.log('🔵 [ensureUser] 시작 - Firebase UID:', uid);
   const userRef = firestore().collection('users').doc(uid);
+  
+  try {
     const doc = await userRef.get();
     const userDocExists = typeof (doc as any).exists === 'function' ? (doc as any).exists() : ((doc as any).exists as boolean);
+    console.log('🔵 [ensureUser] Firestore 문서 존재 여부:', userDocExists);
 
   // 1. Firestore에 이미 데이터가 있는 경우 (정상)
   if (userDocExists) {
@@ -81,8 +85,11 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
   }
 
   // 2. Firestore에 데이터가 없는 경우: deviceUID로 기존 사용자 복구 시도
+  console.log('⚠️ [ensureUser] Firestore에 문서가 없음. 복구 시도 시작...');
+  console.log('⚠️ [ensureUser] 현재 Firebase UID:', uid);
   try {
     const deviceUID = await getDeviceUID();
+    console.log('⚠️ [ensureUser] 현재 deviceUID:', deviceUID);
     
     // 2-1. deviceUID로 기존 사용자 찾기 (앱 재설치 시 복구)
     console.log('🔍 [Recovery] deviceUID로 기존 사용자 찾기 시도:', deviceUID);
@@ -135,9 +142,10 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
             : (recoveredUserData.createdAt as Date),
         } as UserData;
       } else {
-        console.log('ℹ️ [Recovery] deviceUID로 기존 사용자를 찾지 못했습니다. (쿼리 결과 비어있음)');
-        console.log(`ℹ️ [Recovery] 현재 deviceUID: ${deviceUID}`);
-        console.log(`ℹ️ [Recovery] 가능한 원인: 1) 기존 사용자 문서에 deviceUID 필드가 없음, 2) deviceUID 값이 다름`);
+        console.log('❌ [Recovery] deviceUID로 기존 사용자를 찾지 못했습니다. (쿼리 결과 비어있음)');
+        console.log(`❌ [Recovery] 현재 deviceUID: ${deviceUID}`);
+        console.log(`❌ [Recovery] 가능한 원인: 1) 기존 사용자 문서에 deviceUID 필드가 없음, 2) deviceUID 값이 다름`);
+        console.log(`❌ [Recovery] 이전 버전 사용자는 deviceUID가 없어서 복구가 어려울 수 있음`);
       }
     } catch (queryError: any) {
       console.error('❌ [Recovery] deviceUID 쿼리 실패:', queryError);
@@ -264,8 +272,14 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
   }
 
   // 3. 마이그레이션할 데이터도 없는 경우: 신규 사용자 생성
-  console.log('🆕 [V2] 신규 사용자, Firestore에 문서 생성:', uid);
+  console.log('❌ [ensureUser] 모든 복구 시도 실패 - 신규 사용자 생성');
+  console.log('❌ [ensureUser] 복구 실패 원인 요약:');
+  console.log('   - Firestore에 현재 UID로 문서 없음');
+  console.log('   - deviceUID로 기존 사용자 찾기 실패');
+  console.log('   - AsyncStorage 마이그레이션 실패');
+  console.log('❌ [ensureUser] 신규 사용자 생성 시작 - Firebase UID:', uid);
   const deviceUID = await getDeviceUID();
+  console.log('❌ [ensureUser] 신규 사용자 deviceUID:', deviceUID);
   const newUserData = {
     uid,
     deviceUID, // deviceUID 저장 (앱 재설치 시 복구용)
