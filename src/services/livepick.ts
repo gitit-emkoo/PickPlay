@@ -122,12 +122,12 @@ export async function createLivePickQuestion(
     // 튜토리얼 상태 업데이트 (라이브픽 질문 생성)
     let tutorialCompleted = false;
     try {
-      const updatedUserData = await updateTutorialProgress(uid, 'livepickCreated');
+      const result = await updateTutorialProgress(uid, 'livepickCreated');
       // 3개 미션 모두 완료되고 보상을 받았다면 tutorialCompleted = true
-      if (updatedUserData?.tutorial?.mainAnswered && 
-          updatedUserData?.tutorial?.livepickParticipated && 
-          updatedUserData?.tutorial?.livepickCreated &&
-          updatedUserData?.tutorial?.rewardGiven500) {
+      if (result?.userData?.tutorial?.mainAnswered && 
+          result?.userData?.tutorial?.livepickParticipated && 
+          result?.userData?.tutorial?.livepickCreated &&
+          result?.userData?.tutorial?.rewardGiven500) {
         tutorialCompleted = true;
         console.log('[LivePick] 🎉 튜토리얼 완료! 500P 보상 지급됨');
       }

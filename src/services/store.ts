@@ -209,71 +209,9 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
       });
     } else {
       console.log('ℹ️ [Recovery] Firestore에서 deviceUID로 기존 사용자를 찾지 못했습니다.');
-      console.log(`ℹ️ [Recovery] 이전 버전 사용자는 deviceUID가 없을 수 있음. deviceUID 없는 문서 검색 시도...`);
-      
-      // deviceUID가 없는 이전 버전 사용자 문서 찾기
-      // 최근 100개 문서를 가져와서 deviceUID가 없는 문서 중 가장 최근 것 선택
-      // 주의: 이 방법은 같은 기기에서 생성된 문서인지 확실하지 않지만,
-      // AsyncStorage 마이그레이션이 이미 완료된 경우를 대비한 최후의 수단
-      try {
-        const recentUsersQuery = await firestore()
-          .collection('users')
-          .orderBy('createdAt', 'desc')
-          .limit(100)
-          .get();
-        
-        console.log(`🔍 [Recovery] 최근 ${recentUsersQuery.size}개 문서 검색 중...`);
-        
-        // deviceUID가 없는 문서만 찾기 (다른 기기의 문서는 제외)
-        let latestDocWithoutDeviceUID: FirebaseFirestoreTypes.DocumentSnapshot | null = null;
-        let latestCreatedAt: any = null;
-        
-        for (const doc of recentUsersQuery.docs) {
-          const docData = doc.data();
-          const docDeviceUID = docData.deviceUID;
-          const docCreatedAt = docData.createdAt;
-          
-          // deviceUID가 없는 경우만 선택 (이전 버전에서 생성된 문서)
-          if (!docDeviceUID || docDeviceUID === null || docDeviceUID === undefined) {
-            // createdAt 비교
-            const docTime = docCreatedAt && typeof (docCreatedAt as any).toDate === 'function' 
-              ? (docCreatedAt as FirebaseFirestoreTypes.Timestamp).toDate().getTime()
-              : docCreatedAt instanceof Date 
-                ? docCreatedAt.getTime()
-                : new Date(docCreatedAt).getTime();
-            
-            if (!latestCreatedAt || docTime > (latestCreatedAt && typeof (latestCreatedAt as any).toDate === 'function'
-              ? (latestCreatedAt as FirebaseFirestoreTypes.Timestamp).toDate().getTime()
-              : latestCreatedAt instanceof Date
-                ? latestCreatedAt.getTime()
-                : new Date(latestCreatedAt).getTime())) {
-              latestDocWithoutDeviceUID = doc;
-              latestCreatedAt = docCreatedAt;
-            }
-          }
-        }
-        
-        if (latestDocWithoutDeviceUID) {
-          const docData = latestDocWithoutDeviceUID.data();
-          firestoreUserData = docData as UserData;
-          firestoreExistingUID = latestDocWithoutDeviceUID.id;
-          
-          console.log(`✅ [Recovery] deviceUID 없는 이전 사용자 문서 발견 (${firestoreExistingUID})`);
-          console.log(`📊 [Recovery] Firestore 데이터:`, {
-            nickname: firestoreUserData.nickname,
-            points: firestoreUserData.points,
-            streakCount: firestoreUserData.streakCount,
-            totalSelections: firestoreUserData.totalSelections,
-            deviceUID: firestoreUserData.deviceUID || '없음',
-          });
-        } else {
-          console.log('ℹ️ [Recovery] deviceUID 없는 이전 사용자 문서도 찾지 못했습니다.');
-        }
-      } catch (fallbackError: any) {
-        console.error('❌ [Recovery] deviceUID 없는 문서 검색 실패:', fallbackError);
-        console.error('❌ [Recovery] 에러 코드:', fallbackError?.code);
-        console.error('❌ [Recovery] 에러 메시지:', fallbackError?.message);
-      }
+      console.log(`ℹ️ [Recovery] 이전 버전 사용자는 deviceUID가 없어서 Firestore에서 찾을 수 없을 수 있음`);
+      // 원래 V2 로직: AsyncStorage 마이그레이션만 사용 (이미 위에서 시도함)
+      // deviceUID 없는 문서 검색은 제거 (permission-denied 에러 방지)
     }
     } catch (queryError: any) {
       console.error('❌ [Recovery] Firestore deviceUID 쿼리 실패:', queryError);

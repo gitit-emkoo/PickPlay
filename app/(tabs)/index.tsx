@@ -463,7 +463,7 @@ export default function HomeScreen() {
         
         // 튜토리얼 상태 업데이트 (메인 질문 답변)
         try {
-          await updateTutorialProgress(user.uid, 'mainAnswered');
+          const result = await updateTutorialProgress(user.uid, 'mainAnswered');
           // 튜토리얼 상태 다시 로드
           const updatedStatus = await getTutorialStatus(user.uid);
           if (updatedStatus) {

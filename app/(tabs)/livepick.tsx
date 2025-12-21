@@ -48,21 +48,30 @@ export default function LivePickScreen() {
     return unsubscribe;
   }, []);
 
-  // 화면이 포커스될 때마다 튜토리얼 상태 갱신
+  // 화면이 포커스될 때마다 튜토리얼 상태 및 질문 목록 갱신
   useFocusEffect(
     React.useCallback(() => {
       if (user) {
+        // 튜토리얼 상태 갱신
         getTutorialStatus(user.uid).then(status => {
           setTutorialStatus(status);
         }).catch(e => {
           console.warn('[Tutorial] 튜토리얼 상태 갱신 실패:', e);
         });
+        
+        // 질문 목록 갱신 (상세 페이지에서 투표 후 돌아왔을 때 반영)
+        loadInitialQuestions(true).catch(e => {
+          console.warn('[LivePick] 질문 목록 갱신 실패:', e);
+        });
+        
+        // 오늘 참여 횟수 갱신
+        checkTodayParticipationCount(user.uid);
       }
-    }, [user])
+    }, [user, loadInitialQuestions, checkTodayParticipationCount])
   );
 
   // 라이브픽 질문 초기 로드
-  const loadInitialQuestions = async (isRefresh: boolean = false) => {
+  const loadInitialQuestions = React.useCallback(async (isRefresh: boolean = false) => {
     try {
       // 새로고침일 때는 상단 스피너(RefreshControl)만 사용하고,
       // 전체 화면 로딩 인디케이터는 초기 진입 시에만 사용
@@ -80,7 +89,7 @@ export default function LivePickScreen() {
       }
       setRefreshing(false);
     }
-  };
+  }, []);
 
   // 첫 마운트 시 질문 목록 로드
   useEffect(() => {
@@ -109,14 +118,14 @@ export default function LivePickScreen() {
   };
 
   // 오늘 참여 횟수 확인
-  const checkTodayParticipationCount = async (uid: string) => {
+  const checkTodayParticipationCount = React.useCallback(async (uid: string) => {
     try {
       const count = await getTodayParticipationCount(uid);
       setTodayParticipationCount(count);
     } catch (error) {
       console.error('오늘 참여 횟수 확인 실패:', error);
     }
-  };
+  }, []);
 
   // Pull to refresh
   const onRefresh = async () => {

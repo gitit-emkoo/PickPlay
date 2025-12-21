@@ -426,11 +426,13 @@ export default function QuestionDetailScreen() {
 
       // 튜토리얼 상태 업데이트 (라이브픽 참여)
       try {
-        const updatedData = await updateTutorialProgress(user.uid, 'livepickParticipated');
+        const result = await updateTutorialProgress(user.uid, 'livepickParticipated');
         // 참여 완료 시 축하 팝업 표시 (단, livepickCreated는 아직 안 됨)
-        if (updatedData?.tutorial?.mainAnswered && 
-            updatedData?.tutorial?.livepickParticipated &&
-            !updatedData?.tutorial?.livepickCreated) {
+        // 실제로 업데이트가 수행되었을 때만 축하 팝업 표시 (첫 번째 참여만)
+        if (result?.wasUpdated && 
+            result.userData?.tutorial?.mainAnswered && 
+            result.userData?.tutorial?.livepickParticipated &&
+            !result.userData?.tutorial?.livepickCreated) {
           // 보상 모달이 닫힌 후 축하 팝업 표시
           setTimeout(() => {
             setShowCongratulationModal(true);

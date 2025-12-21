@@ -210,7 +210,8 @@ export default function RootLayout() {
       const initResult = await initializeFirebaseIfNeeded();
       if (__DEV__) {
         try {
-          firestore().setLogLevel('debug');
+          // React Native Firebase의 setLogLevel은 타입 정의에 없을 수 있으므로 타입 캐스팅 사용
+          (firestore() as any).setLogLevel?.('debug');
         } catch (e) {
           console.warn('[Debug] Firestore setLogLevel failed (ignored):', (e as any)?.message || e);
         }
