@@ -43,12 +43,19 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
   // 1. Firestore에 이미 데이터가 있는 경우 (정상)
   if (userDocExists) {
     console.log('✅ [V2] Firestore에서 사용자 데이터 확인:', uid);
-      const data = doc.data() as UserData;
+    const data = doc.data() as UserData;
+    console.log('📊 [V2] Firestore 데이터 내용:', {
+      nickname: data.nickname,
+      points: data.points,
+      streakCount: data.streakCount,
+      totalSelections: data.totalSelections,
+      deviceUID: data.deviceUID || '없음',
+    });
     // Firestore Timestamp를 JS Date 객체로 변환
-      if (data.createdAt && (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate) {
+    if (data.createdAt && (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate) {
       return { ...data, createdAt: (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate() };
-      }
-      return data;
+    }
+    return data;
   }
 
   // 2. Firestore에 데이터가 없는 경우: deviceUID로 기존 사용자 복구 시도
@@ -118,8 +125,40 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
     }
     
     // 2-2. AsyncStorage에서 마이그레이션 시도 (레거시)
-    const legacyDataKey = `userData_${deviceUID}`;
-    const legacyDataJSON = await AsyncStorage.getItem(legacyDataKey);
+    // 먼저 현재 deviceUID로 시도
+    let legacyDataKey = `userData_${deviceUID}`;
+    let legacyDataJSON = await AsyncStorage.getItem(legacyDataKey);
+    
+    // 현재 deviceUID로 찾지 못하면 모든 userData_ 키 검색
+    if (!legacyDataJSON) {
+      console.log('🔍 [Migration] 현재 deviceUID로 데이터를 찾지 못함, 모든 userData_ 키 검색 중...');
+      try {
+        const allKeys = await AsyncStorage.getAllKeys();
+        const userDataKeys = allKeys.filter(key => key.startsWith('userData_'));
+        console.log(`🔍 [Migration] 발견된 userData_ 키: ${userDataKeys.length}개`);
+        
+        // 가장 최근 데이터 찾기 (여러 개 있을 수 있음)
+        for (const key of userDataKeys) {
+          const data = await AsyncStorage.getItem(key);
+          if (data) {
+            try {
+              const parsed = JSON.parse(data);
+              // 유효한 데이터인지 확인 (points, nickname 등이 있는지)
+              if (parsed && (parsed.points !== undefined || parsed.nickname || parsed.totalSelections !== undefined)) {
+                legacyDataKey = key;
+                legacyDataJSON = data;
+                console.log(`✅ [Migration] 유효한 데이터 발견: ${key}`);
+                break;
+              }
+            } catch (e) {
+              console.warn(`⚠️ [Migration] ${key} 파싱 실패:`, e);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('❌ [Migration] AsyncStorage 키 검색 실패:', error);
+      }
+    }
 
     if (legacyDataJSON) {
       console.log('🔄 [V1->V2] AsyncStorage에서 기존 데이터 발견. Firestore로 마이그레이션 시작:', uid);

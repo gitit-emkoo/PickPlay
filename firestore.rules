@@ -29,24 +29,35 @@ service cloud.firestore {
 
     // 사용자 데이터
     match /users/{uid} {
-      // 읽기 권한: 자신의 데이터, 관리자, 또는 deviceUID가 있는 문서 (복구용)
-      // deviceUID가 있는 문서는 앱 재설치 시 복구를 위해 읽기 허용
-      // 쿼리 결과 문서도 이 규칙으로 읽을 수 있음
-      // allow read는 allow get과 allow list를 모두 포함
-      allow read: if signedIn() && (
+      // get: 자신의 문서는 항상 읽기 가능 (deviceUID 있든 없든 상관없이)
+      // 기존 앱과 새 앱 모두 지원
+      allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
+      
+      // list: 쿼리용 (deviceUID로 복구할 때 사용)
+      // 자신의 문서 또는 deviceUID가 있는 문서는 읽기 가능
+      allow list: if signedIn() && (
         request.auth.uid == uid ||
         isAdmin() ||
         (resource.data.deviceUID != null && resource.data.deviceUID is string)
       );
       
       // 초기 생성: 기본 필드만 설정 가능
+      // deviceUID는 선택적 필드 (기존 앱은 없고, 새 앱은 있음)
       allow create: if signedIn() 
         && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['uid', 'nickname', 'points', 'streakCount', 'totalSelections', 'lastAnswerDate', 'createdAt', 'characterId', 'adjective1', 'adjective2', 'tutorial', 'deviceUID'])
-        && request.resource.data.points == 0
-        && request.resource.data.streakCount == 0
-        && request.resource.data.totalSelections == 0
-        && (request.resource.data.deviceUID == null || request.resource.data.deviceUID is string);
+        && (
+          // 기존 앱: deviceUID 없이 생성
+          (request.resource.data.keys().hasOnly(['uid', 'nickname', 'points', 'streakCount', 'totalSelections', 'lastAnswerDate', 'createdAt', 'characterId', 'adjective1', 'adjective2', 'tutorial'])
+            && request.resource.data.points == 0
+            && request.resource.data.streakCount == 0
+            && request.resource.data.totalSelections == 0) ||
+          // 새 앱: deviceUID 포함하여 생성
+          (request.resource.data.keys().hasOnly(['uid', 'nickname', 'points', 'streakCount', 'totalSelections', 'lastAnswerDate', 'createdAt', 'characterId', 'adjective1', 'adjective2', 'tutorial', 'deviceUID'])
+            && request.resource.data.points == 0
+            && request.resource.data.streakCount == 0
+            && request.resource.data.totalSelections == 0
+            && (request.resource.data.deviceUID == null || request.resource.data.deviceUID is string))
+        );
       
       // 업데이트: 필드별 세밀한 권한 제어
       allow update: if signedIn() 

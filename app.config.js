@@ -63,6 +63,9 @@ module.exports = {
               'GCC_PREPROCESSOR_DEFINITIONS': '$(inherited) FOLLY_NO_CONFIG=1 FOLLY_HAS_COROUTINES=0',
               'CLANG_CXX_LANGUAGE_STANDARD': 'gnu++20'
             }
+          },
+          android: {
+            targetSdkVersion: 35
           }
         }
       ],
