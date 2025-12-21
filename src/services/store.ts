@@ -315,9 +315,7 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
       ...recoveredUserData,
       createdAt: backfilledCreatedAt ?? new Date(),
     } as UserData;
-    } catch (error) {
-      console.error("❌ [Recovery] 복구 프로세스 실패:", error);
-    }
+  }
 
     // 3. 마이그레이션할 데이터도 없는 경우: 신규 사용자 생성
     console.log('❌ [ensureUser] 모든 복구 시도 실패 - 신규 사용자 생성');
