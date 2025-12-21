@@ -324,7 +324,7 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
     console.log('   - deviceUID로 기존 사용자 찾기 실패');
     console.log('   - AsyncStorage 마이그레이션 실패');
       console.log('❌ [ensureUser] 신규 사용자 생성 시작 - Firebase UID:', uid);
-      const deviceUID = await getDeviceUID();
+      // deviceUID는 이미 91번 줄에서 선언되었으므로 재사용
       console.log('❌ [ensureUser] 신규 사용자 deviceUID:', deviceUID);
       const newUserData = {
     uid,
