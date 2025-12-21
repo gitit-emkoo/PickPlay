@@ -51,6 +51,28 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
       totalSelections: data.totalSelections,
       deviceUID: data.deviceUID || '없음',
     });
+    
+    // 기존 사용자 문서에 deviceUID가 없으면 추가 (앱 재설치 시 복구를 위해)
+    if (!data.deviceUID) {
+      console.log('🔄 [Migration] 기존 사용자 문서에 deviceUID가 없음. 추가 중...');
+      try {
+        const deviceUID = await getDeviceUID();
+        await userRef.update({
+          deviceUID: deviceUID,
+        } as any);
+        console.log('✅ [Migration] deviceUID 추가 완료:', deviceUID);
+        // 업데이트된 데이터 반환
+        const updatedData = { ...data, deviceUID };
+        if (data.createdAt && (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate) {
+          return { ...updatedData, createdAt: (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate() };
+        }
+        return updatedData;
+      } catch (updateError: any) {
+        console.error('❌ [Migration] deviceUID 추가 실패:', updateError);
+        // 업데이트 실패해도 기존 데이터 반환
+      }
+    }
+    
     // Firestore Timestamp를 JS Date 객체로 변환
     if (data.createdAt && (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate) {
       return { ...data, createdAt: (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate() };
