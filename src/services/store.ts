@@ -44,8 +44,8 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
     const userDocExists = typeof (doc as any).exists === 'function' ? (doc as any).exists() : ((doc as any).exists as boolean);
     console.log('🔵 [ensureUser] Firestore 문서 존재 여부:', userDocExists);
 
-  // 1. Firestore에 이미 데이터가 있는 경우 (정상)
-  if (userDocExists) {
+    // 1. Firestore에 이미 데이터가 있는 경우 (정상)
+    if (userDocExists) {
     console.log('✅ [V2] Firestore에서 사용자 데이터 확인:', uid);
     const data = doc.data() as UserData;
     console.log('📊 [V2] Firestore 데이터 내용:', {
@@ -84,11 +84,11 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
     return data;
   }
 
-  // 2. Firestore에 데이터가 없는 경우: AsyncStorage와 Firestore 양쪽에서 복구 시도
-  console.log('⚠️ [ensureUser] Firestore에 문서가 없음. 복구 시도 시작...');
-  console.log('⚠️ [ensureUser] 현재 Firebase UID:', uid);
-  
-  const deviceUID = await getDeviceUID();
+    // 2. Firestore에 데이터가 없는 경우: AsyncStorage와 Firestore 양쪽에서 복구 시도
+    console.log('⚠️ [ensureUser] Firestore에 문서가 없음. 복구 시도 시작...');
+    console.log('⚠️ [ensureUser] 현재 Firebase UID:', uid);
+    
+    const deviceUID = await getDeviceUID();
   console.log('⚠️ [ensureUser] 현재 deviceUID:', deviceUID);
   
   // 2-1. AsyncStorage에서 모든 userData_ 키 검색 (우선 확인)
@@ -315,18 +315,18 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
       ...recoveredUserData,
       createdAt: backfilledCreatedAt ?? new Date(),
     } as UserData;
-  } catch (error) {
-    console.error("❌ [Recovery] 복구 프로세스 실패:", error);
-  }
+    } catch (error) {
+      console.error("❌ [Recovery] 복구 프로세스 실패:", error);
+    }
 
-  // 3. 마이그레이션할 데이터도 없는 경우: 신규 사용자 생성
-  console.log('❌ [ensureUser] 모든 복구 시도 실패 - 신규 사용자 생성');
-  console.log('❌ [ensureUser] 복구 실패 원인 요약:');
-  console.log('   - Firestore에 현재 UID로 문서 없음');
-  console.log('   - deviceUID로 기존 사용자 찾기 실패');
-  console.log('   - AsyncStorage 마이그레이션 실패');
-  console.log('❌ [ensureUser] 신규 사용자 생성 시작 - Firebase UID:', uid);
-  const deviceUID = await getDeviceUID();
+    // 3. 마이그레이션할 데이터도 없는 경우: 신규 사용자 생성
+    console.log('❌ [ensureUser] 모든 복구 시도 실패 - 신규 사용자 생성');
+    console.log('❌ [ensureUser] 복구 실패 원인 요약:');
+    console.log('   - Firestore에 현재 UID로 문서 없음');
+    console.log('   - deviceUID로 기존 사용자 찾기 실패');
+    console.log('   - AsyncStorage 마이그레이션 실패');
+    console.log('❌ [ensureUser] 신규 사용자 생성 시작 - Firebase UID:', uid);
+    const deviceUID = await getDeviceUID();
   console.log('❌ [ensureUser] 신규 사용자 deviceUID:', deviceUID);
   const newUserData = {
     uid,
@@ -348,12 +348,39 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
     },
   };
 
-  await userRef.set(newUserData);
-  
-  return {
-    ...newUserData,
-    createdAt: new Date(), // JS Date 객체로 변환하여 반환
-  } as UserData;
+    await userRef.set(newUserData);
+    
+    return {
+      ...newUserData,
+      createdAt: new Date(), // JS Date 객체로 변환하여 반환
+    } as UserData;
+  } catch (error: any) {
+    console.error('❌ [ensureUser] 전체 프로세스 실패:', error);
+    console.error('❌ [ensureUser] 에러 코드:', error?.code);
+    console.error('❌ [ensureUser] 에러 메시지:', error?.message);
+    // 에러 발생 시에도 최소한의 사용자 데이터 반환
+    const fallbackDeviceUID = await getDeviceUID();
+    const fallbackUserData = {
+      uid,
+      deviceUID: fallbackDeviceUID,
+      createdAt: new Date(),
+      totalSelections: 0,
+      characterId: null,
+      adjective1: null,
+      adjective2: null,
+      points: 0,
+      streakCount: 0,
+      lastAnswerDate: 0,
+      nickname: generateRandomNickname(),
+      tutorial: {
+        mainAnswered: false,
+        livepickParticipated: false,
+        livepickCreated: false,
+        rewardGiven500: false,
+      },
+    };
+    return fallbackUserData as UserData;
+  }
 };
 
 /**
@@ -1124,3 +1151,4 @@ export function watchAggregation(
 
     return unsubscribe;
 }
+
