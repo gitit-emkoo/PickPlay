@@ -57,47 +57,64 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
     
     // 2-1. deviceUID로 기존 사용자 찾기 (앱 재설치 시 복구)
     console.log('🔍 [Recovery] deviceUID로 기존 사용자 찾기 시도:', deviceUID);
-    const existingUsersQuery = await firestore()
-      .collection('users')
-      .where('deviceUID', '==', deviceUID)
-      .limit(1)
-      .get();
-    
-    if (!existingUsersQuery.empty) {
-      const existingUserDoc = existingUsersQuery.docs[0];
-      const existingUserData = existingUserDoc.data() as UserData;
-      const existingUID = existingUserDoc.id;
+    try {
+      const existingUsersQuery = await firestore()
+        .collection('users')
+        .where('deviceUID', '==', deviceUID)
+        .limit(1)
+        .get();
       
-      console.log(`🔄 [Recovery] 기존 사용자 발견 (${existingUID}), 새 UID(${uid})로 데이터 복사 중...`);
-      
-      // 기존 사용자 데이터를 새 UID로 복사
-      const recoveredUserData = {
-        ...existingUserData,
-        uid, // 새 UID로 업데이트
-        deviceUID, // deviceUID 유지
-        // createdAt은 기존 값 유지 (진행 상태 보존)
-      };
-      
-      // Timestamp 처리
-      if (recoveredUserData.createdAt && typeof (recoveredUserData.createdAt as any).toDate === 'function') {
-        recoveredUserData.createdAt = (recoveredUserData.createdAt as FirebaseFirestoreTypes.Timestamp).toDate() as any;
+      if (!existingUsersQuery.empty) {
+        const existingUserDoc = existingUsersQuery.docs[0];
+        const existingUserData = existingUserDoc.data() as UserData;
+        const existingUID = existingUserDoc.id;
+        
+        console.log(`🔄 [Recovery] 기존 사용자 발견 (${existingUID}), 새 UID(${uid})로 데이터 복사 중...`);
+        console.log(`📊 [Recovery] 기존 사용자 데이터:`, {
+          points: existingUserData.points,
+          nickname: existingUserData.nickname,
+          streakCount: existingUserData.streakCount,
+          totalSelections: existingUserData.totalSelections,
+        });
+        
+        // 기존 사용자 데이터를 새 UID로 복사
+        const recoveredUserData = {
+          ...existingUserData,
+          uid, // 새 UID로 업데이트
+          deviceUID, // deviceUID 유지
+          // createdAt은 기존 값 유지 (진행 상태 보존)
+        };
+        
+        // Timestamp 처리
+        if (recoveredUserData.createdAt && typeof (recoveredUserData.createdAt as any).toDate === 'function') {
+          recoveredUserData.createdAt = (recoveredUserData.createdAt as FirebaseFirestoreTypes.Timestamp).toDate() as any;
+        }
+        
+        await userRef.set(recoveredUserData as any);
+        
+        // 기존 사용자 문서에도 새 UID를 deviceUID와 함께 저장 (참조용)
+        await firestore().collection('users').doc(existingUID).update({
+          recoveredToUID: uid,
+          recoveredAt: firestore.FieldValue.serverTimestamp(),
+        } as any);
+        
+        console.log('✅ [Recovery] 사용자 데이터 복구 완료:', uid);
+        return {
+          ...recoveredUserData,
+          createdAt: recoveredUserData.createdAt && typeof (recoveredUserData.createdAt as any).toDate === 'function'
+            ? (recoveredUserData.createdAt as FirebaseFirestoreTypes.Timestamp).toDate()
+            : (recoveredUserData.createdAt as Date),
+        } as UserData;
+      } else {
+        console.log('ℹ️ [Recovery] deviceUID로 기존 사용자를 찾지 못했습니다. (쿼리 결과 비어있음)');
+        console.log(`ℹ️ [Recovery] 현재 deviceUID: ${deviceUID}`);
+        console.log(`ℹ️ [Recovery] 가능한 원인: 1) 기존 사용자 문서에 deviceUID 필드가 없음, 2) deviceUID 값이 다름`);
       }
-      
-      await userRef.set(recoveredUserData as any);
-      
-      // 기존 사용자 문서에도 새 UID를 deviceUID와 함께 저장 (참조용)
-      await firestore().collection('users').doc(existingUID).update({
-        recoveredToUID: uid,
-        recoveredAt: firestore.FieldValue.serverTimestamp(),
-      } as any);
-      
-      console.log('✅ [Recovery] 사용자 데이터 복구 완료:', uid);
-      return {
-        ...recoveredUserData,
-        createdAt: recoveredUserData.createdAt && typeof (recoveredUserData.createdAt as any).toDate === 'function'
-          ? (recoveredUserData.createdAt as FirebaseFirestoreTypes.Timestamp).toDate()
-          : (recoveredUserData.createdAt as Date),
-      } as UserData;
+    } catch (queryError: any) {
+      console.error('❌ [Recovery] deviceUID 쿼리 실패:', queryError);
+      console.error('❌ [Recovery] 에러 코드:', queryError?.code);
+      console.error('❌ [Recovery] 에러 메시지:', queryError?.message);
+      // 쿼리 실패해도 AsyncStorage 마이그레이션은 계속 시도
     }
     
     // 2-2. AsyncStorage에서 마이그레이션 시도 (레거시)

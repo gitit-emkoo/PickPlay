@@ -789,8 +789,8 @@ export default function HomeScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', marginBottom: 8, width: '100%' }}>
               <Image source={require('../../assets/images/img_calendar.png')} style={{ width: 60, height: 60, borderRadius: 8, marginRight: 16 }} resizeMode="contain" />
               <View style={{ flex: 1, justifyContent: 'center' }}>
-                <Text style={{ fontWeight: '700', fontSize: 18, color: colors.accent, lineHeight: 24, marginBottom: 8 }}>연속참여 보상 강화!</Text>
-                <Text style={{ fontWeight: '700', fontSize: 14, color: colors.text, lineHeight: 20 }}>11일 연속 참여 부터 보상 2배로 UP!{`\n`}31일 연속 참여 부터 보상 3배로 UP!</Text>
+                <Text style={{ fontWeight: '700', fontSize: 18, color: colors.accent, lineHeight: 24, marginBottom: 8 }}>1연속참여 보상 강화!</Text>
+                <Text style={{ fontWeight: '700', fontSize: 12, color: colors.text, lineHeight: 20 }}> 11일 연속 참여부터 보상 2배로 UP!{`\n`}31일 연속 참여 부터 보상 3배로 UP!</Text>
               </View>
             </View>
           </View>

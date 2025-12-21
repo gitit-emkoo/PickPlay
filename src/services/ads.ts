@@ -413,21 +413,41 @@ export function attachRewardedInterstitial(ad: any, {
     try {
       // 광고 로드/표시 실패 이벤트 리스너 추가
       // ERROR 이벤트는 로드 실패와 표시 실패 모두를 처리함
-      unsubscribeFailed = ad.addAdEventListener(AdEventType.ERROR, (error: any) => {
-        // 에러 코드로 로드 실패인지 표시 실패인지 판단
-        const errorCode = String(error?.code || error?.message || '');
-        const isLoadError = errorCode.includes('load') || errorCode.includes('LOAD');
-        const isShowError = errorCode.includes('show') || errorCode.includes('SHOW') || errorCode.includes('present');
-        
-        if (isShowError && onFailedToShow) {
-          onFailedToShow(error);
-          // 표시 실패 시에는 onClosed를 호출하지 않음 (CLOSED 이벤트가 별도로 발생할 수 있음)
-        } else if (onFailedToLoad) {
-          onFailedToLoad(error);
-        } else {
-          onClosed();
-        }
-      });
+      // internal-error가 발생할 수 있으므로 더 안전하게 처리
+      try {
+        unsubscribeFailed = ad.addAdEventListener(AdEventType.ERROR, (error: any) => {
+          try {
+            // 에러 코드로 로드 실패인지 표시 실패인지 판단
+            const errorCode = String(error?.code || error?.message || '');
+            const isLoadError = errorCode.includes('load') || errorCode.includes('LOAD');
+            const isShowError = errorCode.includes('show') || errorCode.includes('SHOW') || errorCode.includes('present');
+            
+            // internal-error는 무시하거나 특별 처리
+            const isInternalError = errorCode.includes('internal-error') || errorCode.includes('Internal error');
+            if (isInternalError) {
+              console.warn('⚠️ [광고] internal-error 발생 (무시):', errorCode);
+              // internal-error는 재시도 로직에서 처리되므로 여기서는 무시
+              return;
+            }
+            
+            if (isShowError && onFailedToShow) {
+              onFailedToShow(error);
+              // 표시 실패 시에는 onClosed를 호출하지 않음 (CLOSED 이벤트가 별도로 발생할 수 있음)
+            } else if (onFailedToLoad) {
+              onFailedToLoad(error);
+            } else {
+              onClosed();
+            }
+          } catch (handlerError: any) {
+            console.error('❌ [광고] ERROR 이벤트 핸들러 실행 중 오류:', handlerError?.message);
+          }
+        });
+      } catch (addListenerError: any) {
+        // ERROR 이벤트 리스너 등록 실패 시 경고만 출력하고 계속 진행
+        // internal-error가 발생할 수 있으므로 실패해도 다른 이벤트 리스너는 계속 등록
+        console.warn('⚠️ [광고] ERROR 이벤트 리스너 등록 실패 (계속 진행):', addListenerError?.message);
+        unsubscribeFailed = null;
+      }
     } catch (e: any) {
       console.error('❌ [광고] ERROR 이벤트 리스너 등록 실패:', e?.message);
     }

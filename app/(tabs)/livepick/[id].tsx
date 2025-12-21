@@ -206,6 +206,16 @@ export default function QuestionDetailScreen() {
     
     const setupAd = async (isRetry = false) => {
       try {
+        // 이전 광고 객체가 있으면 정리
+        if (rewardedAdRef.current && unsubscribe) {
+          try {
+            unsubscribe();
+          } catch (e) {
+            console.warn('⚠️ [LivePick] 이전 광고 리스너 정리 실패:', e);
+          }
+          rewardedAdRef.current = null;
+        }
+        
         // 메인 화면과 동일한 함수 사용
         const ad = await createRewardedInterstitial();
         rewardedAdRef.current = ad;
@@ -254,13 +264,23 @@ export default function QuestionDetailScreen() {
             Alert.alert('광고 오류', `광고를 표시할 수 없습니다: ${error?.message || '알 수 없는 오류'}`);
           },
           onFailedToLoad: (error: any) => {
-            console.error(`❌ [LivePick] 광고 로드 실패 (${retryCount + 1}/${MAX_RETRIES}):`, error?.message);
+            const errorMessage = error?.message || String(error || '알 수 없는 오류');
+            const isInternalError = errorMessage.includes('internal-error') || errorMessage.includes('Internal error');
+            
+            console.error(`❌ [LivePick] 광고 로드 실패 (${retryCount + 1}/${MAX_RETRIES}):`, errorMessage);
+            console.error(`❌ [LivePick] 에러 상세:`, JSON.stringify(error, null, 2));
+            
             setAdLoaded(false);
             setIsLoadingAd(false);
             
             if (retryCount < MAX_RETRIES) {
               retryCount++;
-              setTimeout(() => setupAd(true), retryCount * 1000);
+              // internal-error의 경우 더 긴 대기 시간 (SDK 초기화 대기)
+              const waitTime = isInternalError ? retryCount * 2000 : retryCount * 1000;
+              console.log(`⏳ [LivePick] ${waitTime}ms 후 재시도... (internal-error: ${isInternalError})`);
+              setTimeout(() => setupAd(true), waitTime);
+            } else {
+              console.error(`❌ [LivePick] 광고 로드 최종 실패 (${MAX_RETRIES}회 재시도 완료)`);
             }
           }
         });
@@ -456,7 +476,7 @@ export default function QuestionDetailScreen() {
     
     if (!rewardedAdRef.current) {
       console.log('⏳ [LivePick] 광고 객체가 없음');
-      Alert.alert('광고 준비 중', '광고를 불러오는 중입니다. 잠시만 기다려주세요.');
+      Alert.alert('알림', '아직 광고가 로드중입니다. 잠시후 다시 시도하세요.');
       setIsLoadingAd(true);
         return;
       }
@@ -489,10 +509,10 @@ export default function QuestionDetailScreen() {
               console.log('✅ [LivePick] 광고 표시 시작 (로드 완료 후)');
             } catch (error: any) {
               console.error('❌ [LivePick] 광고 표시 실패:', error?.message);
-              Alert.alert('광고 오류', error?.message || '광고를 표시할 수 없습니다.');
+              Alert.alert('알림', '아직 광고가 로드중입니다. 잠시후 다시 시도하세요.');
             }
           } else {
-            Alert.alert('광고 로드 실패', '광고를 불러오는 데 시간이 걸리고 있습니다.');
+            Alert.alert('알림', '아직 광고가 로드중입니다. 잠시후 다시 시도하세요.');
           }
         }
       }, 500);
@@ -502,7 +522,7 @@ export default function QuestionDetailScreen() {
     
     // 광고가 이미 로드된 경우 표시
     if (!rewardedAdRef.current) {
-      Alert.alert('광고 오류', '광고 객체가 준비되지 않았습니다.');
+      Alert.alert('알림', '아직 광고가 로드중입니다. 잠시후 다시 시도하세요.');
       return;
     }
     

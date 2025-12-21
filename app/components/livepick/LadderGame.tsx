@@ -121,18 +121,22 @@ export default function LadderGame({ visible, onResult }: LadderGameProps) {
         setAnimating(false);
           setWinningIndex(currentLadder);
           
-          // 하단 포인트 표시 설정: 당첨된 인덱스는 실제 포인트, 나머지는 랜덤
-          const availableRewards = [10, 50, 100, 200, 300];
-          const shuffled = [...availableRewards].sort(() => Math.random() - 0.5);
+          // 하단 포인트 표시 설정: 당첨된 인덱스는 실제 포인트, 나머지는 당첨 포인트를 제외한 다른 포인트들
+          const allRewards = [10, 50, 100, 200, 300];
+          // 당첨된 포인트를 제외한 나머지 포인트들
+          const remainingRewards = allRewards.filter(reward => reward !== finalReward);
+          // 나머지 포인트들을 섞기
+          const shuffled = [...remainingRewards].sort(() => Math.random() - 0.5);
           const newBottomRewards: (number | null)[] = Array(LADDERS).fill(null);
           
           // 당첨된 인덱스에 실제 포인트 설정
           newBottomRewards[currentLadder] = finalReward;
           
-          // 나머지 인덱스에 랜덤 포인트 배치
+          // 나머지 인덱스에 당첨 포인트를 제외한 다른 포인트들을 랜덤 배치
           let rewardIndex = 0;
           for (let i = 0; i < LADDERS; i++) {
             if (newBottomRewards[i] === null) {
+              // 나머지 포인트가 부족하면 반복 사용 (5개 도착점에 4개 포인트만 있으므로)
               newBottomRewards[i] = shuffled[rewardIndex % shuffled.length];
               rewardIndex++;
             }
