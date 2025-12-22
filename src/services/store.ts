@@ -50,30 +50,40 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
     // 0-0. 이전 Firebase UID로 기존 사용자 찾기 (앱 업데이트 시 가장 확실한 방법)
     const previousUID = await getPreviousUID();
     let existingUserByPreviousUID: { doc: any; data: UserData; uid: string } | null = null;
-    if (previousUID && previousUID !== uid) {
-      console.log(`🔍 [ensureUser] 이전 Firebase UID 발견: ${previousUID}, 현재 UID: ${uid}`);
-      try {
-        const previousUserDoc = await firestore().collection('users').doc(previousUID).get();
-        if (previousUserDoc.exists) {
-          const previousUserData = previousUserDoc.data() as UserData;
-          console.log(`✅ [ensureUser] 이전 UID로 기존 사용자 발견: ${previousUID}`);
-          console.log(`📊 [ensureUser] 이전 사용자 데이터:`, {
-            nickname: previousUserData.nickname,
-            points: previousUserData.points,
-            streakCount: previousUserData.streakCount,
-            totalSelections: previousUserData.totalSelections,
-          });
-          existingUserByPreviousUID = {
-            doc: previousUserDoc,
-            data: previousUserData,
-            uid: previousUID,
-          };
-        } else {
-          console.log(`ℹ️ [ensureUser] 이전 UID로 문서를 찾지 못했습니다: ${previousUID}`);
+    
+    console.log(`🔍 [ensureUser] previousFirebaseUID 확인:`, previousUID ? `발견됨 (${previousUID})` : '없음');
+    console.log(`🔍 [ensureUser] 현재 Firebase UID:`, uid);
+    
+    if (previousUID) {
+      if (previousUID !== uid) {
+        console.log(`🔍 [ensureUser] 이전 Firebase UID 발견: ${previousUID}, 현재 UID: ${uid} (다름 - 복구 필요)`);
+        try {
+          const previousUserDoc = await firestore().collection('users').doc(previousUID).get();
+          if (previousUserDoc.exists) {
+            const previousUserData = previousUserDoc.data() as UserData;
+            console.log(`✅ [ensureUser] 이전 UID로 기존 사용자 발견: ${previousUID}`);
+            console.log(`📊 [ensureUser] 이전 사용자 데이터:`, {
+              nickname: previousUserData.nickname,
+              points: previousUserData.points,
+              streakCount: previousUserData.streakCount,
+              totalSelections: previousUserData.totalSelections,
+            });
+            existingUserByPreviousUID = {
+              doc: previousUserDoc,
+              data: previousUserData,
+              uid: previousUID,
+            };
+          } else {
+            console.log(`ℹ️ [ensureUser] 이전 UID로 문서를 찾지 못했습니다: ${previousUID}`);
+          }
+        } catch (error: any) {
+          console.error('❌ [ensureUser] 이전 UID 쿼리 실패:', error?.code || error?.message);
         }
-      } catch (error: any) {
-        console.error('❌ [ensureUser] 이전 UID 쿼리 실패:', error?.code || error?.message);
+      } else {
+        console.log(`ℹ️ [ensureUser] 이전 UID와 현재 UID가 동일함 (${previousUID}). 복구 불필요.`);
       }
+    } else {
+      console.log(`⚠️ [ensureUser] previousFirebaseUID가 없습니다. 이전 버전 앱에서 저장되지 않았을 수 있습니다.`);
     }
 
     // 0-1. deviceUID로 기존 사용자 찾기 (앱 업데이트 시 UID가 변경되었을 수 있음)
