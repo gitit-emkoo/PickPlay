@@ -102,8 +102,14 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
       console.error('❌ [ensureUser] deviceUID 쿼리 실패 (무시하고 계속):', queryError?.code || queryError?.message);
     }
 
-    // 1. Firestore에 이미 데이터가 있는 경우
-    if (userDocExists) {
+    // 1. deviceUID로 찾은 기존 사용자가 있고, 현재 UID와 다르면 → 무조건 복구
+    if (existingUserByDeviceUID) {
+      console.log('🔄 [Recovery] deviceUID로 기존 사용자 발견. 현재 UID 문서가 있어도 복구 실행.');
+      console.log(`📊 [Recovery] 기존 사용자 UID: ${existingUserByDeviceUID.uid}, 현재 UID: ${uid}`);
+      // 복구 로직으로 진행 (아래 2번으로)
+    }
+    // 1-1. Firestore에 이미 데이터가 있고, deviceUID로 기존 사용자를 찾지 못한 경우
+    else if (userDocExists) {
       const data = doc.data() as UserData;
       console.log('✅ [V2] Firestore에서 사용자 데이터 확인:', uid);
       console.log('📊 [V2] Firestore 데이터 내용:', {
@@ -114,55 +120,33 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
         deviceUID: data.deviceUID || '없음',
       });
       
-      // deviceUID로 찾은 기존 사용자가 있고, 그 사용자의 데이터가 더 오래되었다면 복구
-      if (existingUserByDeviceUID) {
-        const existingData = existingUserByDeviceUID.data;
-        const currentCreatedAt = data.createdAt && typeof (data.createdAt as any).toDate === 'function'
-          ? (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate().getTime()
-          : data.createdAt instanceof Date
-            ? data.createdAt.getTime()
-            : new Date(data.createdAt).getTime();
-        
-        const existingCreatedAt = existingData.createdAt && typeof (existingData.createdAt as any).toDate === 'function'
-          ? (existingData.createdAt as FirebaseFirestoreTypes.Timestamp).toDate().getTime()
-          : existingData.createdAt instanceof Date
-            ? existingData.createdAt.getTime()
-            : new Date(existingData.createdAt).getTime();
-        
-        // 기존 사용자 데이터가 더 오래되었고, 더 많은 진행 상태를 가지고 있다면 복구
-        if (existingCreatedAt < currentCreatedAt && 
-            (existingData.totalSelections > data.totalSelections || 
-             existingData.points > data.points)) {
-          console.log('🔄 [Recovery] 기존 사용자 데이터가 더 오래되고 진행 상태가 더 많음. 복구 시작...');
-          // 복구 로직으로 진행 (아래 2번으로)
-        } else {
-          // 기존 사용자 문서에 deviceUID가 없으면 추가
-          if (!data.deviceUID) {
-            console.log('🔄 [Migration] 기존 사용자 문서에 deviceUID가 없음. 추가 중...');
-            try {
-              await userRef.update({
-                deviceUID: deviceUID,
-              } as any);
-              console.log('✅ [Migration] deviceUID 추가 완료:', deviceUID);
-              const updatedData = { ...data, deviceUID };
-              if (data.createdAt && (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate) {
-                return { ...updatedData, createdAt: (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate() };
-              }
-              return updatedData;
-            } catch (updateError: any) {
-              console.error('❌ [Migration] deviceUID 추가 실패:', updateError);
+      // V2 마이그레이션 사용자 확인: deviceUID가 없고, 데이터가 신규 사용자처럼 보이면 AsyncStorage 확인
+      if (!data.deviceUID && (data.points === 0 && data.streakCount === 0 && data.totalSelections === 0)) {
+        console.log('⚠️ [V2] deviceUID가 없고 데이터가 신규 사용자처럼 보임. AsyncStorage 확인 중...');
+        try {
+          const allKeys = await AsyncStorage.getAllKeys();
+          const userDataKeys = allKeys.filter(key => key.startsWith('userData_'));
+          if (userDataKeys.length > 0) {
+            console.log(`⚠️ [V2] AsyncStorage에 ${userDataKeys.length}개의 userData_ 키 발견. 복구 로직으로 진행...`);
+            // 복구 로직으로 진행 (아래 2번으로)
+          } else {
+            // AsyncStorage에도 없으면 정상적인 신규 사용자
+            console.log('✅ [V2] AsyncStorage에도 데이터 없음. 정상적인 신규 사용자로 처리.');
+            await userRef.update({
+              deviceUID: deviceUID,
+            } as any);
+            const updatedData = { ...data, deviceUID };
+            if (data.createdAt && (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate) {
+              return { ...updatedData, createdAt: (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate() };
             }
+            return updatedData;
           }
-          
-          // Firestore Timestamp를 JS Date 객체로 변환
-          if (data.createdAt && (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate) {
-            return { ...data, createdAt: (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate() };
-          }
-          return data;
+        } catch (e) {
+          console.error('❌ [V2] AsyncStorage 확인 실패:', e);
+          // 실패해도 기존 데이터 반환
         }
       } else {
-        // deviceUID로 기존 사용자를 찾지 못했거나, 현재 UID와 같음
-        // 기존 사용자 문서에 deviceUID가 없으면 추가
+        // deviceUID가 있거나, 데이터가 있는 경우 정상 처리
         if (!data.deviceUID) {
           console.log('🔄 [Migration] 기존 사용자 문서에 deviceUID가 없음. 추가 중...');
           try {
@@ -333,33 +317,71 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
       }
     }
     
-    // 2-3. AsyncStorage와 Firestore 데이터 병합 및 복구
-    // 우선순위: AsyncStorage > Firestore (로컬 데이터가 더 최신일 수 있음)
+    // 2-3. AsyncStorage와 Firestore 데이터 비교 및 병합
+    // 우선순위: 더 최신 데이터 (totalSelections 또는 lastAnswerDate 기준)
     if (legacyData || firestoreUserData) {
-      console.log('🔄 [Recovery] 기존 데이터 발견, 병합 및 복구 시작...');
+      console.log('🔄 [Recovery] 기존 데이터 발견, 비교 및 병합 시작...');
       
-      // AsyncStorage 데이터를 우선 사용, 없으면 Firestore 데이터 사용
-      const sourceData = legacyData || firestoreUserData;
-      const sourceType = legacyData ? 'AsyncStorage' : 'Firestore';
+      // 두 데이터를 비교해서 더 최신 것을 선택
+      let mergedData: any;
+      let sourceType: string;
+      
+      if (legacyData && firestoreUserData) {
+        // 두 데이터가 모두 있으면 비교
+        const legacyTotalSelections = Number(legacyData.totalSelections || 0);
+        const firestoreTotalSelections = Number(firestoreUserData.totalSelections || 0);
+        
+        // lastAnswerDate 비교 (더 최근 것이 더 최신)
+        const parseDateKey = (val: any): number => {
+          if (!val) return 0;
+          if (typeof val === 'number') return val;
+          if (typeof val === 'string' && val.includes('-')) {
+            return parseInt(val.replace(/-/g, ''), 10);
+          }
+          return 0;
+        };
+        
+        const legacyLastDate = parseDateKey(legacyData.lastAnswerDate);
+        const firestoreLastDate = parseDateKey(firestoreUserData.lastAnswerDate);
+        
+        // totalSelections가 더 많거나, 같으면 lastAnswerDate가 더 최근인 것을 선택
+        const useFirestore = firestoreTotalSelections > legacyTotalSelections || 
+                            (firestoreTotalSelections === legacyTotalSelections && firestoreLastDate > legacyLastDate);
+        
+        if (useFirestore) {
+          console.log('📊 [Recovery] Firestore 데이터가 더 최신입니다. (totalSelections:', firestoreTotalSelections, 'vs', legacyTotalSelections, ')');
+          sourceType = 'Firestore (더 최신)';
+          mergedData = firestoreUserData;
+        } else {
+          console.log('📊 [Recovery] AsyncStorage 데이터가 더 최신입니다. (totalSelections:', legacyTotalSelections, 'vs', firestoreTotalSelections, ')');
+          sourceType = 'AsyncStorage (더 최신)';
+          mergedData = legacyData;
+        }
+        
+        // 두 데이터를 병합 (선택된 데이터를 기본으로, 다른 데이터에서 누락된 필드 보완)
+        mergedData = {
+          nickname: mergedData.nickname || (useFirestore ? legacyData.nickname : firestoreUserData.nickname),
+          points: mergedData.points !== undefined ? mergedData.points : (useFirestore ? legacyData.points : firestoreUserData.points),
+          streakCount: mergedData.streakCount !== undefined ? mergedData.streakCount : (useFirestore ? legacyData.streakCount : firestoreUserData.streakCount),
+          totalSelections: mergedData.totalSelections !== undefined ? mergedData.totalSelections : (useFirestore ? legacyData.totalSelections : firestoreUserData.totalSelections),
+          lastAnswerDate: mergedData.lastAnswerDate || (useFirestore ? legacyData.lastAnswerDate : firestoreUserData.lastAnswerDate),
+          createdAt: mergedData.createdAt || (useFirestore ? 
+            (legacyData.createdAt ? (typeof legacyData.createdAt === 'string' || typeof legacyData.createdAt === 'number' ? legacyData.createdAt : legacyData.createdAt) : null) :
+            (firestoreUserData.createdAt && typeof (firestoreUserData.createdAt as any).toDate === 'function' 
+              ? (firestoreUserData.createdAt as FirebaseFirestoreTypes.Timestamp).toDate() 
+              : firestoreUserData.createdAt)),
+          characterId: mergedData.characterId || (useFirestore ? legacyData.characterId : firestoreUserData.characterId),
+          adjective1: mergedData.adjective1 || (useFirestore ? legacyData.adjective1 : firestoreUserData.adjective1),
+          adjective2: mergedData.adjective2 || (useFirestore ? legacyData.adjective2 : firestoreUserData.adjective2),
+          tutorial: mergedData.tutorial || (useFirestore ? legacyData.tutorial : firestoreUserData.tutorial),
+        };
+      } else {
+        // 하나만 있으면 그것을 사용
+        mergedData = legacyData || firestoreUserData;
+        sourceType = legacyData ? 'AsyncStorage' : 'Firestore';
+      }
       
       console.log(`📊 [Recovery] ${sourceType} 데이터를 사용하여 복구합니다.`);
-      
-      // 두 데이터를 병합 (AsyncStorage가 있으면 우선, 없으면 Firestore 사용)
-      const mergedData = legacyData && firestoreUserData ? {
-      // AsyncStorage 데이터를 기본으로 사용하되, Firestore에 더 나은 데이터가 있으면 사용
-      nickname: legacyData.nickname || firestoreUserData.nickname,
-      points: legacyData.points !== undefined ? legacyData.points : firestoreUserData.points,
-      streakCount: legacyData.streakCount !== undefined ? legacyData.streakCount : firestoreUserData.streakCount,
-      totalSelections: legacyData.totalSelections !== undefined ? legacyData.totalSelections : firestoreUserData.totalSelections,
-      lastAnswerDate: legacyData.lastAnswerDate || firestoreUserData.lastAnswerDate,
-      createdAt: legacyData.createdAt || (firestoreUserData.createdAt && typeof (firestoreUserData.createdAt as any).toDate === 'function' 
-        ? (firestoreUserData.createdAt as FirebaseFirestoreTypes.Timestamp).toDate() 
-        : firestoreUserData.createdAt),
-      characterId: legacyData.characterId || firestoreUserData.characterId,
-      adjective1: legacyData.adjective1 || firestoreUserData.adjective1,
-      adjective2: legacyData.adjective2 || firestoreUserData.adjective2,
-      tutorial: legacyData.tutorial || firestoreUserData.tutorial,
-      } : (legacyData || firestoreUserData);
       
       // createdAt 백필 알고리즘 (기존 Day 진행 상태 보존)
       const parseDateKeyToDate = (val: any): Date | null => {
@@ -413,16 +435,17 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
       : computeCreatedAtFromProgress(mergedData);
 
       // V2 데이터 구조에 맞게 변환
+      // points와 streakCount는 undefined가 아닌 경우에만 사용 (0도 유효한 값)
       const recoveredUserData = {
       uid,
       deviceUID, // deviceUID 저장 (앱 재설치 시 복구용)
-      points: mergedData.points || 0,
-      streakCount: mergedData.streakCount || 0,
+      points: mergedData.points !== undefined ? mergedData.points : 0,
+      streakCount: mergedData.streakCount !== undefined ? mergedData.streakCount : 0,
       lastAnswerDate: typeof mergedData.lastAnswerDate === 'string' && mergedData.lastAnswerDate.includes('-') ? 
                         parseInt(mergedData.lastAnswerDate.replace(/-/g, ''), 10) : 
-                        (mergedData.lastAnswerDate || 0),
+                        (mergedData.lastAnswerDate !== undefined ? mergedData.lastAnswerDate : 0),
       nickname: mergedData.nickname || generateRandomNickname(),
-      totalSelections: mergedData.totalSelections || 0,
+      totalSelections: mergedData.totalSelections !== undefined ? mergedData.totalSelections : 0,
       createdAt: backfilledCreatedAt ?? firestore.FieldValue.serverTimestamp(),
       characterId: mergedData.characterId || null,
       adjective1: mergedData.adjective1 || null,
@@ -434,6 +457,16 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
         rewardGiven500: false,
       },
     };
+    
+    // 복구된 데이터 로깅 (중요 필드 확인)
+    console.log('✅ [Recovery] 복구된 사용자 데이터:', {
+      nickname: recoveredUserData.nickname,
+      points: recoveredUserData.points,
+      streakCount: recoveredUserData.streakCount,
+      totalSelections: recoveredUserData.totalSelections,
+      lastAnswerDate: recoveredUserData.lastAnswerDate,
+      deviceUID: recoveredUserData.deviceUID,
+    });
 
       await userRef.set(recoveredUserData as any);
       

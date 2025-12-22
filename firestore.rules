@@ -6,7 +6,7 @@
 // - 푸쉬로그 컬렉션을 위한 규칙 업데이트
 // - votes(집계로그)삭제
 // - 라이브픽 추가
-// - eviceUID 저장 추가가
+// - eviceUID 저장 추가
 
 rules_version = '2';
 service cloud.firestore {
