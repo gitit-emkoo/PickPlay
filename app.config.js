@@ -3,8 +3,8 @@ module.exports = {
     name: 'pickplay',
     slug: 'today-balance',
     scheme: 'pickplay',
-    version: '2.1.0',
-    runtimeVersion: '2.1.0',
+    version: '2.1.1',
+    runtimeVersion: '2.1.1',
     extra: {
       eas: {
         projectId: '14d1ecb2-a3c0-4425-ac97-0ec33b289905'
