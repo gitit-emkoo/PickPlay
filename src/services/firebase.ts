@@ -2,7 +2,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import * as Device from 'expo-device';
-import * as Application from 'expo-application';
 import { Platform } from 'react-native';
 export { watchAuth, ensureAnonymousAuth, getPreviousUID } from './authGuard';
 export { ensureAnonymousAuth as forceAnonymousAuth } from './authGuard';
@@ -47,34 +46,33 @@ export async function getDeviceUID(): Promise<string> {
     let hardwareIdSource: string = 'unknown';
     
     if (Platform.OS === 'android') {
-      // Android: expo-application의 getAndroidIdAsync() 사용
-      // 앱 서명이 같으면 동일한 ID 유지 (앱 업데이트 시에도 동일)
+      // Android: Android ID 사용 (앱 서명이 같으면 동일한 ID)
       // 주의: 기기 초기화 시 변경될 수 있음
+      // expo-device v7에서는 androidId가 없을 수 있으므로 타입 체크
       try {
-        hardwareId = await Application.getAndroidIdAsync();
+        hardwareId = (Device as any).androidId || null;
         if (hardwareId) {
-          hardwareIdSource = 'Android ID (expo-application)';
+          hardwareIdSource = 'androidId';
           console.log('📱 Android ID 가져오기 성공:', hardwareId);
         } else {
-          console.warn('⚠️ [getDeviceUID] Android ID를 가져올 수 없습니다.');
+          console.warn('⚠️ [getDeviceUID] Android ID를 가져올 수 없습니다. expo-device 버전을 확인하세요.');
         }
       } catch (e) {
         console.error('❌ [getDeviceUID] Android ID 가져오기 실패:', e);
       }
     } else if (Platform.OS === 'ios') {
-      // iOS: expo-application의 getIosIdForVendorAsync() 사용
-      // 같은 벤더의 앱들 간 동일한 ID 제공
-      // 앱 업데이트 시 동일한 ID 유지, 하지만 앱 삭제 후 재설치 시 변경될 수 있음
+      // iOS: osInternalBuildId 사용 (앱 재설치 시 유지됨)
+      // 주의: 완벽하지 않지만 대부분의 경우 동일한 ID 유지
       try {
-        hardwareId = await Application.getIosIdForVendorAsync();
+        hardwareId = (Device as any).osInternalBuildId || Device.modelId || null;
         if (hardwareId) {
-          hardwareIdSource = 'iOS ID for Vendor (expo-application)';
-          console.log('📱 iOS ID for Vendor 가져오기 성공:', hardwareId);
+          hardwareIdSource = (Device as any).osInternalBuildId ? 'osInternalBuildId' : 'modelId';
+          console.log(`📱 iOS 기기 ID 가져오기 성공 (${hardwareIdSource}):`, hardwareId);
         } else {
-          console.warn('⚠️ [getDeviceUID] iOS ID for Vendor를 가져올 수 없습니다.');
+          console.warn('⚠️ [getDeviceUID] iOS 기기 ID를 가져올 수 없습니다.');
         }
       } catch (e) {
-        console.error('❌ [getDeviceUID] iOS ID for Vendor 가져오기 실패:', e);
+        console.error('❌ [getDeviceUID] iOS 기기 ID 가져오기 실패:', e);
       }
     }
     
