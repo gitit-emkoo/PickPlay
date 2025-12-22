@@ -4,7 +4,7 @@ import { generateRandomNickname } from '../utils/nickname';
 import { Answer, Character, Question, UserData } from '../types';
 import { ensureAnonymousAuth } from './firebase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getDeviceUID } from './firebase';
+import { getDeviceUID, getPreviousUID } from './firebase';
 import { currentDateKey } from '../utils/date';
 import functionsModule from '@react-native-firebase/functions';
 import { scheduleStreakNotification } from './notifications';
@@ -47,7 +47,36 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
     const deviceUID = await getDeviceUID();
     console.log('🔵 [ensureUser] 현재 deviceUID:', deviceUID);
 
-    // 0. 먼저 deviceUID로 기존 사용자 찾기 (앱 업데이트 시 UID가 변경되었을 수 있음)
+    // 0-0. 이전 Firebase UID로 기존 사용자 찾기 (앱 업데이트 시 가장 확실한 방법)
+    const previousUID = await getPreviousUID();
+    let existingUserByPreviousUID: { doc: any; data: UserData; uid: string } | null = null;
+    if (previousUID && previousUID !== uid) {
+      console.log(`🔍 [ensureUser] 이전 Firebase UID 발견: ${previousUID}, 현재 UID: ${uid}`);
+      try {
+        const previousUserDoc = await firestore().collection('users').doc(previousUID).get();
+        if (previousUserDoc.exists) {
+          const previousUserData = previousUserDoc.data() as UserData;
+          console.log(`✅ [ensureUser] 이전 UID로 기존 사용자 발견: ${previousUID}`);
+          console.log(`📊 [ensureUser] 이전 사용자 데이터:`, {
+            nickname: previousUserData.nickname,
+            points: previousUserData.points,
+            streakCount: previousUserData.streakCount,
+            totalSelections: previousUserData.totalSelections,
+          });
+          existingUserByPreviousUID = {
+            doc: previousUserDoc,
+            data: previousUserData,
+            uid: previousUID,
+          };
+        } else {
+          console.log(`ℹ️ [ensureUser] 이전 UID로 문서를 찾지 못했습니다: ${previousUID}`);
+        }
+      } catch (error: any) {
+        console.error('❌ [ensureUser] 이전 UID 쿼리 실패:', error?.code || error?.message);
+      }
+    }
+
+    // 0-1. deviceUID로 기존 사용자 찾기 (앱 업데이트 시 UID가 변경되었을 수 있음)
     let existingUserByDeviceUID: { doc: any; data: UserData; uid: string } | null = null;
     try {
       const existingUsersQuery = await firestore()
@@ -102,8 +131,14 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
       console.error('❌ [ensureUser] deviceUID 쿼리 실패 (무시하고 계속):', queryError?.code || queryError?.message);
     }
 
-    // 1. deviceUID로 찾은 기존 사용자가 있고, 현재 UID와 다르면 → 무조건 복구
-    if (existingUserByDeviceUID) {
+    // 1. 이전 UID로 찾은 기존 사용자가 있으면 → 최우선 복구 (가장 확실한 방법)
+    if (existingUserByPreviousUID) {
+      console.log('🔄 [Recovery] 이전 Firebase UID로 기존 사용자 발견. 무조건 복구 실행.');
+      console.log(`📊 [Recovery] 이전 사용자 UID: ${existingUserByPreviousUID.uid}, 현재 UID: ${uid}`);
+      // 복구 로직으로 진행 (아래 2번으로)
+    }
+    // 1-1. deviceUID로 찾은 기존 사용자가 있고, 현재 UID와 다르면 → 복구
+    else if (existingUserByDeviceUID) {
       console.log('🔄 [Recovery] deviceUID로 기존 사용자 발견. 현재 UID 문서가 있어도 복구 실행.');
       console.log(`📊 [Recovery] 기존 사용자 UID: ${existingUserByDeviceUID.uid}, 현재 UID: ${uid}`);
       // 복구 로직으로 진행 (아래 2번으로)
@@ -238,15 +273,27 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
       console.error('❌ [Recovery] AsyncStorage 검색 실패:', error);
     }
     
-    // 2-2. Firestore에서 deviceUID로 기존 사용자 찾기 (이미 위에서 찾았으면 사용)
+    // 2-2. Firestore에서 기존 사용자 찾기 (이전 UID 우선, deviceUID 다음)
     let firestoreUserData: UserData | null = null;
     let firestoreExistingUID: string | null = null;
     
-    if (existingUserByDeviceUID) {
-      // 이미 위에서 찾은 기존 사용자 사용
+    if (existingUserByPreviousUID) {
+      // 이전 UID로 찾은 사용자 우선 사용 (가장 확실한 방법)
+      firestoreUserData = existingUserByPreviousUID.data;
+      firestoreExistingUID = existingUserByPreviousUID.uid;
+      console.log(`✅ [Recovery] 이전 Firebase UID로 기존 사용자 발견 (${firestoreExistingUID}) - 최우선 사용`);
+      console.log(`📊 [Recovery] Firestore 데이터:`, {
+        nickname: firestoreUserData.nickname,
+        points: firestoreUserData.points,
+        streakCount: firestoreUserData.streakCount,
+        totalSelections: firestoreUserData.totalSelections,
+        deviceUID: firestoreUserData.deviceUID || '없음',
+      });
+    } else if (existingUserByDeviceUID) {
+      // deviceUID로 찾은 기존 사용자 사용
       firestoreUserData = existingUserByDeviceUID.data;
       firestoreExistingUID = existingUserByDeviceUID.uid;
-      console.log(`✅ [Recovery] Firestore에서 기존 사용자 발견 (${firestoreExistingUID}) - 위에서 찾은 데이터 사용`);
+      console.log(`✅ [Recovery] Firestore에서 기존 사용자 발견 (${firestoreExistingUID}) - deviceUID로 찾은 데이터 사용`);
       console.log(`📊 [Recovery] Firestore 데이터:`, {
         nickname: firestoreUserData.nickname,
         points: firestoreUserData.points,

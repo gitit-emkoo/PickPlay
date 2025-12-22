@@ -1,8 +1,38 @@
 import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 let signingIn = false;
 let inflight: Promise<FirebaseAuthTypes.User | null> | null = null;
 let unsub: (() => void) | null = null;
+
+/**
+ * 이전 Firebase UID를 AsyncStorage에 저장합니다.
+ * 앱 업데이트 시 새로운 UID가 생성되면, 이전 UID를 사용하여 기존 사용자 데이터를 복구할 수 있습니다.
+ */
+async function savePreviousUID(uid: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem('previousFirebaseUID', uid);
+    console.log(`[savePreviousUID] 이전 Firebase UID 저장 완료: ${uid}`);
+  } catch (error) {
+    console.error('[savePreviousUID] 저장 실패:', error);
+  }
+}
+
+/**
+ * AsyncStorage에 저장된 이전 Firebase UID를 가져옵니다.
+ */
+export async function getPreviousUID(): Promise<string | null> {
+  try {
+    const previousUID = await AsyncStorage.getItem('previousFirebaseUID');
+    if (previousUID) {
+      console.log(`[getPreviousUID] 이전 Firebase UID 발견: ${previousUID}`);
+    }
+    return previousUID;
+  } catch (error) {
+    console.error('[getPreviousUID] 읽기 실패:', error);
+    return null;
+  }
+}
 
 /**
  * Firebase가 초기화될 때까지 대기합니다.
@@ -78,6 +108,8 @@ export async function ensureAnonymousAuth(): Promise<FirebaseAuthTypes.User | nu
     const current = auth().currentUser;
     if (current) {
       console.log(`[ensureAnonymousAuth] ✅ 기존 사용자 발견: ${current.uid}`);
+      // 현재 UID를 저장 (앱 업데이트 시 복구용)
+      await savePreviousUID(current.uid);
       return Promise.resolve(current);
     }
     
@@ -86,12 +118,31 @@ export async function ensureAnonymousAuth(): Promise<FirebaseAuthTypes.User | nu
       return inflight;
     }
 
+    // 이전 UID 확인 (앱 업데이트 시 새로운 UID가 생성되었을 수 있음)
+    const previousUID = await getPreviousUID();
+    if (previousUID) {
+      console.log(`[ensureAnonymousAuth] 이전 Firebase UID 발견: ${previousUID}`);
+    }
+
     console.log('[ensureAnonymousAuth] 익명 로그인 시작...');
     signingIn = true;
     inflight = auth()
       .signInAnonymously()
-      .then(res => {
-        console.log(`[ensureAnonymousAuth] ✅ 익명 로그인 성공: ${res.user.uid}`);
+      .then(async res => {
+        const newUID = res.user.uid;
+        console.log(`[ensureAnonymousAuth] ✅ 익명 로그인 성공: ${newUID}`);
+        
+        // 이전 UID와 다르면 이전 UID 유지 (앱 업데이트로 인한 새로운 UID 생성)
+        // 이전 UID는 복구 로직에서 사용되므로 덮어쓰지 않음
+        if (previousUID && previousUID !== newUID) {
+          console.log(`[ensureAnonymousAuth] ⚠️ 새로운 UID 생성됨 (이전: ${previousUID}, 새: ${newUID})`);
+          console.log(`[ensureAnonymousAuth] 이전 UID는 유지하여 복구 로직에서 사용`);
+          // 이전 UID를 유지하므로 새 UID를 저장하지 않음
+        } else {
+          // 이전 UID가 없거나 같으면 현재 UID 저장
+          await savePreviousUID(newUID);
+        }
+        
         return res.user;
       })
       .catch(err => {

@@ -3,7 +3,7 @@ import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
-export { watchAuth, ensureAnonymousAuth } from './authGuard';
+export { watchAuth, ensureAnonymousAuth, getPreviousUID } from './authGuard';
 export { ensureAnonymousAuth as forceAnonymousAuth } from './authGuard';
 
 // 네이티브 SDK 초기화는 google-services.json / GoogleService-Info.plist로 자동 처리됩니다.
