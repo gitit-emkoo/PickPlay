@@ -4,6 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 let signingIn = false;
 let inflight: Promise<FirebaseAuthTypes.User | null> | null = null;
 let unsub: (() => void) | null = null;
+let ensureAuthRetryCount = 0;
+const MAX_ENSURE_AUTH_RETRIES = 3;
 
 /**
  * 이전 Firebase UID를 AsyncStorage에 저장합니다.
@@ -37,6 +39,7 @@ export async function getPreviousUID(): Promise<string | null> {
 /**
  * Firebase가 초기화될 때까지 대기합니다.
  * React Native Firebase는 네이티브 모듈이므로, auth() 호출을 시도하여 초기화 여부를 확인합니다.
+ * 실패 시 false를 반환하여 앱 크래시를 방지합니다.
  */
 async function waitForFirebase(maxRetries = 20, initialDelay = 200, maxDelay = 1000): Promise<boolean> {
   console.log(`[waitForFirebase] 시작 - 최대 ${maxRetries}회 재시도`);
@@ -75,32 +78,56 @@ async function waitForFirebase(maxRetries = 20, initialDelay = 200, maxDelay = 1
           console.error(`[waitForFirebase] ❌ 최대 재시도 횟수(${maxRetries}) 초과`);
         }
       } else {
-        // 다른 에러는 즉시 throw
-        console.error(`[waitForFirebase] ❌ 예상치 못한 에러 발생, 즉시 종료`);
-        throw error;
+        // 다른 에러도 크래시 방지를 위해 false 반환
+        console.error(`[waitForFirebase] ❌ 예상치 못한 에러 발생, false 반환 (크래시 방지)`);
+        console.error(`[waitForFirebase] 에러 상세:`, error);
+        return false;
       }
     }
   }
-  // 최대 재시도 횟수 초과
+  // 최대 재시도 횟수 초과 - 크래시 방지를 위해 false 반환
   console.error(`[waitForFirebase] ❌ Firebase 초기화 시간 초과 (${maxRetries}회 시도 실패)`);
-  throw new Error('Firebase 초기화 시간 초과');
+  console.error(`[waitForFirebase] ⚠️ false 반환하여 앱 크래시 방지`);
+  return false;
 }
 
 /**
  * 중복 호출을 막고, 모든 호출자가 같은 Promise를 공유합니다.
+ * 재시도 횟수를 제한하여 무한 루프를 방지합니다.
  */
 export async function ensureAnonymousAuth(): Promise<FirebaseAuthTypes.User | null> {
-  console.log('[ensureAnonymousAuth] 시작');
+  console.log(`[ensureAnonymousAuth] 시작 (재시도 횟수: ${ensureAuthRetryCount}/${MAX_ENSURE_AUTH_RETRIES})`);
+  
+  // 재시도 횟수 제한 확인
+  if (ensureAuthRetryCount >= MAX_ENSURE_AUTH_RETRIES) {
+    console.error(`[ensureAnonymousAuth] ❌ 최대 재시도 횟수(${MAX_ENSURE_AUTH_RETRIES}) 초과, null 반환하여 크래시 방지`);
+    ensureAuthRetryCount = 0; // 리셋
+    return null;
+  }
   
   // Firebase 초기화 대기
   try {
     console.log('[ensureAnonymousAuth] Firebase 초기화 대기 중...');
-    await waitForFirebase();
+    const firebaseReady = await waitForFirebase();
+    if (!firebaseReady) {
+      console.warn('[ensureAnonymousAuth] ❌ Firebase 초기화 실패, 재시도 중...');
+      ensureAuthRetryCount++;
+      await new Promise(resolve => setTimeout(resolve, 500));
+      return ensureAnonymousAuth(); // 재시도
+    }
     console.log('[ensureAnonymousAuth] ✅ Firebase 초기화 완료');
+    ensureAuthRetryCount = 0; // 성공 시 리셋
   } catch (error) {
-    console.warn('[ensureAnonymousAuth] ❌ Firebase 초기화 대기 실패, 재시도 중...', error);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    return ensureAnonymousAuth(); // 재시도
+    console.warn('[ensureAnonymousAuth] ❌ Firebase 초기화 대기 중 예외 발생:', error);
+    ensureAuthRetryCount++;
+    if (ensureAuthRetryCount < MAX_ENSURE_AUTH_RETRIES) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      return ensureAnonymousAuth(); // 재시도
+    } else {
+      console.error(`[ensureAnonymousAuth] ❌ 최대 재시도 횟수(${MAX_ENSURE_AUTH_RETRIES}) 초과, null 반환`);
+      ensureAuthRetryCount = 0; // 리셋
+      return null;
+    }
   }
   
   try {
@@ -161,19 +188,41 @@ export async function ensureAnonymousAuth(): Promise<FirebaseAuthTypes.User | nu
     console.error('[ensureAnonymousAuth] ❌ 에러 발생:', errorMessage);
     
     if (errorMessage.includes("No Firebase App '[DEFAULT]'")) {
-      console.warn('[ensureAnonymousAuth] Firebase 초기화 대기 중, 재시도...');
-      await new Promise(resolve => setTimeout(resolve, 500));
-      return ensureAnonymousAuth(); // 재시도
+      ensureAuthRetryCount++;
+      if (ensureAuthRetryCount < MAX_ENSURE_AUTH_RETRIES) {
+        console.warn(`[ensureAnonymousAuth] Firebase 초기화 대기 중, 재시도... (${ensureAuthRetryCount}/${MAX_ENSURE_AUTH_RETRIES})`);
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return ensureAnonymousAuth(); // 재시도
+      } else {
+        console.error(`[ensureAnonymousAuth] ❌ 최대 재시도 횟수(${MAX_ENSURE_AUTH_RETRIES}) 초과, null 반환`);
+        ensureAuthRetryCount = 0; // 리셋
+        return null;
+      }
     }
-    throw error;
+    // 다른 에러도 크래시 방지를 위해 null 반환
+    console.error('[ensureAnonymousAuth] ❌ 예상치 못한 에러, null 반환하여 크래시 방지');
+    ensureAuthRetryCount = 0; // 리셋
+    return null;
   }
 }
 
+let watchAuthRetryCount = 0;
+const MAX_WATCH_AUTH_RETRIES = 3;
+
 /**
  * 단 하나의 상태 리스너만 유지 + 비로그인 시 1회만 로그인 시도합니다.
+ * 재시도 횟수를 제한하여 무한 루프를 방지합니다.
  */
 export function watchAuth(cb: (user: { uid: string } | null) => void): () => void {
-  console.log('[watchAuth] 시작');
+  console.log(`[watchAuth] 시작 (재시도 횟수: ${watchAuthRetryCount}/${MAX_WATCH_AUTH_RETRIES})`);
+  
+  // 재시도 횟수 제한 확인
+  if (watchAuthRetryCount >= MAX_WATCH_AUTH_RETRIES) {
+    console.error(`[watchAuth] ❌ 최대 재시도 횟수(${MAX_WATCH_AUTH_RETRIES}) 초과, null 콜백 호출하여 크래시 방지`);
+    watchAuthRetryCount = 0; // 리셋
+    cb(null);
+    return () => {}; // 빈 cleanup 함수 반환
+  }
   
   if (unsub) {
     console.log('[watchAuth] 기존 리스너 제거');
@@ -183,7 +232,16 @@ export function watchAuth(cb: (user: { uid: string } | null) => void): () => voi
   // Firebase 초기화를 기다린 후 리스너 등록
   console.log('[watchAuth] Firebase 초기화 대기 시작...');
   waitForFirebase()
-    .then(() => {
+    .then((firebaseReady) => {
+      if (!firebaseReady) {
+        console.warn('[watchAuth] ❌ Firebase 초기화 실패, 재시도 중...');
+        watchAuthRetryCount++;
+        setTimeout(() => {
+          watchAuth(cb);
+        }, 2000);
+        return;
+      }
+      watchAuthRetryCount = 0; // 성공 시 리셋
       console.log('[watchAuth] ✅ Firebase 초기화 완료, 리스너 등록 시도...');
       try {
         unsub = auth().onAuthStateChanged(async (u) => {
@@ -215,24 +273,37 @@ export function watchAuth(cb: (user: { uid: string } | null) => void): () => voi
         console.error('[watchAuth] ❌ 리스너 등록 실패:', errorMessage);
         
         if (errorMessage.includes("No Firebase App '[DEFAULT]'")) {
-          console.warn('[watchAuth] Firebase 초기화 대기 중, 1초 후 재시도...');
-          // 재시도 (더 긴 대기 시간)
-          setTimeout(() => {
-            watchAuth(cb);
-          }, 1000);
+          watchAuthRetryCount++;
+          if (watchAuthRetryCount < MAX_WATCH_AUTH_RETRIES) {
+            console.warn(`[watchAuth] Firebase 초기화 대기 중, 1초 후 재시도... (${watchAuthRetryCount}/${MAX_WATCH_AUTH_RETRIES})`);
+            setTimeout(() => {
+              watchAuth(cb);
+            }, 1000);
+          } else {
+            console.error(`[watchAuth] ❌ 최대 재시도 횟수(${MAX_WATCH_AUTH_RETRIES}) 초과, null 콜백 호출`);
+            watchAuthRetryCount = 0; // 리셋
+            cb(null);
+          }
         } else {
           console.error('[watchAuth] 예상치 못한 에러:', error);
+          watchAuthRetryCount = 0; // 리셋
           cb(null);
         }
       }
     })
     .catch((error) => {
-      console.warn('[watchAuth] ❌ Firebase 초기화 실패, 2초 후 재시도...', error?.message || error);
-      // 에러가 발생해도 앱이 계속 실행되도록 재시도
-      setTimeout(() => {
-        console.log('[watchAuth] 재시도 시작...');
-        watchAuth(cb);
-      }, 2000);
+      watchAuthRetryCount++;
+      if (watchAuthRetryCount < MAX_WATCH_AUTH_RETRIES) {
+        console.warn(`[watchAuth] ❌ Firebase 초기화 실패, 2초 후 재시도... (${watchAuthRetryCount}/${MAX_WATCH_AUTH_RETRIES})`, error?.message || error);
+        setTimeout(() => {
+          console.log('[watchAuth] 재시도 시작...');
+          watchAuth(cb);
+        }, 2000);
+      } else {
+        console.error(`[watchAuth] ❌ 최대 재시도 횟수(${MAX_WATCH_AUTH_RETRIES}) 초과, null 콜백 호출하여 크래시 방지`);
+        watchAuthRetryCount = 0; // 리셋
+        cb(null);
+      }
     });
 
   return () => {
