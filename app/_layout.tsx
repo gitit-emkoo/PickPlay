@@ -208,14 +208,6 @@ export default function RootLayout() {
     (async () => {
       // 0. Firebase 초기화 확인 (빠른 체크)
       const initResult = await initializeFirebaseIfNeeded();
-      if (!initResult) {
-        // 초기화 실패 시에도 앱은 계속 진행 (백그라운드에서 재시도)
-        console.warn('[RootLayout] Firebase 초기화 확인 실패 - 백그라운드에서 재시도');
-        setFirebaseStatus('ready'); // 에러 화면 대신 메인 화면으로 진행
-        return;
-      }
-      
-      // Firebase 초기화 성공 후에만 firestore() 호출 (크래시 방지)
       if (__DEV__) {
         try {
           // React Native Firebase의 setLogLevel은 타입 정의에 없을 수 있으므로 타입 캐스팅 사용
@@ -223,6 +215,12 @@ export default function RootLayout() {
         } catch (e) {
           console.warn('[Debug] Firestore setLogLevel failed (ignored):', (e as any)?.message || e);
         }
+      }
+      if (!initResult) {
+        // 초기화 실패 시에도 앱은 계속 진행 (백그라운드에서 재시도)
+        console.warn('[RootLayout] Firebase 초기화 확인 실패 - 백그라운드에서 재시도');
+        setFirebaseStatus('ready'); // 에러 화면 대신 메인 화면으로 진행
+        return;
       }
 
       // 익명 인증은 백그라운드에서 처리 (블로킹하지 않음)
