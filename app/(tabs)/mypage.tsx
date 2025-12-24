@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
 import LottieView from 'lottie-react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import colors from '../../src/styles/colors';
 import { watchAuth } from '../../src/services/firebase';
 import { ensureUser } from '../../src/services/store';
@@ -37,6 +37,26 @@ export default function MyPageScreen() {
     });
     return unsubscribe;
   }, []);
+
+  // 화면이 포커스될 때마다 사용자 데이터 갱신 (메인페이지에서 투표 후 업데이트된 데이터 반영)
+  useFocusEffect(
+    React.useCallback(() => {
+      if (user) {
+        ensureUser(user.uid)
+          .then((data) => {
+            setUserData(data);
+            console.log('✅ [MyPage] 사용자 데이터 갱신 완료:', {
+              streakCount: data.streakCount,
+              points: data.points,
+              totalSelections: data.totalSelections,
+            });
+          })
+          .catch((error) => {
+            console.error('❌ [MyPage] 사용자 데이터 갱신 실패:', error);
+          });
+      }
+    }, [user])
+  );
 
   const openLink = async (url: string) => {
     try {
