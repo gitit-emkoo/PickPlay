@@ -931,19 +931,38 @@ export const saveAnswerAndProcessLogic = async (userData: UserData, question: Qu
         const day = String(yesterdayKST.getUTCDate()).padStart(2, '0');
         const yesterdayKey = parseInt(`${year}${month}${day}`, 10);
 
+        // lastAnswerDate를 숫자로 변환 (문자열일 수 있음)
+        const lastAnswerDateNum = typeof currentUserData.lastAnswerDate === 'string' 
+          ? parseInt(currentUserData.lastAnswerDate.replace(/-/g, ''), 10) 
+          : (currentUserData.lastAnswerDate || 0);
+
         console.log(`[Streak] 연속 참여일수 계산:`, {
           todayKey: todayKey,
           yesterdayKey: yesterdayKey,
           lastAnswerDate: currentUserData.lastAnswerDate,
+          lastAnswerDateNum: lastAnswerDateNum,
           currentStreakCount: currentUserData.streakCount,
-          isYesterdayAnswered: currentUserData.lastAnswerDate === yesterdayKey
+          isYesterdayAnswered: lastAnswerDateNum === yesterdayKey,
+          isTodayAnswered: lastAnswerDateNum === todayKey
         });
 
-        if (currentUserData.lastAnswerDate === yesterdayKey) {
+        // 오늘 이미 투표했는지 확인 (중복 방지)
+        if (lastAnswerDateNum === todayKey) {
+          // 오늘 이미 투표했으면 현재 streakCount 유지
+          newStreakCount = currentUserData.streakCount || 1;
+          console.log(`[Streak] 오늘 이미 투표함. 현재 streakCount 유지: ${newStreakCount}`);
+        } else if (lastAnswerDateNum === yesterdayKey) {
+          // 어제 투표했으면 연속 참여
           newStreakCount = (currentUserData.streakCount || 0) + 1;
           console.log(`[Streak] 연속 참여 감지: ${currentUserData.streakCount} → ${newStreakCount}`);
+        } else if (lastAnswerDateNum === 0 || !currentUserData.lastAnswerDate) {
+          // 첫 투표이거나 lastAnswerDate가 없으면 1일
+          newStreakCount = 1;
+          console.log(`[Streak] 첫 투표 또는 lastAnswerDate 없음: 1일로 설정`);
         } else {
-          console.log(`[Streak] 연속 참여 끊김: 1로 리셋`);
+          // 하루라도 건너뛰었으면 1일로 리셋
+          newStreakCount = 1;
+          console.log(`[Streak] 연속 참여 끊김: 1로 리셋 (lastAnswerDate: ${lastAnswerDateNum}, 어제: ${yesterdayKey})`);
         }
       }
       
