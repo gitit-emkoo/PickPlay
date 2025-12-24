@@ -45,7 +45,7 @@
     "expo-haptics": "~14.0.1",
     "expo-image": "~2.0.7",
     "expo-linking": "~7.0.5",
-    "expo-modules-autolinking": "~2.0.8",
+    "expo-modules-autolinking": "~2.1.0",
     "expo-modules-core": "~2.2.3",
     "expo-notifications": "~0.29.14",
     "expo-router": "~4.0.21",
@@ -88,7 +88,7 @@
   },
   "overrides": {
     "react-native-worklets": false,
-    "expo-modules-autolinking": "~2.0.8"
+    "expo-modules-autolinking": "~2.1.0"
   },
   "private": true
 }
