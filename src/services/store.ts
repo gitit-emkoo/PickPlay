@@ -40,14 +40,74 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
   const userRef = firestore().collection('users').doc(uid);
   
   try {
+    const deviceUID = await getDeviceUID();
+    console.log('🔵 [ensureUser] 현재 deviceUID:', deviceUID);
+
+    // 0-0. AsyncStorage를 가장 먼저 확인 (같은 기기라면 업데이트 후에도 유지됨)
+    console.log('🔍 [ensureUser] AsyncStorage에서 기존 데이터 우선 확인 중...');
+    let asyncStorageData: any = null;
+    let asyncStorageKey: string | null = null;
+    try {
+      // 먼저 현재 deviceUID로 시도
+      const currentDeviceKey = `userData_${deviceUID}`;
+      let asyncDataJSON = await AsyncStorage.getItem(currentDeviceKey);
+      
+      // 현재 deviceUID로 찾지 못하면 모든 userData_ 키 검색
+      if (!asyncDataJSON) {
+        console.log('🔍 [ensureUser] 현재 deviceUID로 데이터를 찾지 못함, 모든 userData_ 키 검색 중...');
+        const allKeys = await AsyncStorage.getAllKeys();
+        const userDataKeys = allKeys.filter(key => key.startsWith('userData_'));
+        console.log(`🔍 [ensureUser] 발견된 userData_ 키: ${userDataKeys.length}개`);
+        
+        // 가장 최신 데이터 찾기 (totalSelections가 가장 큰 것 선택)
+        for (const key of userDataKeys) {
+          const data = await AsyncStorage.getItem(key);
+          if (data) {
+            try {
+              const parsed = JSON.parse(data);
+              // 유효한 데이터인지 확인 (points, nickname 등이 있고, totalSelections가 0이 아닌 경우 우선)
+              if (parsed && (parsed.points !== undefined || parsed.nickname || parsed.totalSelections !== undefined)) {
+                // totalSelections가 있는 데이터를 우선 선택 (더 많은 활동 = 더 최신)
+                if (!asyncStorageData || (parsed.totalSelections || 0) > (asyncStorageData.totalSelections || 0)) {
+                  asyncStorageKey = key;
+                  asyncStorageData = parsed;
+                }
+              }
+            } catch (e) {
+              console.warn(`⚠️ [ensureUser] ${key} 파싱 실패:`, e);
+            }
+          }
+        }
+        
+        if (asyncStorageData) {
+          console.log(`✅ [ensureUser] AsyncStorage에서 유효한 데이터 발견: ${asyncStorageKey}`);
+          console.log(`📊 [ensureUser] AsyncStorage 데이터:`, {
+            nickname: asyncStorageData.nickname,
+            points: asyncStorageData.points,
+            streakCount: asyncStorageData.streakCount,
+            totalSelections: asyncStorageData.totalSelections,
+          });
+        }
+      } else {
+        asyncStorageData = JSON.parse(asyncDataJSON);
+        asyncStorageKey = currentDeviceKey;
+        console.log(`✅ [ensureUser] AsyncStorage에서 데이터 발견 (현재 deviceUID): ${asyncStorageKey}`);
+        console.log(`📊 [ensureUser] AsyncStorage 데이터:`, {
+          nickname: asyncStorageData.nickname,
+          points: asyncStorageData.points,
+          streakCount: asyncStorageData.streakCount,
+          totalSelections: asyncStorageData.totalSelections,
+        });
+      }
+    } catch (error) {
+      console.error('❌ [ensureUser] AsyncStorage 검색 실패:', error);
+    }
+
     const doc = await userRef.get();
     const userDocExists = typeof (doc as any).exists === 'function' ? (doc as any).exists() : ((doc as any).exists as boolean);
     console.log('🔵 [ensureUser] Firestore 문서 존재 여부:', userDocExists);
 
-    const deviceUID = await getDeviceUID();
-    console.log('🔵 [ensureUser] 현재 deviceUID:', deviceUID);
-
-    // 0-0. 이전 Firebase UID로 기존 사용자 찾기 (앱 업데이트 시 가장 확실한 방법)
+    // 0-1. 이전 Firebase UID로 기존 사용자 찾기 (앱 업데이트 시 가장 확실한 방법)
     const previousUID = await getPreviousUID();
     let existingUserByPreviousUID: { doc: any; data: UserData; uid: string } | null = null;
     
@@ -141,19 +201,25 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
       console.error('❌ [ensureUser] deviceUID 쿼리 실패 (무시하고 계속):', queryError?.code || queryError?.message);
     }
 
-    // 1. 이전 UID로 찾은 기존 사용자가 있으면 → 최우선 복구 (가장 확실한 방법)
-    if (existingUserByPreviousUID) {
-      console.log('🔄 [Recovery] 이전 Firebase UID로 기존 사용자 발견. 무조건 복구 실행.');
+    // 1. AsyncStorage에 유효한 데이터가 있으면 → 최우선 복구 (같은 기기라면 업데이트 후에도 유지됨)
+    if (asyncStorageData && (asyncStorageData.totalSelections > 0 || asyncStorageData.points > 0 || asyncStorageData.streakCount > 0)) {
+      console.log('🔄 [Recovery] AsyncStorage에서 기존 사용자 데이터 발견. 무조건 복구 실행.');
+      console.log(`📊 [Recovery] AsyncStorage 키: ${asyncStorageKey}`);
+      // 복구 로직으로 진행 (아래 2번으로)
+    }
+    // 1-1. 이전 UID로 찾은 기존 사용자가 있으면 → 복구 (가장 확실한 방법)
+    else if (existingUserByPreviousUID) {
+      console.log('🔄 [Recovery] 이전 Firebase UID로 기존 사용자 발견. 복구 실행.');
       console.log(`📊 [Recovery] 이전 사용자 UID: ${existingUserByPreviousUID.uid}, 현재 UID: ${uid}`);
       // 복구 로직으로 진행 (아래 2번으로)
     }
-    // 1-1. deviceUID로 찾은 기존 사용자가 있고, 현재 UID와 다르면 → 복구
+    // 1-2. deviceUID로 찾은 기존 사용자가 있고, 현재 UID와 다르면 → 복구
     else if (existingUserByDeviceUID) {
-      console.log('🔄 [Recovery] deviceUID로 기존 사용자 발견. 현재 UID 문서가 있어도 복구 실행.');
+      console.log('🔄 [Recovery] deviceUID로 기존 사용자 발견. 복구 실행.');
       console.log(`📊 [Recovery] 기존 사용자 UID: ${existingUserByDeviceUID.uid}, 현재 UID: ${uid}`);
       // 복구 로직으로 진행 (아래 2번으로)
     }
-    // 1-1. Firestore에 이미 데이터가 있고, deviceUID로 기존 사용자를 찾지 못한 경우
+    // 1-3. Firestore에 이미 데이터가 있고, deviceUID로 기존 사용자를 찾지 못한 경우
     else if (userDocExists) {
       const data = doc.data() as UserData;
       console.log('✅ [V2] Firestore에서 사용자 데이터 확인:', uid);
@@ -217,70 +283,78 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
       }
     }
 
-    // 2. Firestore에 데이터가 없거나, deviceUID로 찾은 기존 사용자가 있는 경우: 복구 시도
+    // 2. Firestore에 데이터가 없거나, 기존 사용자가 있는 경우: 복구 시도
     console.log('⚠️ [ensureUser] 복구 시도 시작...');
     console.log('⚠️ [ensureUser] 현재 Firebase UID:', uid);
     console.log('⚠️ [ensureUser] 현재 deviceUID:', deviceUID);
     
-    // 2-1. AsyncStorage에서 모든 userData_ 키 검색 (우선 확인)
-    console.log('🔍 [Recovery] AsyncStorage에서 기존 데이터 검색 시작...');
-    let legacyDataKey: string | null = null;
-    let legacyDataJSON: string | null = null;
-    let legacyData: any = null;
+    // 2-1. AsyncStorage 데이터 사용 (이미 위에서 검색함)
+    let legacyData: any = asyncStorageData;
+    let legacyDataKey: string | null = asyncStorageKey;
     
-    try {
-    // 먼저 현재 deviceUID로 시도
-    legacyDataKey = `userData_${deviceUID}`;
-    legacyDataJSON = await AsyncStorage.getItem(legacyDataKey);
-    
-    // 현재 deviceUID로 찾지 못하면 모든 userData_ 키 검색
-    if (!legacyDataJSON) {
-      console.log('🔍 [Recovery] 현재 deviceUID로 데이터를 찾지 못함, 모든 userData_ 키 검색 중...');
+    // 위에서 찾지 못했으면 다시 검색 시도
+    if (!legacyData) {
+      console.log('🔍 [Recovery] AsyncStorage에서 기존 데이터 재검색 시작...');
       try {
-        const allKeys = await AsyncStorage.getAllKeys();
-        const userDataKeys = allKeys.filter(key => key.startsWith('userData_'));
-        console.log(`🔍 [Recovery] 발견된 userData_ 키: ${userDataKeys.length}개`);
+        // 먼저 현재 deviceUID로 시도
+        legacyDataKey = `userData_${deviceUID}`;
+        let legacyDataJSON = await AsyncStorage.getItem(legacyDataKey);
         
-        // 가장 최근 데이터 찾기 (여러 개 있을 수 있음)
-        for (const key of userDataKeys) {
-          const data = await AsyncStorage.getItem(key);
-          if (data) {
-            try {
-              const parsed = JSON.parse(data);
-              // 유효한 데이터인지 확인 (points, nickname 등이 있는지)
-              if (parsed && (parsed.points !== undefined || parsed.nickname || parsed.totalSelections !== undefined)) {
-                legacyDataKey = key;
-                legacyDataJSON = data;
-                legacyData = parsed;
-                console.log(`✅ [Recovery] AsyncStorage에서 유효한 데이터 발견: ${key}`);
-                console.log(`📊 [Recovery] AsyncStorage 데이터:`, {
-                  nickname: parsed.nickname,
-                  points: parsed.points,
-                  streakCount: parsed.streakCount,
-                  totalSelections: parsed.totalSelections,
-                });
-                break;
+        // 현재 deviceUID로 찾지 못하면 모든 userData_ 키 검색
+        if (!legacyDataJSON) {
+          console.log('🔍 [Recovery] 현재 deviceUID로 데이터를 찾지 못함, 모든 userData_ 키 검색 중...');
+          try {
+            const allKeys = await AsyncStorage.getAllKeys();
+            const userDataKeys = allKeys.filter(key => key.startsWith('userData_'));
+            console.log(`🔍 [Recovery] 발견된 userData_ 키: ${userDataKeys.length}개`);
+            
+            // 가장 최신 데이터 찾기 (totalSelections가 가장 큰 것 선택)
+            for (const key of userDataKeys) {
+              const data = await AsyncStorage.getItem(key);
+              if (data) {
+                try {
+                  const parsed = JSON.parse(data);
+                  // 유효한 데이터인지 확인 (points, nickname 등이 있는지)
+                  if (parsed && (parsed.points !== undefined || parsed.nickname || parsed.totalSelections !== undefined)) {
+                    // totalSelections가 있는 데이터를 우선 선택
+                    if (!legacyData || (parsed.totalSelections || 0) > (legacyData.totalSelections || 0)) {
+                      legacyDataKey = key;
+                      legacyData = parsed;
+                    }
+                  }
+                } catch (e) {
+                  console.warn(`⚠️ [Recovery] ${key} 파싱 실패:`, e);
+                }
               }
-            } catch (e) {
-              console.warn(`⚠️ [Recovery] ${key} 파싱 실패:`, e);
             }
+            
+            if (legacyData) {
+              console.log(`✅ [Recovery] AsyncStorage에서 유효한 데이터 발견: ${legacyDataKey}`);
+              console.log(`📊 [Recovery] AsyncStorage 데이터:`, {
+                nickname: legacyData.nickname,
+                points: legacyData.points,
+                streakCount: legacyData.streakCount,
+                totalSelections: legacyData.totalSelections,
+              });
+            }
+          } catch (error) {
+            console.error('❌ [Recovery] AsyncStorage 키 검색 실패:', error);
           }
+        } else {
+          legacyData = JSON.parse(legacyDataJSON);
+          console.log(`✅ [Recovery] AsyncStorage에서 데이터 발견 (현재 deviceUID): ${legacyDataKey}`);
+          console.log(`📊 [Recovery] AsyncStorage 데이터:`, {
+            nickname: legacyData.nickname,
+            points: legacyData.points,
+            streakCount: legacyData.streakCount,
+            totalSelections: legacyData.totalSelections,
+          });
         }
       } catch (error) {
-        console.error('❌ [Recovery] AsyncStorage 키 검색 실패:', error);
+        console.error('❌ [Recovery] AsyncStorage 검색 실패:', error);
       }
     } else {
-      legacyData = JSON.parse(legacyDataJSON);
-      console.log(`✅ [Recovery] AsyncStorage에서 데이터 발견 (현재 deviceUID): ${legacyDataKey}`);
-      console.log(`📊 [Recovery] AsyncStorage 데이터:`, {
-        nickname: legacyData.nickname,
-        points: legacyData.points,
-        streakCount: legacyData.streakCount,
-        totalSelections: legacyData.totalSelections,
-      });
-    }
-    } catch (error) {
-      console.error('❌ [Recovery] AsyncStorage 검색 실패:', error);
+      console.log('✅ [Recovery] 위에서 찾은 AsyncStorage 데이터 재사용');
     }
     
     // 2-2. Firestore에서 기존 사용자 찾기 (이전 UID 우선, deviceUID 다음)
