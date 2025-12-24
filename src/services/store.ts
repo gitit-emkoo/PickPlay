@@ -308,69 +308,6 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
       console.log('⚠️ [Recovery] SDK 53 → SDK 52 다운그레이드로 인해 Firebase Anonymous Auth가 새로운 UID를 생성했을 수 있습니다.');
       console.log('⚠️ [Recovery] AsyncStorage에 기존 데이터가 없다면 복구가 불가능할 수 있습니다.');
     }
-    // 1-3. Firestore에 이미 데이터가 있고, deviceUID로 기존 사용자를 찾지 못한 경우 (이미 위에서 처리됨)
-    else if (false) {
-      const data = doc.data() as UserData;
-      console.log('✅ [V2] Firestore에서 사용자 데이터 확인:', uid);
-      console.log('📊 [V2] Firestore 데이터 내용:', {
-        nickname: data.nickname,
-        points: data.points,
-        streakCount: data.streakCount,
-        totalSelections: data.totalSelections,
-        deviceUID: data.deviceUID || '없음',
-      });
-      
-      // V2 마이그레이션 사용자 확인: deviceUID가 없고, 데이터가 신규 사용자처럼 보이면 AsyncStorage 확인
-      if (!data.deviceUID && (data.points === 0 && data.streakCount === 0 && data.totalSelections === 0)) {
-        console.log('⚠️ [V2] deviceUID가 없고 데이터가 신규 사용자처럼 보임. AsyncStorage 확인 중...');
-        try {
-          const allKeys = await AsyncStorage.getAllKeys();
-          const userDataKeys = allKeys.filter(key => key.startsWith('userData_'));
-          if (userDataKeys.length > 0) {
-            console.log(`⚠️ [V2] AsyncStorage에 ${userDataKeys.length}개의 userData_ 키 발견. 복구 로직으로 진행...`);
-            // 복구 로직으로 진행 (아래 2번으로)
-          } else {
-            // AsyncStorage에도 없으면 정상적인 신규 사용자
-            console.log('✅ [V2] AsyncStorage에도 데이터 없음. 정상적인 신규 사용자로 처리.');
-            await userRef.update({
-              deviceUID: deviceUID,
-            } as any);
-            const updatedData = { ...data, deviceUID };
-            if (data.createdAt && (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate) {
-              return { ...updatedData, createdAt: (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate() };
-            }
-            return updatedData;
-          }
-        } catch (e) {
-          console.error('❌ [V2] AsyncStorage 확인 실패:', e);
-          // 실패해도 기존 데이터 반환
-        }
-      } else {
-        // deviceUID가 있거나, 데이터가 있는 경우 정상 처리
-        if (!data.deviceUID) {
-          console.log('🔄 [Migration] 기존 사용자 문서에 deviceUID가 없음. 추가 중...');
-          try {
-            await userRef.update({
-              deviceUID: deviceUID,
-            } as any);
-            console.log('✅ [Migration] deviceUID 추가 완료:', deviceUID);
-            const updatedData = { ...data, deviceUID };
-            if (data.createdAt && (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate) {
-              return { ...updatedData, createdAt: (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate() };
-            }
-            return updatedData;
-          } catch (updateError: any) {
-            console.error('❌ [Migration] deviceUID 추가 실패:', updateError);
-          }
-        }
-        
-        // Firestore Timestamp를 JS Date 객체로 변환
-        if (data.createdAt && (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate) {
-          return { ...data, createdAt: (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate() };
-        }
-        return data;
-      }
-    }
 
     // 2. Firestore에 데이터가 없거나, 기존 사용자가 있는 경우: 복구 시도
     console.log('⚠️ [ensureUser] 복구 시도 시작...');
