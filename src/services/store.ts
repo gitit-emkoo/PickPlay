@@ -293,22 +293,20 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
       // 복구 로직으로 진행 (아래 2번으로)
     } else if (asyncStorageData) {
       console.log('⚠️ [Recovery] AsyncStorage에 데이터가 있지만 모든 값이 0입니다. 새 유저 데이터로 간주합니다.');
+    } else if (existingUserByPreviousUID) {
+      // 1-1. 이전 UID로 찾은 기존 사용자가 있으면 → 복구 (가장 확실한 방법)
+      console.log('🔄 [Recovery] 이전 Firebase UID로 기존 사용자 발견. 복구 실행.');
+      console.log(`📊 [Recovery] 이전 사용자 UID: ${existingUserByPreviousUID.uid}, 현재 UID: ${uid}`);
+      // 복구 로직으로 진행 (아래 2번으로)
+    } else if (existingUserByDeviceUID) {
+      // 1-2. deviceUID로 찾은 기존 사용자가 있고, 현재 UID와 다르면 → 복구
+      console.log('🔄 [Recovery] deviceUID로 기존 사용자 발견. 복구 실행.');
+      console.log(`📊 [Recovery] 기존 사용자 UID: ${existingUserByDeviceUID.uid}, 현재 UID: ${uid}`);
+      // 복구 로직으로 진행 (아래 2번으로)
     } else {
       console.log('⚠️ [Recovery] AsyncStorage에서 유효한 데이터를 찾지 못했습니다.');
       console.log('⚠️ [Recovery] SDK 53 → SDK 52 다운그레이드로 인해 Firebase Anonymous Auth가 새로운 UID를 생성했을 수 있습니다.');
       console.log('⚠️ [Recovery] AsyncStorage에 기존 데이터가 없다면 복구가 불가능할 수 있습니다.');
-    }
-    // 1-1. 이전 UID로 찾은 기존 사용자가 있으면 → 복구 (가장 확실한 방법)
-    else if (existingUserByPreviousUID) {
-      console.log('🔄 [Recovery] 이전 Firebase UID로 기존 사용자 발견. 복구 실행.');
-      console.log(`📊 [Recovery] 이전 사용자 UID: ${existingUserByPreviousUID.uid}, 현재 UID: ${uid}`);
-      // 복구 로직으로 진행 (아래 2번으로)
-    }
-    // 1-2. deviceUID로 찾은 기존 사용자가 있고, 현재 UID와 다르면 → 복구
-    else if (existingUserByDeviceUID) {
-      console.log('🔄 [Recovery] deviceUID로 기존 사용자 발견. 복구 실행.');
-      console.log(`📊 [Recovery] 기존 사용자 UID: ${existingUserByDeviceUID.uid}, 현재 UID: ${uid}`);
-      // 복구 로직으로 진행 (아래 2번으로)
     }
     // 1-3. Firestore에 이미 데이터가 있고, deviceUID로 기존 사용자를 찾지 못한 경우 (이미 위에서 처리됨)
     else if (false) {
