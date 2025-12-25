@@ -48,7 +48,7 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
     const userDocExists = typeof (doc as any).exists === 'function' ? (doc as any).exists() : ((doc as any).exists as boolean);
     console.log('🔵 [ensureUser] Firestore 문서 존재 여부:', userDocExists);
     
-    // V2 버전과 동일: Firestore에 데이터가 있으면 바로 반환
+    // V2 버전과 동일: Firestore에 데이터가 있으면 확인
     if (userDocExists) {
       const data = doc.data() as UserData;
       console.log('✅ [V2] Firestore에서 사용자 데이터 확인:', uid);
@@ -60,29 +60,38 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
         deviceUID: data.deviceUID || '없음',
       });
       
-      // deviceUID가 없으면 추가 (향후 복구용)
-      if (!data.deviceUID) {
-        console.log('🔄 [Migration] 기존 사용자 문서에 deviceUID가 없음. 추가 중...');
-        try {
-          await userRef.update({
-            deviceUID: deviceUID,
-          } as any);
-          console.log('✅ [Migration] deviceUID 추가 완료:', deviceUID);
-          const updatedData = { ...data, deviceUID };
-          if (data.createdAt && (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate) {
-            return { ...updatedData, createdAt: (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate() };
-          }
-          return updatedData;
-        } catch (updateError: any) {
-          console.error('❌ [Migration] deviceUID 추가 실패:', updateError);
-        }
-      }
+      // 신규 사용자처럼 보이는 경우 (모든 값이 0) 복구 로직 실행
+      const isNewUserLike = (data.points === 0 && data.streakCount === 0 && data.totalSelections === 0);
       
-      // Firestore Timestamp를 JS Date 객체로 변환
-      if (data.createdAt && (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate) {
-        return { ...data, createdAt: (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate() };
+      if (isNewUserLike) {
+        console.log('⚠️ [ensureUser] Firestore 문서가 있지만 신규 사용자처럼 보임 (모든 값이 0). 복구 로직 실행...');
+        // 아래 복구 로직으로 진행
+      } else {
+        // 유효한 데이터가 있으면 정상 반환
+        // deviceUID가 없으면 추가 (향후 복구용)
+        if (!data.deviceUID) {
+          console.log('🔄 [Migration] 기존 사용자 문서에 deviceUID가 없음. 추가 중...');
+          try {
+            await userRef.update({
+              deviceUID: deviceUID,
+            } as any);
+            console.log('✅ [Migration] deviceUID 추가 완료:', deviceUID);
+            const updatedData = { ...data, deviceUID };
+            if (data.createdAt && (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate) {
+              return { ...updatedData, createdAt: (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate() };
+            }
+            return updatedData;
+          } catch (updateError: any) {
+            console.error('❌ [Migration] deviceUID 추가 실패:', updateError);
+          }
+        }
+        
+        // Firestore Timestamp를 JS Date 객체로 변환
+        if (data.createdAt && (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate) {
+          return { ...data, createdAt: (data.createdAt as FirebaseFirestoreTypes.Timestamp).toDate() };
+        }
+        return data;
       }
-      return data;
     }
 
     // Firestore에 데이터가 없으면 복구 시도
@@ -534,6 +543,118 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
               }
             } catch (nicknameQueryError: any) {
               console.error('❌ [Recovery] Firestore 닉네임 쿼리 실패:', nicknameQueryError);
+            }
+          }
+          
+          // V2 유저 복구: answers 컬렉션에서 최근 답변한 UID 찾기
+          // (같은 기기에서 V2 앱을 사용했다면, answers 컬렉션에 해당 기기의 답변이 있을 수 있음)
+          if (!firestoreUserData) {
+            console.log('🔍 [Recovery] V2 유저 복구 시도: answers 컬렉션에서 최근 답변한 UID 검색...');
+            try {
+              // 최근 7일 이내에 답변한 사용자 찾기
+              const sevenDaysAgo = new Date();
+              sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+              sevenDaysAgo.setHours(0, 0, 0, 0);
+              
+              // answers 컬렉션에서 최근 답변 찾기 (최대 50개)
+              const recentAnswersQuery = await firestore()
+                .collection('answers')
+                .orderBy('answeredAt', 'desc')
+                .limit(50)
+                .get();
+              
+              if (!recentAnswersQuery.empty) {
+                // UID별로 그룹화하여 가장 최근 활동이 많은 사용자 찾기
+                const uidActivityMap = new Map<string, { count: number; lastAnswerAt: Date; uid: string }>();
+                
+                for (const answerDoc of recentAnswersQuery.docs) {
+                  const answerData = answerDoc.data();
+                  const answerUID = answerData.uid;
+                  const answerDocId = answerDoc.id;
+                  
+                  // 문서 ID 형식: {uid}_{questionId}
+                  const docUID = answerDocId.split('_')[0];
+                  
+                  // answerData.uid와 문서 ID의 UID가 일치하는지 확인
+                  if (answerUID && answerUID === docUID && answerUID !== uid) {
+                    let answerAt: Date | null = null;
+                    if (answerData.answeredAt) {
+                      if (typeof (answerData.answeredAt as any).toDate === 'function') {
+                        answerAt = (answerData.answeredAt as FirebaseFirestoreTypes.Timestamp).toDate();
+                      } else if (answerData.answeredAt instanceof Date) {
+                        answerAt = answerData.answeredAt;
+                      }
+                    }
+                    
+                    // 최근 7일 이내 답변이면 카운트
+                    if (answerAt && answerAt >= sevenDaysAgo) {
+                      const existing = uidActivityMap.get(answerUID);
+                      if (!existing || (answerAt && answerAt > existing.lastAnswerAt)) {
+                        uidActivityMap.set(answerUID, {
+                          count: (existing?.count || 0) + 1,
+                          lastAnswerAt: answerAt || new Date(),
+                          uid: answerUID,
+                        });
+                      } else {
+                        uidActivityMap.set(answerUID, {
+                          ...existing,
+                          count: existing.count + 1,
+                        });
+                      }
+                    }
+                  }
+                }
+                
+                // 가장 활동이 많은 UID 찾기
+                let mostActiveUID: string | null = null;
+                let maxActivity = 0;
+                let mostRecentAnswerAt: Date | null = null;
+                
+                for (const [uid, activity] of uidActivityMap.entries()) {
+                  if (activity.count > maxActivity || 
+                      (activity.count === maxActivity && activity.lastAnswerAt > (mostRecentAnswerAt || new Date(0)))) {
+                    mostActiveUID = uid;
+                    maxActivity = activity.count;
+                    mostRecentAnswerAt = activity.lastAnswerAt;
+                  }
+                }
+                
+                // 가장 활동이 많은 UID로 사용자 문서 조회
+                if (mostActiveUID) {
+                  console.log(`🔍 [Recovery] answers 컬렉션에서 가장 활동이 많은 UID 발견: ${mostActiveUID} (답변 ${maxActivity}개)`);
+                  
+                  const v2UserDoc = await firestore().collection('users').doc(mostActiveUID).get();
+                  if (v2UserDoc.exists) {
+                    const v2UserData = v2UserDoc.data() as UserData;
+                    
+                    // deviceUID가 없으면 V2 유저로 간주
+                    if (!v2UserData.deviceUID) {
+                      firestoreUserData = v2UserData;
+                      firestoreExistingUID = mostActiveUID;
+                      console.log(`✅ [Recovery] V2 유저 발견 (answers 기반, ${firestoreExistingUID}): "${firestoreUserData.nickname}"`);
+                      console.log(`📊 [Recovery] Firestore 데이터:`, {
+                        nickname: firestoreUserData.nickname,
+                        points: firestoreUserData.points,
+                        streakCount: firestoreUserData.streakCount,
+                        totalSelections: firestoreUserData.totalSelections,
+                        deviceUID: firestoreUserData.deviceUID || '없음',
+                      });
+                    } else {
+                      console.log(`ℹ️ [Recovery] 발견한 UID(${mostActiveUID})는 이미 deviceUID가 있어서 V2 유저가 아닙니다.`);
+                    }
+                  } else {
+                    console.log(`ℹ️ [Recovery] 발견한 UID(${mostActiveUID})로 사용자 문서를 찾지 못했습니다.`);
+                  }
+                } else {
+                  console.log('ℹ️ [Recovery] answers 컬렉션에서 최근 활동이 있는 사용자를 찾지 못했습니다.');
+                }
+              } else {
+                console.log('ℹ️ [Recovery] answers 컬렉션에 최근 답변이 없습니다.');
+              }
+            } catch (v2RecoveryError: any) {
+              console.error('❌ [Recovery] V2 유저 복구 쿼리 실패:', v2RecoveryError);
+              console.error('❌ [Recovery] 에러 코드:', v2RecoveryError?.code);
+              console.error('❌ [Recovery] 에러 메시지:', v2RecoveryError?.message);
             }
           }
         }

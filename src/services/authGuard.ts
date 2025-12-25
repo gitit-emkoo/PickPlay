@@ -131,6 +131,11 @@ export async function ensureAnonymousAuth(): Promise<FirebaseAuthTypes.User | nu
   }
   
   try {
+    // Firebase 초기화 후 약간의 지연을 주어 기존 토큰이 복원되도록 함
+    // (같은 앱 서명이면 Firebase가 기기 내부 토큰을 자동으로 복원함)
+    console.log('[ensureAnonymousAuth] 기존 토큰 복원 대기 중... (200ms)');
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
     console.log('[ensureAnonymousAuth] currentUser 확인 중...');
     const current = auth().currentUser;
     if (current) {
@@ -138,6 +143,40 @@ export async function ensureAnonymousAuth(): Promise<FirebaseAuthTypes.User | nu
       // 현재 UID를 저장 (앱 업데이트 시 복구용)
       await savePreviousUID(current.uid);
       return Promise.resolve(current);
+    }
+    
+    // currentUser가 없으면 onAuthStateChanged를 통해 기존 사용자 확인 시도
+    // (Firebase가 비동기로 토큰을 복원할 수 있음)
+    console.log('[ensureAnonymousAuth] currentUser가 null. onAuthStateChanged로 기존 사용자 확인 시도...');
+    const existingUser = await new Promise<FirebaseAuthTypes.User | null>((resolve) => {
+      let resolved = false;
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          console.log('[ensureAnonymousAuth] onAuthStateChanged 타임아웃 (500ms). 기존 사용자 없음으로 간주.');
+          resolve(null);
+        }
+      }, 500);
+      
+      const unsubscribe = auth().onAuthStateChanged((user) => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeout);
+          unsubscribe();
+          if (user) {
+            console.log(`[ensureAnonymousAuth] ✅ onAuthStateChanged로 기존 사용자 발견: ${user.uid}`);
+            resolve(user);
+          } else {
+            console.log('[ensureAnonymousAuth] onAuthStateChanged: 기존 사용자 없음');
+            resolve(null);
+          }
+        }
+      });
+    });
+    
+    if (existingUser) {
+      await savePreviousUID(existingUser.uid);
+      return Promise.resolve(existingUser);
     }
     
     if (inflight) {
