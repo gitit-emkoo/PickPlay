@@ -64,7 +64,8 @@
           }
         },
         "android": {
-          "targetSdkVersion": 35
+          "targetSdkVersion": 35,
+          "kotlinVersion": "1.9.22"
         }
       }
     ],
