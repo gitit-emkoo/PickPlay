@@ -11,7 +11,6 @@ import { ensureUser } from '../../src/services/store';
 import { PointHistory, UserData } from '../../src/types';
 import { getPointHistory } from '../../src/services/pointHistory';
 import { prepareDeviceTransfer, executeDeviceTransfer, watchDeviceTransferCompletion } from '../../src/services/deviceTransfer';
-import { ensureAnonymousAuth } from '../../src/services/firebase';
 
 export default function MyPageScreen() {
   const router = useRouter();
