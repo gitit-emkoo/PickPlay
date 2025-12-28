@@ -1,7 +1,10 @@
 import LottieView from 'lottie-react-native';
 import React, { useState } from 'react';
-import { Dimensions, Image, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, Image, ScrollView, Text, TouchableOpacity, View, Modal, TextInput, Alert, ActivityIndicator, Clipboard } from 'react-native';
 import colors from '../../src/styles/colors';
+import { Ionicons } from '@expo/vector-icons';
+import { executeDeviceTransfer } from '../../src/services/deviceTransfer';
+import { watchAuth } from '../../src/services/firebase';
 
 const { width, height } = Dimensions.get('window');
 
@@ -11,6 +14,19 @@ interface TutorialScreenProps {
 
 export default function TutorialScreen({ onFinish }: TutorialScreenProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferUID, setTransferUID] = useState('');
+  const [transferPassword, setTransferPassword] = useState('');
+  const [transferLoading, setTransferLoading] = useState(false);
+  const [user, setUser] = useState<{ uid: string } | null>(null);
+
+  // 사용자 인증 확인
+  React.useEffect(() => {
+    const unsubscribe = watchAuth((authUser) => {
+      setUser(authUser);
+    });
+    return unsubscribe;
+  }, []);
 
   const tutorialCards = [
     {
@@ -54,6 +70,52 @@ export default function TutorialScreen({ onFinish }: TutorialScreenProps) {
 
   const handleFinish = () => {
     onFinish();
+  };
+
+  const handleResume = async () => {
+    if (!user || !transferUID.trim() || !transferPassword.trim()) {
+      Alert.alert('입력 오류', '사용자 ID와 비밀번호를 모두 입력해주세요.');
+      return;
+    }
+
+    Alert.alert(
+      '기기 연동',
+      '기존 데이터를 불러오시겠습니까?\n\n연동하면 기존 기기의 데이터가 삭제되고, 현재 기기로 모든 정보가 이전됩니다.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '이어하기',
+          style: 'default',
+          onPress: async () => {
+            try {
+              setTransferLoading(true);
+              const result = await executeDeviceTransfer(transferUID.trim(), transferPassword.trim(), user.uid);
+              
+              if (result.success) {
+                Alert.alert('성공', '기존 데이터를 불러왔습니다!', [
+                  {
+                    text: '확인',
+                    onPress: () => {
+                      setShowTransferModal(false);
+                      setTransferUID('');
+                      setTransferPassword('');
+                      onFinish(); // 튜토리얼 완료 처리
+                    },
+                  },
+                ]);
+              } else {
+                Alert.alert('연동 실패', result.error || '기존 데이터를 불러오는데 실패했습니다.');
+              }
+            } catch (error: any) {
+              console.error('연동 실행 실패:', error);
+              Alert.alert('오류', error.message || '기존 데이터를 불러오는 중 오류가 발생했습니다.');
+            } finally {
+              setTransferLoading(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
 
@@ -182,31 +244,224 @@ export default function TutorialScreen({ onFinish }: TutorialScreenProps) {
 
                  {/* 시작하기 버튼 - 마지막 카드에서만 표시 */}
          {currentIndex === tutorialCards.length - 1 && (
-           <TouchableOpacity
-             onPress={handleFinish}
-             style={{
-               backgroundColor: colors.primary,
-               borderRadius: 16,
-               paddingVertical: 16,
-               paddingHorizontal: 48,
-               shadowColor: colors.primary,
-               shadowOffset: { width: 0, height: 4 },
-               shadowOpacity: 0.3,
-               shadowRadius: 8,
-               elevation: 8
-             }}
-           >
-             <Text style={{
-               fontSize: 18,
-               fontWeight: '700',
-               color: 'white',
-               textAlign: 'center'
-             }}>
-               시작하기
-             </Text>
-           </TouchableOpacity>
+           <View style={{ 
+             width: '100%', 
+             flexDirection: 'row', 
+             alignItems: 'center', 
+             gap: 12,
+             justifyContent: 'center'
+           }}>
+             <TouchableOpacity
+               onPress={handleFinish}
+               style={{
+                 backgroundColor: colors.primary,
+                 borderRadius: 16,
+                 paddingVertical: 16,
+                 paddingHorizontal: 24,
+                 flex: 1,
+                 maxWidth: 150,
+                 shadowColor: colors.primary,
+                 shadowOffset: { width: 0, height: 4 },
+                 shadowOpacity: 0.3,
+                 shadowRadius: 8,
+                 elevation: 8
+               }}
+             >
+               <Text style={{
+                 fontSize: 18,
+                 fontWeight: '700',
+                 color: 'white',
+                 textAlign: 'center'
+               }}>
+                 시작하기
+               </Text>
+             </TouchableOpacity>
+
+             {/* 이어하기 버튼 */}
+             <TouchableOpacity
+               onPress={() => setShowTransferModal(true)}
+               style={{
+                 backgroundColor: 'transparent',
+                 borderRadius: 16,
+                 paddingVertical: 16,
+                 paddingHorizontal: 24,
+                 flex: 1,
+                 maxWidth: 150,
+                 borderWidth: 2,
+                 borderColor: colors.primary
+               }}
+             >
+               <Text style={{
+                 fontSize: 18,
+                 fontWeight: '700',
+                 color: colors.primary,
+                 textAlign: 'center'
+               }}>
+                 이어하기
+               </Text>
+             </TouchableOpacity>
+           </View>
          )}
       </View>
+
+      {/* 이어하기 모달 */}
+      <Modal
+        visible={showTransferModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setShowTransferModal(false);
+          setTransferUID('');
+          setTransferPassword('');
+        }}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: 20
+        }}>
+          <View style={{
+            backgroundColor: colors.background,
+            borderRadius: 16,
+            width: '100%',
+            maxWidth: 400,
+            padding: 24,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.3,
+            shadowRadius: 8,
+            elevation: 8
+          }}>
+            <View style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 24
+            }}>
+              <Text style={{
+                fontSize: 20,
+                fontWeight: '700',
+                color: colors.text
+              }}>
+                기존 데이터 불러오기
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowTransferModal(false);
+                  setTransferUID('');
+                  setTransferPassword('');
+                }}
+                style={{ padding: 4 }}
+              >
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={{ marginBottom: 24 }}>
+              <Text style={{
+                fontSize: 14,
+                fontWeight: '600',
+                color: colors.text,
+                marginBottom: 8
+              }}>
+                사용자 ID
+              </Text>
+              <TextInput
+                style={{
+                  backgroundColor: colors.surface,
+                  borderRadius: 8,
+                  padding: 12,
+                  fontSize: 14,
+                  color: colors.text,
+                  borderWidth: 1,
+                  borderColor: colors.border
+                }}
+                value={transferUID}
+                onChangeText={setTransferUID}
+                placeholder="기존 기기의 사용자 ID를 입력하세요"
+                placeholderTextColor={colors.textLight}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              
+              <Text style={{
+                fontSize: 14,
+                fontWeight: '600',
+                color: colors.text,
+                marginTop: 16,
+                marginBottom: 8
+              }}>
+                연동 비밀번호
+              </Text>
+              <TextInput
+                style={{
+                  backgroundColor: colors.surface,
+                  borderRadius: 8,
+                  padding: 12,
+                  fontSize: 14,
+                  color: colors.text,
+                  borderWidth: 1,
+                  borderColor: colors.border
+                }}
+                value={transferPassword}
+                onChangeText={setTransferPassword}
+                placeholder="기존 기기에서 확인한 연동 비밀번호를 입력하세요"
+                placeholderTextColor={colors.textLight}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                maxLength={10}
+              />
+              
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'flex-start',
+                backgroundColor: '#FFF4E6',
+                borderRadius: 8,
+                padding: 12,
+                marginTop: 16,
+                gap: 8
+              }}>
+                <Ionicons name="information-circle-outline" size={20} color={colors.primary} />
+                <Text style={{
+                  flex: 1,
+                  fontSize: 12,
+                  lineHeight: 18,
+                  color: colors.text
+                }}>
+                  기존 기기에서 "연동준비"를 통해 확인한 ID와 비밀번호를 입력하세요.
+                </Text>
+              </View>
+            </View>
+            
+            <TouchableOpacity
+              style={{
+                backgroundColor: colors.primary,
+                borderRadius: 8,
+                padding: 16,
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: transferLoading ? 0.6 : 1
+              }}
+              onPress={handleResume}
+              disabled={transferLoading || !transferUID.trim() || !transferPassword.trim()}
+            >
+              {transferLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={{
+                  fontSize: 16,
+                  fontWeight: '700',
+                  color: '#fff'
+                }}>
+                  이어하기
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

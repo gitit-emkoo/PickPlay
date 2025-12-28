@@ -223,10 +223,9 @@ export default function RootLayout() {
         return;
       }
 
-      // 익명 인증은 백그라운드에서 처리 (블로킹하지 않음)
-      ensureAnonymousAuth().catch((authError: any) => {
-        console.warn('[RootLayout] 익명 인증 실패 - 백그라운드에서 재시도:', authError?.message);
-      });
+      // 익명 인증은 watchAuth에서 처리하므로 여기서는 호출하지 않음
+      // (onAuthStateChanged가 첫 번째 호출을 마칠 때까지 기다려야 토큰 복원이 가능함)
+      // ensureAnonymousAuth()를 직접 호출하면 토큰 복원 전에 새 계정을 생성할 수 있음
       
       setFirebaseStatus('ready');
       

@@ -201,7 +201,8 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
       console.log(`⚠️ [ensureUser] previousFirebaseUID가 없습니다. 이전 버전 앱에서 저장되지 않았을 수 있습니다.`);
     }
 
-    // 0-1. deviceUID로 기존 사용자 찾기 (앱 업데이트 시 UID가 변경되었을 수 있음)
+    // 0-1. deviceUID로 기존 사용자 찾기 (V3 이후 업데이트 시 사용)
+    // V2 → V3 업데이트 시에는 deviceUID가 없으므로 자동으로 실패하고 다음 단계로 진행
     let existingUserByDeviceUID: { doc: any; data: UserData; uid: string } | null = null;
     try {
       const existingUsersQuery = await firestore()
@@ -251,6 +252,8 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
           };
           console.log(`🔍 [ensureUser] deviceUID로 기존 사용자 발견 (${existingUID}), 현재 UID(${uid})와 다름. 복구 필요.`);
         }
+      } else {
+        console.log('ℹ️ [ensureUser] deviceUID로 기존 사용자를 찾지 못했습니다. (V2 유저는 deviceUID가 없을 수 있음)');
       }
     } catch (queryError: any) {
       console.error('❌ [ensureUser] deviceUID 쿼리 실패 (무시하고 계속):', queryError?.code || queryError?.message);
@@ -442,7 +445,7 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
         deviceUID: firestoreUserData.deviceUID,
       });
     } else {
-      // 위에서 찾지 못했으면 다시 쿼리 (혹시 모를 경우를 대비)
+      // 위에서 찾지 못했으면 deviceUID로 다시 검색 시도 (V2 유저는 deviceUID가 없으므로 자동으로 실패)
       console.log('🔍 [Recovery] Firestore에서 deviceUID로 기존 사용자 찾기 시도:', deviceUID);
       try {
         const existingUsersQuery = await firestore()
@@ -495,7 +498,7 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
           });
         } else {
           console.log('ℹ️ [Recovery] Firestore에서 deviceUID로 기존 사용자를 찾지 못했습니다.');
-          console.log(`ℹ️ [Recovery] 이전 버전 사용자는 deviceUID가 없어서 Firestore에서 찾을 수 없을 수 있음`);
+          console.log(`ℹ️ [Recovery] V2 유저는 deviceUID가 없어서 Firestore에서 찾을 수 없을 수 있음`);
           
           // deviceUID로 찾지 못했으면, AsyncStorage에서 닉네임을 찾아서 Firestore에서 검색 시도
           if (legacyData && legacyData.nickname) {
@@ -545,11 +548,17 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
               console.error('❌ [Recovery] Firestore 닉네임 쿼리 실패:', nicknameQueryError);
             }
           }
-          
-          // V2 유저 복구: answers 컬렉션에서 최근 답변한 UID 찾기
-          // (같은 기기에서 V2 앱을 사용했다면, answers 컬렉션에 해당 기기의 답변이 있을 수 있음)
-          if (!firestoreUserData) {
-            console.log('🔍 [Recovery] V2 유저 복구 시도: answers 컬렉션에서 최근 답변한 UID 검색...');
+        }
+      } catch (queryError: any) {
+        console.error('❌ [Recovery] Firestore deviceUID 쿼리 실패:', queryError);
+        console.error('❌ [Recovery] 에러 코드:', queryError?.code);
+        console.error('❌ [Recovery] 에러 메시지:', queryError?.message);
+      }
+      
+      // deviceUID로 찾지 못했으면 answers 컬렉션에서 V2 유저 찾기
+      // (V2 유저는 deviceUID가 없으므로 answers 컬렉션으로 찾아야 함)
+      if (!firestoreUserData) {
+        console.log('🔍 [Recovery] V2 유저 복구 시도: answers 컬렉션에서 최근 답변한 UID 검색...');
             try {
               // 최근 7일 이내에 답변한 사용자 찾기
               const sevenDaysAgo = new Date();
@@ -620,6 +629,7 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
                 }
                 
                 // 가장 활동이 많은 UID로 사용자 문서 조회
+                // 중요: AsyncStorage 데이터와 비교하여 정말 이 기기에서 사용한 유저인지 확인
                 if (mostActiveUID) {
                   console.log(`🔍 [Recovery] answers 컬렉션에서 가장 활동이 많은 UID 발견: ${mostActiveUID} (답변 ${maxActivity}개)`);
                   
@@ -629,16 +639,80 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
                     
                     // deviceUID가 없으면 V2 유저로 간주
                     if (!v2UserData.deviceUID) {
-                      firestoreUserData = v2UserData;
-                      firestoreExistingUID = mostActiveUID;
-                      console.log(`✅ [Recovery] V2 유저 발견 (answers 기반, ${firestoreExistingUID}): "${firestoreUserData.nickname}"`);
-                      console.log(`📊 [Recovery] Firestore 데이터:`, {
-                        nickname: firestoreUserData.nickname,
-                        points: firestoreUserData.points,
-                        streakCount: firestoreUserData.streakCount,
-                        totalSelections: firestoreUserData.totalSelections,
-                        deviceUID: firestoreUserData.deviceUID || '없음',
-                      });
+                      // AsyncStorage 데이터와 비교하여 정말 이 기기에서 사용한 유저인지 확인
+                      let isMatchedUser = false;
+                      
+                      if (legacyData) {
+                        // 닉네임, points, streakCount가 일치하면 같은 사용자로 간주
+                        const nicknameMatch = legacyData.nickname && v2UserData.nickname && legacyData.nickname === v2UserData.nickname;
+                        const pointsMatch = legacyData.points !== undefined && v2UserData.points !== undefined && legacyData.points === v2UserData.points;
+                        const streakMatch = legacyData.streakCount !== undefined && v2UserData.streakCount !== undefined && legacyData.streakCount === v2UserData.streakCount;
+                        
+                        // 최소 2개 이상 일치하면 같은 사용자로 간주
+                        const matchCount = (nicknameMatch ? 1 : 0) + (pointsMatch ? 1 : 0) + (streakMatch ? 1 : 0);
+                        isMatchedUser = matchCount >= 2;
+                        
+                        console.log(`🔍 [Recovery] AsyncStorage 데이터와 비교:`, {
+                          nicknameMatch,
+                          pointsMatch,
+                          streakMatch,
+                          matchCount,
+                          isMatchedUser,
+                          asyncStorage: {
+                            nickname: legacyData.nickname,
+                            points: legacyData.points,
+                            streakCount: legacyData.streakCount,
+                          },
+                          firestore: {
+                            nickname: v2UserData.nickname,
+                            points: v2UserData.points,
+                            streakCount: v2UserData.streakCount,
+                          },
+                        });
+                      } else {
+                        // AsyncStorage 데이터가 없어도, answers 컬렉션에서 찾은 UID가 V2 유저이고
+                        // 현재 UID가 새로 생성된 것이라면, 이전 UID로 복구 시도
+                        // (토큰 복원이 실패했지만, answers 컬렉션에 이전 UID의 활동이 있다면 복구 가능)
+                        console.log(`⚠️ [Recovery] AsyncStorage 데이터가 없지만, answers 컬렉션에서 찾은 UID(${mostActiveUID})가 V2 유저입니다.`);
+                        console.log(`⚠️ [Recovery] 토큰 복원이 실패했을 가능성이 있으므로, 이전 UID로 복구를 시도합니다.`);
+                        console.log(`⚠️ [Recovery] 주의: 이 방법은 다른 사용자 정보로 덮어씌워질 위험이 있지만, V2 유저 복구를 위해 시도합니다.`);
+                        
+                        // V2 유저이고, 현재 UID가 새로 생성된 것이라면 복구 시도
+                        // (previousUID와 다르면 새로 생성된 UID로 간주)
+                        const previousUID = await getPreviousUID();
+                        if (previousUID && previousUID !== uid && previousUID === mostActiveUID) {
+                          // previousUID와 answers 컬렉션에서 찾은 UID가 일치하면 복구 시도
+                          console.log(`✅ [Recovery] previousUID(${previousUID})와 answers 컬렉션에서 찾은 UID(${mostActiveUID})가 일치합니다. 복구 시도.`);
+                          isMatchedUser = true;
+                        } else if (!previousUID || previousUID === uid) {
+                          // previousUID가 없거나 현재 UID와 같으면, 토큰 복원이 성공한 것
+                          // 이 경우 answers 컬렉션 검색 결과는 신뢰할 수 없음
+                          console.log(`⚠️ [Recovery] previousUID가 없거나 현재 UID와 같습니다. 토큰 복원이 성공했을 가능성이 있습니다.`);
+                          console.log(`⚠️ [Recovery] answers 컬렉션 검색 결과는 사용하지 않습니다.`);
+                          isMatchedUser = false;
+                        } else {
+                          // previousUID와 answers 컬렉션에서 찾은 UID가 다르면 신뢰할 수 없음
+                          console.log(`⚠️ [Recovery] previousUID(${previousUID})와 answers 컬렉션에서 찾은 UID(${mostActiveUID})가 다릅니다.`);
+                          console.log(`⚠️ [Recovery] 잘못된 사용자 정보로 덮어씌워지는 것을 방지하기 위해 이 UID는 사용하지 않습니다.`);
+                          isMatchedUser = false;
+                        }
+                      }
+                      
+                      if (isMatchedUser) {
+                        firestoreUserData = v2UserData;
+                        firestoreExistingUID = mostActiveUID;
+                        console.log(`✅ [Recovery] V2 유저 발견 및 검증 완료 (answers 기반, ${firestoreExistingUID}): "${firestoreUserData.nickname}"`);
+                        console.log(`📊 [Recovery] Firestore 데이터:`, {
+                          nickname: firestoreUserData.nickname,
+                          points: firestoreUserData.points,
+                          streakCount: firestoreUserData.streakCount,
+                          totalSelections: firestoreUserData.totalSelections,
+                          deviceUID: firestoreUserData.deviceUID || '없음',
+                        });
+                      } else {
+                        console.log(`⚠️ [Recovery] 발견한 UID(${mostActiveUID})는 AsyncStorage 데이터와 일치하지 않아서 이 기기에서 사용한 유저가 아닙니다.`);
+                        console.log(`⚠️ [Recovery] 잘못된 사용자 정보로 덮어씌워지는 것을 방지하기 위해 이 UID는 사용하지 않습니다.`);
+                      }
                     } else {
                       console.log(`ℹ️ [Recovery] 발견한 UID(${mostActiveUID})는 이미 deviceUID가 있어서 V2 유저가 아닙니다.`);
                     }
@@ -658,12 +732,6 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
             }
           }
         }
-      } catch (queryError: any) {
-        console.error('❌ [Recovery] Firestore deviceUID 쿼리 실패:', queryError);
-        console.error('❌ [Recovery] 에러 코드:', queryError?.code);
-        console.error('❌ [Recovery] 에러 메시지:', queryError?.message);
-      }
-    }
     
     // 2-3. AsyncStorage와 Firestore 데이터 비교 및 병합
     // 우선순위: 더 최신 데이터 (totalSelections 또는 lastAnswerDate 기준)
@@ -733,92 +801,92 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
       
       // createdAt 백필 알고리즘 (기존 Day 진행 상태 보존)
       const parseDateKeyToDate = (val: any): Date | null => {
-      try {
-        if (!val) return null;
-        if (typeof val === 'number') {
-          const s = String(val);
-          const y = parseInt(s.slice(0, 4), 10);
-          const m = parseInt(s.slice(4, 6), 10) - 1;
-          const d = parseInt(s.slice(6, 8), 10);
-          const dt = new Date(Date.UTC(y, m, d));
-          return isNaN(dt.getTime()) ? null : dt;
+        try {
+          if (!val) return null;
+          if (typeof val === 'number') {
+            const s = String(val);
+            const y = parseInt(s.slice(0, 4), 10);
+            const m = parseInt(s.slice(4, 6), 10) - 1;
+            const d = parseInt(s.slice(6, 8), 10);
+            const dt = new Date(Date.UTC(y, m, d));
+            return isNaN(dt.getTime()) ? null : dt;
+          }
+          if (typeof val === 'string' && /\d{4}-\d{2}-\d{2}/.test(val)) {
+            const [y, m, d] = val.split('-').map((x: string) => parseInt(x, 10));
+            const dt = new Date(Date.UTC(y, m - 1, d));
+            return isNaN(dt.getTime()) ? null : dt;
+          }
+          if (typeof val === 'string') {
+            const dt = new Date(val);
+            return isNaN(dt.getTime()) ? null : dt;
+          }
+          return null;
+        } catch {
+          return null;
         }
-        if (typeof val === 'string' && /\d{4}-\d{2}-\d{2}/.test(val)) {
-          const [y, m, d] = val.split('-').map((x: string) => parseInt(x, 10));
-          const dt = new Date(Date.UTC(y, m - 1, d));
-          return isNaN(dt.getTime()) ? null : dt;
-        }
-        if (typeof val === 'string') {
-          const dt = new Date(val);
-          return isNaN(dt.getTime()) ? null : dt;
-        }
-        return null;
-      } catch {
-        return null;
-      }
-    };
+      };
 
       const computeCreatedAtFromProgress = (data: any): Date | null => {
-      const totalSelections = Number(data.totalSelections || 0);
-      const lastAns = data.lastAnswerDate;
-      const lastDate = parseDateKeyToDate(
-        typeof lastAns === 'string' && lastAns.includes('-') ? lastAns :
-        typeof lastAns === 'number' ? lastAns : null
-      );
-      if (!lastDate || !totalSelections || totalSelections < 1) return null;
-      const base = new Date(lastDate.getTime());
-      base.setUTCHours(0,0,0,0);
-      const day1 = new Date(base.getTime() - (totalSelections - 1) * 24 * 60 * 60 * 1000);
-      return day1;
-    };
+        const totalSelections = Number(data.totalSelections || 0);
+        const lastAns = data.lastAnswerDate;
+        const lastDate = parseDateKeyToDate(
+          typeof lastAns === 'string' && lastAns.includes('-') ? lastAns :
+          typeof lastAns === 'number' ? lastAns : null
+        );
+        if (!lastDate || !totalSelections || totalSelections < 1) return null;
+        const base = new Date(lastDate.getTime());
+        base.setUTCHours(0,0,0,0);
+        const day1 = new Date(base.getTime() - (totalSelections - 1) * 24 * 60 * 60 * 1000);
+        return day1;
+      };
 
       const backfilledCreatedAt: Date | null = mergedData.createdAt 
-      ? (typeof mergedData.createdAt === 'string' || typeof mergedData.createdAt === 'number' 
-          ? parseDateKeyToDate(mergedData.createdAt) 
-          : mergedData.createdAt instanceof Date 
-            ? mergedData.createdAt 
-            : typeof (mergedData.createdAt as any).toDate === 'function'
-              ? (mergedData.createdAt as FirebaseFirestoreTypes.Timestamp).toDate()
-              : new Date(mergedData.createdAt))
-      : computeCreatedAtFromProgress(mergedData);
+        ? (typeof mergedData.createdAt === 'string' || typeof mergedData.createdAt === 'number' 
+            ? parseDateKeyToDate(mergedData.createdAt) 
+            : mergedData.createdAt instanceof Date 
+              ? mergedData.createdAt 
+              : typeof (mergedData.createdAt as any).toDate === 'function'
+                ? (mergedData.createdAt as FirebaseFirestoreTypes.Timestamp).toDate()
+                : new Date(mergedData.createdAt))
+        : computeCreatedAtFromProgress(mergedData);
 
       // V2 데이터 구조에 맞게 변환
       // points와 streakCount는 undefined가 아닌 경우에만 사용 (0도 유효한 값)
       const recoveredUserData = {
-      uid,
-      deviceUID, // deviceUID 저장 (앱 재설치 시 복구용)
-      points: mergedData.points !== undefined ? mergedData.points : 0,
-      streakCount: mergedData.streakCount !== undefined ? mergedData.streakCount : 0,
-      lastAnswerDate: typeof mergedData.lastAnswerDate === 'string' && mergedData.lastAnswerDate.includes('-') ? 
-                        parseInt(mergedData.lastAnswerDate.replace(/-/g, ''), 10) : 
-                        (mergedData.lastAnswerDate !== undefined ? mergedData.lastAnswerDate : 0),
-      nickname: mergedData.nickname || generateRandomNickname(),
-      totalSelections: mergedData.totalSelections !== undefined ? mergedData.totalSelections : 0,
-      createdAt: backfilledCreatedAt ?? firestore.FieldValue.serverTimestamp(),
-      characterId: mergedData.characterId || null,
-      adjective1: mergedData.adjective1 || null,
-      adjective2: mergedData.adjective2 || null,
-      tutorial: mergedData.tutorial || {
-        mainAnswered: false,
-        livepickParticipated: false,
-        livepickCreated: false,
-        rewardGiven500: false,
-      },
-    };
-    
-    // 복구된 데이터 로깅 (중요 필드 확인)
-    console.log('✅ [Recovery] 복구된 사용자 데이터:', {
-      nickname: recoveredUserData.nickname,
-      points: recoveredUserData.points,
-      streakCount: recoveredUserData.streakCount,
-      totalSelections: recoveredUserData.totalSelections,
-      lastAnswerDate: recoveredUserData.lastAnswerDate,
-      deviceUID: recoveredUserData.deviceUID,
-    });
+        uid,
+        deviceUID, // deviceUID 저장 (앱 재설치 시 복구용)
+        points: mergedData.points !== undefined ? mergedData.points : 0,
+        streakCount: mergedData.streakCount !== undefined ? mergedData.streakCount : 0,
+        lastAnswerDate: typeof mergedData.lastAnswerDate === 'string' && mergedData.lastAnswerDate.includes('-') ? 
+                          parseInt(mergedData.lastAnswerDate.replace(/-/g, ''), 10) : 
+                          (mergedData.lastAnswerDate !== undefined ? mergedData.lastAnswerDate : 0),
+        nickname: mergedData.nickname || generateRandomNickname(),
+        totalSelections: mergedData.totalSelections !== undefined ? mergedData.totalSelections : 0,
+        createdAt: backfilledCreatedAt ?? firestore.FieldValue.serverTimestamp(),
+        characterId: mergedData.characterId || null,
+        adjective1: mergedData.adjective1 || null,
+        adjective2: mergedData.adjective2 || null,
+        tutorial: mergedData.tutorial || {
+          mainAnswered: false,
+          livepickParticipated: false,
+          livepickCreated: false,
+          rewardGiven500: false,
+        },
+      };
+      
+      // 복구된 데이터 로깅 (중요 필드 확인)
+      console.log('✅ [Recovery] 복구된 사용자 데이터:', {
+        nickname: recoveredUserData.nickname,
+        points: recoveredUserData.points,
+        streakCount: recoveredUserData.streakCount,
+        totalSelections: recoveredUserData.totalSelections,
+        lastAnswerDate: recoveredUserData.lastAnswerDate,
+        deviceUID: recoveredUserData.deviceUID,
+      });
 
       await userRef.set(recoveredUserData as any);
       
-      // Firestore에서 찾은 기존 문서가 있으면 참조용으로 업데이트
+      // Firestore에서 찾은 기존 문서가 있으면 참조용으로 업데이트 및 answers 마이그레이션
       if (firestoreExistingUID && firestoreExistingUID !== uid) {
         try {
           await firestore().collection('users').doc(firestoreExistingUID).update({
@@ -826,6 +894,68 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
             recoveredAt: firestore.FieldValue.serverTimestamp(),
           } as any);
           console.log(`✅ [Recovery] 기존 Firestore 문서(${firestoreExistingUID})에 복구 정보 추가`);
+          
+          // answers 컬렉션 마이그레이션: 이전 UID의 answers를 새 UID로 복사
+          console.log(`🔄 [Recovery] answers 컬렉션 마이그레이션 시작: ${firestoreExistingUID} → ${uid}`);
+          try {
+            const oldAnswersQuery = await firestore()
+              .collection('answers')
+              .where('uid', '==', firestoreExistingUID)
+              .get();
+            
+            if (!oldAnswersQuery.empty) {
+              console.log(`📊 [Recovery] 마이그레이션할 answers 문서 수: ${oldAnswersQuery.size}개`);
+              
+              const batch = firestore().batch();
+              let batchCount = 0;
+              const BATCH_LIMIT = 500; // Firestore 배치 제한
+              
+              for (const oldAnswerDoc of oldAnswersQuery.docs) {
+                const oldAnswerData = oldAnswerDoc.data();
+                const questionId = oldAnswerData.question_id;
+                
+                // 새 UID로 answers 문서 생성
+                const newAnswerDocId = `${uid}_${questionId}`;
+                const newAnswerRef = firestore().collection('answers').doc(newAnswerDocId);
+                
+                // 새 문서가 이미 있으면 건너뛰기 (중복 방지)
+                const newAnswerDoc = await newAnswerRef.get();
+                if (newAnswerDoc.exists) {
+                  console.log(`ℹ️ [Recovery] answers 문서가 이미 존재함: ${newAnswerDocId}`);
+                  continue;
+                }
+                
+                // 새 UID로 answers 문서 생성 (uid 필드도 업데이트)
+                batch.set(newAnswerRef, {
+                  ...oldAnswerData,
+                  uid: uid, // 새 UID로 업데이트
+                });
+                batchCount++;
+                
+                // 배치 제한에 도달하면 커밋
+                if (batchCount >= BATCH_LIMIT) {
+                  await batch.commit();
+                  console.log(`✅ [Recovery] answers 마이그레이션 배치 커밋: ${batchCount}개`);
+                  batchCount = 0;
+                }
+              }
+              
+              // 남은 배치 커밋
+              if (batchCount > 0) {
+                await batch.commit();
+                console.log(`✅ [Recovery] answers 마이그레이션 최종 배치 커밋: ${batchCount}개`);
+              }
+              
+              console.log(`✅ [Recovery] answers 컬렉션 마이그레이션 완료: ${oldAnswersQuery.size}개 문서`);
+            } else {
+              console.log(`ℹ️ [Recovery] 마이그레이션할 answers 문서가 없습니다.`);
+            }
+          } catch (answersMigrationError: any) {
+            console.error('❌ [Recovery] answers 마이그레이션 실패:', answersMigrationError);
+            console.error('❌ [Recovery] 에러 코드:', answersMigrationError?.code);
+            console.error('❌ [Recovery] 에러 메시지:', answersMigrationError?.message);
+            // answers 마이그레이션 실패해도 사용자 데이터 복구는 성공한 것으로 간주
+          }
         } catch (e) {
           console.warn(`⚠️ [Recovery] 기존 Firestore 문서 업데이트 실패 (무시):`, e);
         }
@@ -851,35 +981,35 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
     console.log('   - Firestore에 현재 UID로 문서 없음');
     console.log('   - deviceUID로 기존 사용자 찾기 실패');
     console.log('   - AsyncStorage 마이그레이션 실패');
-      console.log('❌ [ensureUser] 신규 사용자 생성 시작 - Firebase UID:', uid);
-      // deviceUID는 이미 91번 줄에서 선언되었으므로 재사용
-      console.log('❌ [ensureUser] 신규 사용자 deviceUID:', deviceUID);
-      const newUserData = {
-    uid,
-    deviceUID, // deviceUID 저장 (앱 재설치 시 복구용)
-    createdAt: firestore.FieldValue.serverTimestamp(),
-    totalSelections: 0,
-    characterId: null,
-    adjective1: null,
-    adjective2: null,
-    points: 0,
-    streakCount: 0,
-    lastAnswerDate: 0,
-    nickname: generateRandomNickname(),
-    tutorial: {
-      mainAnswered: false,
-      livepickParticipated: false,
-      livepickCreated: false,
-      rewardGiven500: false,
-    },
-  };
+    console.log('❌ [ensureUser] 신규 사용자 생성 시작 - Firebase UID:', uid);
+    // deviceUID는 이미 91번 줄에서 선언되었으므로 재사용
+    console.log('❌ [ensureUser] 신규 사용자 deviceUID:', deviceUID);
+    const newUserData = {
+      uid,
+      deviceUID, // deviceUID 저장 (앱 재설치 시 복구용)
+      createdAt: firestore.FieldValue.serverTimestamp(),
+      totalSelections: 0,
+      characterId: null,
+      adjective1: null,
+      adjective2: null,
+      points: 0,
+      streakCount: 0,
+      lastAnswerDate: 0,
+      nickname: generateRandomNickname(),
+      tutorial: {
+        mainAnswered: false,
+        livepickParticipated: false,
+        livepickCreated: false,
+        rewardGiven500: false,
+      },
+    };
 
-      await userRef.set(newUserData);
-      
-      return {
-        ...newUserData,
-        createdAt: new Date(), // JS Date 객체로 변환하여 반환
-      } as UserData;
+    await userRef.set(newUserData);
+    
+    return {
+      ...newUserData,
+      createdAt: new Date(), // JS Date 객체로 변환하여 반환
+    } as UserData;
   } catch (error: any) {
     console.error('❌ [ensureUser] 전체 프로세스 실패:', error);
     console.error('❌ [ensureUser] 에러 코드:', error?.code);
@@ -1700,4 +1830,3 @@ export function watchAggregation(
 
     return unsubscribe;
 }
-

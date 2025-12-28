@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, TextInput, Alert, Clipboard } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
 import LottieView from 'lottie-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import colors from '../../src/styles/colors';
-import { watchAuth } from '../../src/services/firebase';
+import { watchAuth, ensureAnonymousAuth } from '../../src/services/firebase';
 import { ensureUser } from '../../src/services/store';
 import { PointHistory, UserData } from '../../src/types';
 import { getPointHistory } from '../../src/services/pointHistory';
+import { prepareDeviceTransfer, executeDeviceTransfer, watchDeviceTransferCompletion } from '../../src/services/deviceTransfer';
+import { ensureAnonymousAuth } from '../../src/services/firebase';
 
 export default function MyPageScreen() {
   const router = useRouter();
@@ -20,6 +22,16 @@ export default function MyPageScreen() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  
+  // 기기 이전 관련 상태
+  const [showPrepareModal, setShowPrepareModal] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [showTransferCompletedModal, setShowTransferCompletedModal] = useState(false);
+  const [transferPassword, setTransferPassword] = useState('');
+  const [transferUID, setTransferUID] = useState('');
+  const [transferLoading, setTransferLoading] = useState(false);
+  const [preparedPassword, setPreparedPassword] = useState<string | null>(null);
+  const [transferWatchUnsubscribe, setTransferWatchUnsubscribe] = useState<(() => void) | null>(null);
 
   // 사용자 인증 및 데이터 로드
   useEffect(() => {
@@ -37,6 +49,16 @@ export default function MyPageScreen() {
     });
     return unsubscribe;
   }, []);
+
+  // 컴포넌트 언마운트 시 연동 감시 리스너 해제
+  useEffect(() => {
+    return () => {
+      if (transferWatchUnsubscribe) {
+        transferWatchUnsubscribe();
+        console.log('[MyPage] 연동 감시 리스너 해제');
+      }
+    };
+  }, [transferWatchUnsubscribe]);
 
   // 화면이 포커스될 때마다 사용자 데이터 갱신 (메인페이지에서 투표 후 업데이트된 데이터 반영)
   useFocusEffect(
@@ -106,6 +128,130 @@ export default function MyPageScreen() {
     } catch {
       return '';
     }
+  };
+
+  // 연동 준비 핸들러
+  const handlePrepareTransfer = async () => {
+    if (!user) return;
+    
+    try {
+      setTransferLoading(true);
+      
+      // 이전 리스너가 있으면 먼저 해제 (중복 방지)
+      if (transferWatchUnsubscribe) {
+        transferWatchUnsubscribe();
+        setTransferWatchUnsubscribe(null);
+      }
+      
+      const password = await prepareDeviceTransfer(user.uid);
+      setPreparedPassword(password);
+      setShowPrepareModal(true);
+      
+      // 연동 완료 감시 시작
+      const unsubscribe = watchDeviceTransferCompletion(user.uid, () => {
+        console.log('[MyPage] 연동 완료 감지! 팝업 표시');
+        setShowTransferCompletedModal(true);
+        setShowPrepareModal(false); // 연동 준비 모달 닫기
+      });
+      
+      setTransferWatchUnsubscribe(unsubscribe);
+    } catch (error: any) {
+      console.error('연동 준비 실패:', error);
+      Alert.alert('오류', error.message || '연동 준비에 실패했습니다.');
+    } finally {
+      setTransferLoading(false);
+    }
+  };
+
+  // 연동 준비 모달 닫기 핸들러
+  const handlePrepareModalClose = () => {
+    setShowPrepareModal(false);
+    // 리스너는 유지 (연동 완료까지 감시 필요)
+    // 사용자가 명시적으로 취소하려면 별도 취소 버튼 필요
+  };
+
+  // 연동 완료 모달 닫기 및 새 유저 생성
+  const handleTransferCompletedModalClose = async () => {
+    setShowTransferCompletedModal(false);
+    
+    // 감시 리스너 해제
+    if (transferWatchUnsubscribe) {
+      transferWatchUnsubscribe();
+      setTransferWatchUnsubscribe(null);
+    }
+    
+    // 새 유저 생성 (익명 로그인으로 새 UID 생성)
+    try {
+      console.log('[MyPage] 새 유저 생성 시작...');
+      const newUser = await ensureAnonymousAuth();
+      if (newUser) {
+        console.log('[MyPage] 새 유저 생성 완료:', newUser.uid);
+        // watchAuth가 자동으로 새 유저를 감지하고 데이터를 로드할 것입니다
+        // 여기서는 명시적으로 데이터를 새로고침
+        const newUserData = await ensureUser(newUser.uid);
+        setUserData(newUserData);
+        setUser({ uid: newUser.uid });
+      }
+    } catch (error) {
+      console.error('[MyPage] 새 유저 생성 실패:', error);
+      Alert.alert('오류', '새 유저 생성 중 문제가 발생했습니다.');
+    }
+  };
+
+  // 연동 실행 핸들러
+  const handleExecuteTransfer = async () => {
+    if (!user || !transferUID.trim() || !transferPassword.trim()) {
+      Alert.alert('입력 오류', 'UID와 비밀번호를 모두 입력해주세요.');
+      return;
+    }
+
+    Alert.alert(
+      '기기 연동',
+      '기기 연동을 진행하시겠습니까?\n\n원본 기기의 데이터는 삭제되고, 현재 기기로 모든 정보가 이전됩니다.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '연동하기',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setTransferLoading(true);
+              const result = await executeDeviceTransfer(transferUID.trim(), transferPassword.trim(), user.uid);
+              
+              if (result.success) {
+                Alert.alert('성공', '기기 연동이 완료되었습니다.', [
+                  {
+                    text: '확인',
+                    onPress: () => {
+                      // 사용자 데이터 새로고침
+                      if (user) {
+                        ensureUser(user.uid)
+                          .then((data) => {
+                            setUserData(data);
+                            setShowTransferModal(false);
+                            setTransferUID('');
+                            setTransferPassword('');
+                          })
+                          .catch((error) => {
+                            console.error('사용자 데이터 새로고침 실패:', error);
+                          });
+                      }
+                    },
+                  },
+                ]);
+              } else {
+                Alert.alert('연동 실패', result.error || '기기 연동에 실패했습니다.');
+              }
+            } catch (error: any) {
+              console.error('연동 실행 실패:', error);
+              Alert.alert('오류', error.message || '기기 연동 중 오류가 발생했습니다.');
+            } finally {
+              setTransferLoading(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
 
@@ -291,6 +437,38 @@ export default function MyPageScreen() {
             </View>
             <Ionicons name="chevron-forward" size={20} color={colors.textLight} />
           </TouchableOpacity>
+
+          {/* 기기 연동 메뉴 */}
+          <View style={styles.transferSection}>
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={handlePrepareTransfer}
+              activeOpacity={0.7}
+              disabled={transferLoading || !user}
+            >
+              <View style={styles.menuLeft}>
+                <Ionicons name="phone-portrait-outline" size={24} color={colors.primary} />
+                <Text style={styles.menuText}>연동준비</Text>
+              </View>
+              {transferLoading ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Ionicons name="chevron-forward" size={20} color={colors.textLight} />
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => setShowTransferModal(true)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.menuLeft}>
+                <Ionicons name="sync-outline" size={24} color={colors.primary} />
+                <Text style={styles.menuText}>연동하기</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.textLight} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* 푸터 */}
@@ -301,6 +479,187 @@ export default function MyPageScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      {/* 연동 준비 모달 */}
+      <Modal
+        visible={showPrepareModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handlePrepareModalClose}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>연동 준비 완료</Text>
+              <TouchableOpacity
+                onPress={handlePrepareModalClose}
+                style={styles.modalCloseButton}
+              >
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.transferInfoContainer}>
+              <Text style={styles.transferInfoLabel}>사용자 ID</Text>
+              <View style={styles.transferInfoBox}>
+                <Text style={styles.transferInfoValue} selectable>{user?.uid || ''}</Text>
+                <TouchableOpacity
+                  onPress={async () => {
+                    if (user?.uid) {
+                      await Clipboard.setString(user.uid);
+                      Alert.alert('복사 완료', '사용자 ID가 클립보드에 복사되었습니다.');
+                    }
+                  }}
+                  style={styles.copyButton}
+                >
+                  <Ionicons name="copy-outline" size={20} color={colors.primary} />
+                </TouchableOpacity>
+              </View>
+              
+              <Text style={[styles.transferInfoLabel, { marginTop: 20 }]}>연동 비밀번호</Text>
+              <View style={styles.transferInfoBox}>
+                <Text style={styles.transferPasswordValue} selectable>{preparedPassword || ''}</Text>
+                <TouchableOpacity
+                  onPress={async () => {
+                    if (preparedPassword) {
+                      await Clipboard.setString(preparedPassword);
+                      Alert.alert('복사 완료', '비밀번호가 클립보드에 복사되었습니다.');
+                    }
+                  }}
+                  style={styles.copyButton}
+                >
+                  <Ionicons name="copy-outline" size={20} color={colors.primary} />
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.transferWarningBox}>
+                <Ionicons name="warning-outline" size={20} color="#FF9500" />
+                <Text style={styles.transferWarningText}>
+                  이 정보를 다른 기기에서 입력하면 현재 기기의 데이터가 삭제되고 새 기기로 이전됩니다.{'\n'}
+                  비밀번호는 24시간 동안 유효합니다.
+                </Text>
+              </View>
+            </View>
+            
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={handlePrepareModalClose}
+            >
+              <Text style={styles.modalButtonText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 연동하기 모달 */}
+      <Modal
+        visible={showTransferModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setShowTransferModal(false);
+          setTransferUID('');
+          setTransferPassword('');
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>기기 연동</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowTransferModal(false);
+                  setTransferUID('');
+                  setTransferPassword('');
+                }}
+                style={styles.modalCloseButton}
+              >
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.transferInputContainer}>
+              <Text style={styles.transferInputLabel}>사용자 ID</Text>
+              <TextInput
+                style={styles.transferInput}
+                value={transferUID}
+                onChangeText={setTransferUID}
+                placeholder="연동할 기기의 사용자 ID를 입력하세요"
+                placeholderTextColor={colors.textLight}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              
+              <Text style={[styles.transferInputLabel, { marginTop: 16 }]}>연동 비밀번호</Text>
+              <TextInput
+                style={styles.transferInput}
+                value={transferPassword}
+                onChangeText={setTransferPassword}
+                placeholder="기존 기기에서 확인한 연동 비밀번호를 입력하세요"
+                placeholderTextColor={colors.textLight}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                maxLength={10}
+              />
+              
+              <View style={styles.transferWarningBox}>
+                <Ionicons name="information-circle-outline" size={20} color={colors.primary} />
+                <Text style={styles.transferWarningText}>
+                  연동하면 원본 기기의 데이터가 삭제되고 현재 기기로 모든 정보가 이전됩니다.
+                </Text>
+              </View>
+            </View>
+            
+            <TouchableOpacity
+              style={[styles.modalButton, transferLoading && styles.modalButtonDisabled]}
+              onPress={handleExecuteTransfer}
+              disabled={transferLoading}
+            >
+              {transferLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.modalButtonText}>연동하기</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 연동 완료 모달 (A기기에서 표시) */}
+      <Modal
+        visible={showTransferCompletedModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleTransferCompletedModalClose}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>연동 완료</Text>
+            </View>
+            
+            <View style={styles.modalBody}>
+              <View style={styles.transferWarningBox}>
+                <Ionicons name="checkmark-circle" size={48} color={colors.primary} style={{ marginBottom: 16 }} />
+                <Text style={[styles.modalTitle, { textAlign: 'center', marginBottom: 12 }]}>
+                  연동이 완료되었습니다.
+                </Text>
+                <Text style={[styles.transferWarningText, { textAlign: 'center' }]}>
+                  기존 유저 정보가 삭제되었습니다.{'\n'}
+                  새 유저를 생성합니다.
+                </Text>
+              </View>
+            </View>
+            
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={handleTransferCompletedModalClose}
+            >
+              <Text style={styles.modalButtonText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -520,5 +879,197 @@ const styles = StyleSheet.create({
     color: colors.textLight,
     textAlign: 'center',
     lineHeight: 16,
+  },
+  transferSection: {
+    marginTop: 8,
+    marginBottom: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 400,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  modalBody: {
+    marginBottom: 20,
+  },
+  modalLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  uidContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  uidText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: 'monospace',
+    color: colors.text,
+    marginRight: 8,
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  passwordText: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.primary,
+    marginRight: 8,
+    letterSpacing: 2,
+  },
+  modalInput: {
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalInfoBox: {
+    flexDirection: 'row',
+    backgroundColor: '#FFF4E6',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 16,
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  modalInfoText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.text,
+  },
+  modalButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalButtonDisabled: {
+    opacity: 0.5,
+  },
+  modalButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  transferInfoContainer: {
+    marginBottom: 24,
+  },
+  transferInfoLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  transferInfoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  transferInfoValue: {
+    flex: 1,
+    fontSize: 12,
+    color: colors.text,
+    fontFamily: 'monospace',
+  },
+  transferPasswordValue: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.primary,
+    fontFamily: 'monospace',
+    letterSpacing: 2,
+  },
+  copyButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  transferWarningBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FFF4E6',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 16,
+    gap: 8,
+  },
+  transferWarningText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.text,
+  },
+  transferInputContainer: {
+    marginBottom: 24,
+  },
+  transferInputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  transferInput: {
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalCloseButton: {
+    padding: 4,
   },
 });

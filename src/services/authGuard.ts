@@ -95,6 +95,11 @@ async function waitForFirebase(maxRetries = 20, initialDelay = 200, maxDelay = 1
  * 중복 호출을 막고, 모든 호출자가 같은 Promise를 공유합니다.
  * 재시도 횟수를 제한하여 무한 루프를 방지합니다.
  */
+/**
+ * 익명 로그인을 수행합니다.
+ * 주의: 이 함수는 watchAuth의 onAuthStateChanged가 첫 번째 호출을 마친 후에만 호출되어야 합니다.
+ * 그렇지 않으면 토큰 복원 전에 새 계정을 생성할 수 있습니다.
+ */
 export async function ensureAnonymousAuth(): Promise<FirebaseAuthTypes.User | null> {
   console.log(`[ensureAnonymousAuth] 시작 (재시도 횟수: ${ensureAuthRetryCount}/${MAX_ENSURE_AUTH_RETRIES})`);
   
@@ -131,52 +136,13 @@ export async function ensureAnonymousAuth(): Promise<FirebaseAuthTypes.User | nu
   }
   
   try {
-    // Firebase 초기화 후 약간의 지연을 주어 기존 토큰이 복원되도록 함
-    // (같은 앱 서명이면 Firebase가 기기 내부 토큰을 자동으로 복원함)
-    console.log('[ensureAnonymousAuth] 기존 토큰 복원 대기 중... (200ms)');
-    await new Promise(resolve => setTimeout(resolve, 200));
-    
+    // 현재 사용자 확인 (이미 토큰이 복원되어 있을 수 있음)
     console.log('[ensureAnonymousAuth] currentUser 확인 중...');
     const current = auth().currentUser;
     if (current) {
       console.log(`[ensureAnonymousAuth] ✅ 기존 사용자 발견: ${current.uid}`);
-      // 현재 UID를 저장 (앱 업데이트 시 복구용)
       await savePreviousUID(current.uid);
       return Promise.resolve(current);
-    }
-    
-    // currentUser가 없으면 onAuthStateChanged를 통해 기존 사용자 확인 시도
-    // (Firebase가 비동기로 토큰을 복원할 수 있음)
-    console.log('[ensureAnonymousAuth] currentUser가 null. onAuthStateChanged로 기존 사용자 확인 시도...');
-    const existingUser = await new Promise<FirebaseAuthTypes.User | null>((resolve) => {
-      let resolved = false;
-      const timeout = setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          console.log('[ensureAnonymousAuth] onAuthStateChanged 타임아웃 (500ms). 기존 사용자 없음으로 간주.');
-          resolve(null);
-        }
-      }, 500);
-      
-      const unsubscribe = auth().onAuthStateChanged((user) => {
-        if (!resolved) {
-          resolved = true;
-          clearTimeout(timeout);
-          unsubscribe();
-          if (user) {
-            console.log(`[ensureAnonymousAuth] ✅ onAuthStateChanged로 기존 사용자 발견: ${user.uid}`);
-            resolve(user);
-          } else {
-            console.log('[ensureAnonymousAuth] onAuthStateChanged: 기존 사용자 없음');
-            resolve(null);
-          }
-        }
-      });
-    });
-    
-    if (existingUser) {
-      await savePreviousUID(existingUser.uid);
-      return Promise.resolve(existingUser);
     }
     
     if (inflight) {
@@ -283,17 +249,48 @@ export function watchAuth(cb: (user: { uid: string } | null) => void): () => voi
       watchAuthRetryCount = 0; // 성공 시 리셋
       console.log('[watchAuth] ✅ Firebase 초기화 완료, 리스너 등록 시도...');
       try {
+        // onAuthStateChanged가 첫 번째 호출(기존 유저 여부 확인)을 마칠 때까지 기다림
+        // 이렇게 해야 토큰 복원이 완료된 후에 새 계정을 생성할 수 있음
+        let firstCallCompleted = false;
+        let firstCallWasNull = false; // 첫 호출이 null이었는지 추적
+        
         unsub = auth().onAuthStateChanged(async (u) => {
           console.log(`[watchAuth] 🔔 onAuthStateChanged 호출됨: ${u ? `사용자 있음 (${u.uid})` : '사용자 없음'}`);
           
+          // 첫 번째 호출 완료 표시
+          if (!firstCallCompleted) {
+            firstCallCompleted = true;
+            firstCallWasNull = (u === null);
+            console.log(`[watchAuth] ✅ onAuthStateChanged 첫 번째 호출 완료 (기존 유저 여부 확인 완료, null: ${firstCallWasNull})`);
+          }
+          
           if (u) {
             console.log(`[watchAuth] ✅ 사용자 인증됨: ${u.uid}`);
+            await savePreviousUID(u.uid);
             cb({ uid: u.uid });
             return;
           }
           
-          if (!signingIn) {
-            console.log('[watchAuth] 로그인되지 않음, 익명 로그인 시도...');
+          // 유저가 null이고, 첫 번째 호출이 완료되었고, 로그인 진행 중이 아닐 때만 익명 로그인 시도
+          if (firstCallCompleted && !signingIn) {
+            // 첫 호출이 null이었던 경우, 토큰 복원을 위해 짧은 대기 시간 추가
+            // (React Native Firebase의 네이티브 브릿지를 통한 토큰 복원이 완료될 시간 확보)
+            if (firstCallWasNull) {
+              console.log('[watchAuth] ⏳ 첫 호출이 null이었음 - 토큰 복원 대기 중 (500ms)...');
+              await new Promise(resolve => setTimeout(resolve, 500));
+              // 대기 후 다시 한 번 확인 (토큰 복원으로 인해 유저가 생겼을 수 있음)
+              const currentUser = auth().currentUser;
+              if (currentUser) {
+                console.log(`[watchAuth] ✅ 대기 중 토큰 복원 성공: ${currentUser.uid}`);
+                await savePreviousUID(currentUser.uid);
+                cb({ uid: currentUser.uid });
+                return;
+              }
+              console.log('[watchAuth] 대기 후에도 유저 없음, 익명 로그인 시도...');
+            } else {
+              console.log('[watchAuth] 로그인되지 않음, 익명 로그인 시도...');
+            }
+            
             try {
               const user = await ensureAnonymousAuth();
               console.log(`[watchAuth] 익명 로그인 결과: ${user ? `성공 (${user.uid})` : '실패'}`);
@@ -302,7 +299,9 @@ export function watchAuth(cb: (user: { uid: string } | null) => void): () => voi
               console.warn('[watchAuth] ❌ ensureAnonymousAuth 실패:', error);
               cb(null);
             }
-          } else {
+          } else if (!firstCallCompleted) {
+            console.log('[watchAuth] ⏳ 첫 번째 호출 대기 중... (토큰 복원 대기)');
+          } else if (signingIn) {
             console.log('[watchAuth] 이미 로그인 진행 중, 대기...');
           }
         });

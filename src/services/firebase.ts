@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import * as Device from 'expo-device';
+import * as Application from 'expo-application';
 import { Platform, NativeModules } from 'react-native';
 export { watchAuth, ensureAnonymousAuth, getPreviousUID } from './authGuard';
 export { ensureAnonymousAuth as forceAnonymousAuth } from './authGuard';
@@ -46,37 +47,24 @@ export async function getDeviceUID(): Promise<string> {
     let hardwareIdSource: string = 'unknown';
     
     if (Platform.OS === 'android') {
-      // Android: Android ID 사용 (앱 서명이 같으면 동일한 ID)
-      // 주의: 기기 초기화 시 변경될 수 있음
+      // Android: expo-application의 installationId 사용 (앱 재설치 시에도 유지됨)
+      // 주의: 같은 앱 서명으로 재설치하는 경우에만 동일한 ID가 생성됨
       try {
-        // 방법 1: expo-device에서 직접 가져오기 시도
-        if ('androidId' in Device) {
-          const androidIdValue = (Device as any).androidId;
-          if (androidIdValue && typeof androidIdValue === 'string' && androidIdValue.length > 0) {
-            hardwareId = androidIdValue;
-            hardwareIdSource = 'androidId';
-            console.log('📱 Android ID 가져오기 성공 (expo-device):', hardwareId);
+        // 방법 1: expo-application의 installationId 사용 (우선순위 1)
+        try {
+          const installationId = await Application.getInstallationIdAsync();
+          if (installationId && installationId.length > 0) {
+            hardwareId = installationId;
+            hardwareIdSource = 'installationId';
+            console.log('📱 Android Installation ID 가져오기 성공 (expo-application):', hardwareId);
           }
+        } catch (installError) {
+          console.warn('⚠️ [getDeviceUID] expo-application에서 Installation ID 가져오기 실패:', installError);
         }
         
-        // 방법 2: expo-device에서 가져오지 못했으면 expo-application의 installationId 사용
-        if (!hardwareId) {
-          try {
-            const Application = require('expo-application');
-            if (Application && Application.getInstallationIdAsync) {
-              const installationId = await Application.getInstallationIdAsync();
-              if (installationId && installationId.length > 0) {
-                hardwareId = installationId;
-                hardwareIdSource = 'installationId';
-                console.log('📱 Installation ID 가져오기 성공 (expo-application):', hardwareId);
-              }
-            }
-          } catch (installError) {
-            console.warn('⚠️ [getDeviceUID] expo-application에서 Installation ID 가져오기 실패:', installError);
-          }
-        }
-        
-        // 방법 3: React Native NativeModules를 통한 직접 접근 (최후의 수단)
+        // 방법 2: React Native NativeModules를 통한 직접 접근 (최후의 수단)
+        // 주의: NativeModules.PlatformConstants.AndroidID는 React Native에서 직접 제공하지 않음
+        // 실제로는 네이티브 모듈을 만들어야 하지만, 여기서는 시도만 함
         if (!hardwareId) {
           try {
             const { PlatformConstants } = NativeModules;
@@ -92,7 +80,7 @@ export async function getDeviceUID(): Promise<string> {
         
         if (!hardwareId) {
           console.error('❌ [getDeviceUID] 모든 방법으로 Android ID를 가져올 수 없습니다.');
-          console.error('❌ [getDeviceUID] expo-device, expo-application, NativeModules 모두 실패');
+          console.error('❌ [getDeviceUID] expo-application, NativeModules 모두 실패');
         }
       } catch (e) {
         console.error('❌ [getDeviceUID] Android ID 가져오기 전체 프로세스 실패:', e);
@@ -103,14 +91,11 @@ export async function getDeviceUID(): Promise<string> {
       try {
         // 방법 1: expo-application의 installationId 사용 (앱 재설치 시에도 유지됨)
         try {
-          const Application = require('expo-application');
-          if (Application && Application.getInstallationIdAsync) {
-            const installationId = await Application.getInstallationIdAsync();
-            if (installationId && installationId.length > 0) {
-              hardwareId = installationId;
-              hardwareIdSource = 'installationId';
-              console.log('📱 iOS Installation ID 가져오기 성공 (expo-application):', hardwareId);
-            }
+          const installationId = await Application.getInstallationIdAsync();
+          if (installationId && installationId.length > 0) {
+            hardwareId = installationId;
+            hardwareIdSource = 'installationId';
+            console.log('📱 iOS Installation ID 가져오기 성공 (expo-application):', hardwareId);
           }
         } catch (installError) {
           console.warn('⚠️ [getDeviceUID] expo-application에서 Installation ID 가져오기 실패:', installError);
