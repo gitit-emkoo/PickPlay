@@ -11,11 +11,23 @@ interface TutorialTooltipProps {
   width?: number; // 말풍선 너비 지정 (선택)
   color?: string; // 테두리 및 꼬리 색상 (선택, 기본값: primary)
   blink?: boolean; // 깜빡임 효과 (선택, 주황-파랑 전환)
+  onDismiss?: () => void; // 말풍선이 표시될 때 호출되는 콜백 (한 번만 표시하기 위해)
 }
 
-export default function TutorialTooltip({ message, title, position = 'bottom', style, width, color, blink = false }: TutorialTooltipProps) {
+export default function TutorialTooltip({ message, title, position = 'bottom', style, width, color, blink = false, onDismiss }: TutorialTooltipProps) {
   const themeColor = color || colors.primary;
   const blinkAnim = useRef(new Animated.Value(0)).current;
+
+  // 말풍선이 표시될 때 onDismiss 콜백 호출 (한 번만 표시하기 위해)
+  useEffect(() => {
+    if (onDismiss) {
+      // 약간의 딜레이를 주어 말풍선이 표시된 후 호출
+      const timer = setTimeout(() => {
+        onDismiss();
+      }, 1000); // 1초 후 호출
+      return () => clearTimeout(timer);
+    }
+  }, [onDismiss]);
 
   // 깜빡임 애니메이션 (주황-파랑 전환)
   useEffect(() => {

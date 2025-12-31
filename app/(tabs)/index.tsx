@@ -1,7 +1,8 @@
 ﻿import React, { useEffect, useState, useRef } from 'react';
 import { Alert, ScrollView, Text, TouchableOpacity, View, StyleSheet, Image, Share, Platform } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { loadData, ensureUser, getTodayQuestionForUser, saveAnswerAndProcessLogic, aggregate, getTodayAnswer, rewardWithMajority } from '../../src/services/store';
+import { loadData, ensureUser, getTodayQuestionForUser, saveAnswerAndProcessLogic, saveAnswerQuick, aggregate, getTodayAnswer, rewardWithMajority } from '../../src/services/store';
 import { Question, UserData } from '../../src/types';
 import { watchAuth } from '../../src/services/firebase';
 import LoadingScreen from '../components/LoadingScreen';
@@ -24,7 +25,6 @@ import UpdateModal from '../components/UpdateModal';
 import { getServiceStatusConfig, getAppVersionConfig, ServiceStatusConfig, AppVersionConfig } from '../../src/services/config';
 import { isVersionBelowMinimum, isVersionBelowCurrent } from '../../src/utils/version';
 import Constants from 'expo-constants';
-import { useNavigation } from 'expo-router';
 
 export default function HomeScreen() {
   // 화면 흐름 상태
@@ -85,6 +85,9 @@ export default function HomeScreen() {
     rewardGiven500: boolean;
     allCompleted: boolean;
   } | null>(null);
+  
+  // 튜토리얼 말풍선 표시 여부 (한 번만 표시)
+  const [hasSeenMainTooltip, setHasSeenMainTooltip] = useState(false);
 
   const navigation = useNavigation();
 
@@ -349,6 +352,10 @@ export default function HomeScreen() {
       try {
         const status = await getTutorialStatus(user.uid);
         setTutorialStatus(status);
+        
+        // 메인 튜토리얼 말풍선 표시 여부 확인
+        const hasSeenMain = await AsyncStorage.getItem('hasSeenMainTutorialTooltip');
+        setHasSeenMainTooltip(hasSeenMain === 'true');
       } catch (e) {
         console.warn('[Tutorial] 튜토리얼 상태 로드 실패:', e);
       }
@@ -426,6 +433,7 @@ export default function HomeScreen() {
     init();
   }, [user]);
 
+
   const handleVote = async (index: 0 | 1) => {
     if (!user || !userData || !question) return;
     
@@ -451,20 +459,16 @@ export default function HomeScreen() {
     return { total: nextTotal, c0: nextC0, c1: nextC1, p0, p1 };
   });
     
-    // 2. 백그라운드에서 AI 태그 생성 및 저장 처리
+    // 2. 빠르게 답변 저장 (AI 태그 없이, 보상받기 버튼 즉시 표시를 위해)
     setTimeout(async () => {
       try {
-        const previousTotalSelections = userData.totalSelections;
-        const updatedUserData = await saveAnswerAndProcessLogic(userData, question, index);
-        setUserData(updatedUserData);
-        const result = await aggregate(question.question_id);
-        setAgg(result);
-        console.log('✅ 백그라운드 투표 처리 완료');
+        // 빠르게 답변 저장 (AI 태그는 백그라운드에서 생성)
+        await saveAnswerQuick(userData, question, index);
+        console.log('✅ 빠른 답변 저장 완료');
         
-        // 튜토리얼 상태 업데이트 (메인 질문 답변)
+        // 튜토리얼 상태 즉시 업데이트 (보상받기 버튼 표시를 위해)
         try {
-          const result = await updateTutorialProgress(user.uid, 'mainAnswered');
-          // 튜토리얼 상태 다시 로드
+          await updateTutorialProgress(user.uid, 'mainAnswered');
           const updatedStatus = await getTutorialStatus(user.uid);
           if (updatedStatus) {
             setTutorialStatus(updatedStatus);
@@ -473,26 +477,45 @@ export default function HomeScreen() {
           console.warn('[Tutorial] 메인 질문 답변 튜토리얼 업데이트 실패:', e);
         }
         
-        // 애니마코드 팝업 표시 체크
-        const newTotalSelections = updatedUserData.totalSelections;
-        await checkAndShowAnimaCodeModal(previousTotalSelections, newTotalSelections, updatedUserData);
+        // 집계 데이터 업데이트
+        const result = await aggregate(question.question_id);
+        setAgg(result);
         
-        // 테스트 유저는 투표 후 다음 질문으로 넘어감
-        if (TEST_UIDS.includes(user.uid)) {
-          const nextQuestion = getTodayQuestionForUser(updatedUserData);
-          if (nextQuestion) {
-            setQuestion(nextQuestion);
-            setUserChoice(null);
-            setRewardCompleted(false);
-            setMsg('');
-            // 새로운 질문의 집계 데이터 로드
-            const nextAgg = await aggregate(nextQuestion.question_id);
-            setAgg(nextAgg);
-            console.log(`🧪 [Test] 다음 질문으로 이동: Q${nextQuestion.question_id}`);
+        // 3. 백그라운드에서 전체 로직 처리 (연속 참여일수, 캐릭터 로직 등)
+        try {
+          const previousTotalSelections = userData.totalSelections;
+          const updatedUserData = await saveAnswerAndProcessLogic(userData, question, index);
+          setUserData(updatedUserData);
+          console.log('✅ 백그라운드 전체 로직 처리 완료');
+          
+          // 집계 데이터 다시 업데이트 (정확한 수치를 위해)
+          const finalResult = await aggregate(question.question_id);
+          setAgg(finalResult);
+          
+          // 애니마코드 팝업 표시 체크
+          const newTotalSelections = updatedUserData.totalSelections;
+          await checkAndShowAnimaCodeModal(previousTotalSelections, newTotalSelections, updatedUserData);
+          
+          // 테스트 유저는 투표 후 다음 질문으로 넘어감
+          if (TEST_UIDS.includes(user.uid)) {
+            const nextQuestion = getTodayQuestionForUser(updatedUserData);
+            if (nextQuestion) {
+              setQuestion(nextQuestion);
+              setUserChoice(null);
+              setRewardCompleted(false);
+              setMsg('');
+              // 새로운 질문의 집계 데이터 로드
+              const nextAgg = await aggregate(nextQuestion.question_id);
+              setAgg(nextAgg);
+              console.log(`🧪 [Test] 다음 질문으로 이동: Q${nextQuestion.question_id}`);
+            }
           }
+        } catch (e: any) {
+          console.error('❌ 백그라운드 전체 로직 처리 실패:', e);
+          // 에러 발생 시에도 UI는 이미 업데이트됨 (사용자 경험 유지)
         }
       } catch (e: any) {
-        console.error('❌ 백그라운드 투표 처리 실패:', e);
+        console.error('❌ 빠른 답변 저장 실패:', e);
         // 에러 발생 시에도 UI는 이미 업데이트됨 (사용자 경험 유지)
       }
     }, 0);
@@ -740,8 +763,8 @@ export default function HomeScreen() {
           {/* 질문 카드 */}
           {question ? (
           <View style={{ backgroundColor: colors.surface, borderRadius: 20, padding: 24, marginBottom: 24, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 4, position: 'relative' }}>
-            {/* 튜토리얼 말풍선 (메인 질문 안내) - 튜토리얼 미완료 시 표시 */}
-            {tutorialStatus && !tutorialStatus.mainAnswered && userChoice === null && (
+            {/* 튜토리얼 말풍선 (메인 질문 안내) - 튜토리얼 미완료 시 한 번만 표시 */}
+            {tutorialStatus && !tutorialStatus.mainAnswered && userChoice === null && !hasSeenMainTooltip && (
               <TutorialTooltip
                 title="튜토리얼 하기!"
                 message="보상 : 500P!"
@@ -749,6 +772,10 @@ export default function HomeScreen() {
                 style={{ top: -50, left: 100, right: 20 }}
                 color="#FF5722"
                 blink={true}
+                onDismiss={async () => {
+                  await AsyncStorage.setItem('hasSeenMainTutorialTooltip', 'true');
+                  setHasSeenMainTooltip(true);
+                }}
               />
             )}
             <Text style={{ fontSize: 20, fontWeight: '700', color: colors.primary, textAlign: 'center', lineHeight: 28, marginBottom: 24 }}>

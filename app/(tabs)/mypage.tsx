@@ -4,16 +4,18 @@ import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
 import LottieView from 'lottie-react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import colors from '../../src/styles/colors';
 import { watchAuth, ensureAnonymousAuth } from '../../src/services/firebase';
 import { ensureUser } from '../../src/services/store';
 import { PointHistory, UserData } from '../../src/types';
 import { getPointHistory } from '../../src/services/pointHistory';
 import { prepareDeviceTransfer, executeDeviceTransfer, watchDeviceTransferCompletion } from '../../src/services/deviceTransfer';
+import { useToast } from '../../app/components/Toast';
 
 export default function MyPageScreen() {
   const router = useRouter();
+  const { showToast } = useToast();
   const [user, setUser] = useState<{ uid: string } | null>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,6 +33,7 @@ export default function MyPageScreen() {
   const [transferLoading, setTransferLoading] = useState(false);
   const [preparedPassword, setPreparedPassword] = useState<string | null>(null);
   const [transferWatchUnsubscribe, setTransferWatchUnsubscribe] = useState<(() => void) | null>(null);
+  const [isWaitingForTransfer, setIsWaitingForTransfer] = useState(false); // 연동 대기 중 상태
 
   // 사용자 인증 및 데이터 로드
   useEffect(() => {
@@ -60,24 +63,23 @@ export default function MyPageScreen() {
   }, [transferWatchUnsubscribe]);
 
   // 화면이 포커스될 때마다 사용자 데이터 갱신 (메인페이지에서 투표 후 업데이트된 데이터 반영)
-  useFocusEffect(
-    React.useCallback(() => {
-      if (user) {
-        ensureUser(user.uid)
-          .then((data) => {
-            setUserData(data);
-            console.log('✅ [MyPage] 사용자 데이터 갱신 완료:', {
-              streakCount: data.streakCount,
-              points: data.points,
-              totalSelections: data.totalSelections,
-            });
-          })
-          .catch((error) => {
-            console.error('❌ [MyPage] 사용자 데이터 갱신 실패:', error);
+  // useFocusEffect 대신 useEffect로 처리 (expo-router 호환성 문제로 인해)
+  useEffect(() => {
+    if (user) {
+      ensureUser(user.uid)
+        .then((data) => {
+          setUserData(data);
+          console.log('✅ [MyPage] 사용자 데이터 갱신 완료:', {
+            streakCount: data.streakCount,
+            points: data.points,
+            totalSelections: data.totalSelections,
           });
-      }
-    }, [user])
-  );
+        })
+        .catch((error) => {
+          console.error('❌ [MyPage] 사용자 데이터 갱신 실패:', error);
+        });
+    }
+  }, [user]);
 
   const openLink = async (url: string) => {
     try {
@@ -147,16 +149,23 @@ export default function MyPageScreen() {
       setShowPrepareModal(true);
       
       // 연동 완료 감시 시작
+      setIsWaitingForTransfer(true); // 연동 대기 중 상태로 변경
       const unsubscribe = watchDeviceTransferCompletion(user.uid, () => {
         console.log('[MyPage] 연동 완료 감지! 팝업 표시');
-        setShowTransferCompletedModal(true);
+        setIsWaitingForTransfer(false); // 연동 대기 중 상태 해제
         setShowPrepareModal(false); // 연동 준비 모달 닫기
+        // 연동 완료 모달 표시 전에 토스트 메시지 표시
+        showToast('연동이 완료되었습니다. 기존 정보는 삭제되었고 새 유저를 생성했습니다.', 'success');
+        // 약간의 딜레이 후 모달 표시 (토스트가 먼저 보이도록)
+        setTimeout(() => {
+          setShowTransferCompletedModal(true);
+        }, 500);
       });
       
       setTransferWatchUnsubscribe(unsubscribe);
     } catch (error: any) {
       console.error('연동 준비 실패:', error);
-      Alert.alert('오류', error.message || '연동 준비에 실패했습니다.');
+      showToast(error.message || '연동 준비에 실패했습니다.', 'error');
     } finally {
       setTransferLoading(false);
     }
@@ -166,12 +175,24 @@ export default function MyPageScreen() {
   const handlePrepareModalClose = () => {
     setShowPrepareModal(false);
     // 리스너는 유지 (연동 완료까지 감시 필요)
-    // 사용자가 명시적으로 취소하려면 별도 취소 버튼 필요
+    // 연동 대기 중 상태는 유지 (백그라운드에서 계속 감시)
+  };
+
+  // 연동 준비 취소 핸들러 (연동 감시 중단)
+  const handleCancelTransfer = () => {
+    if (transferWatchUnsubscribe) {
+      transferWatchUnsubscribe();
+      setTransferWatchUnsubscribe(null);
+    }
+    setIsWaitingForTransfer(false);
+    setShowPrepareModal(false);
+    setPreparedPassword(null);
   };
 
   // 연동 완료 모달 닫기 및 새 유저 생성
   const handleTransferCompletedModalClose = async () => {
     setShowTransferCompletedModal(false);
+    setIsWaitingForTransfer(false); // 연동 대기 중 상태 해제
     
     // 감시 리스너 해제
     if (transferWatchUnsubscribe) {
@@ -200,13 +221,13 @@ export default function MyPageScreen() {
   // 연동 실행 핸들러
   const handleExecuteTransfer = async () => {
     if (!user || !transferUID.trim() || !transferPassword.trim()) {
-      Alert.alert('입력 오류', 'UID와 비밀번호를 모두 입력해주세요.');
+      showToast('UID와 비밀번호를 모두 입력해주세요.', 'warning');
       return;
     }
 
     Alert.alert(
       '기기 연동',
-      '기기 연동을 진행하시겠습니까?\n\n원본 기기의 데이터는 삭제되고, 현재 기기로 모든 정보가 이전됩니다.',
+      '기기 연동을 진행하시겠습니까?\n\n기존 기기의 데이터는 삭제되고, 현재 기기로 모든 정보가 이전됩니다.\n\n⚠️ 네트워크 연결이 필요합니다.',
       [
         { text: '취소', style: 'cancel' },
         {
@@ -218,32 +239,30 @@ export default function MyPageScreen() {
               const result = await executeDeviceTransfer(transferUID.trim(), transferPassword.trim(), user.uid);
               
               if (result.success) {
-                Alert.alert('성공', '기기 연동이 완료되었습니다.', [
-                  {
-                    text: '확인',
-                    onPress: () => {
-                      // 사용자 데이터 새로고침
-                      if (user) {
-                        ensureUser(user.uid)
-                          .then((data) => {
-                            setUserData(data);
-                            setShowTransferModal(false);
-                            setTransferUID('');
-                            setTransferPassword('');
-                          })
-                          .catch((error) => {
-                            console.error('사용자 데이터 새로고침 실패:', error);
-                          });
-                      }
-                    },
-                  },
-                ]);
+                showToast('기기 연동이 완료되었습니다.', 'success');
+                // 사용자 데이터 새로고침
+                if (user) {
+                  ensureUser(user.uid)
+                    .then((data) => {
+                      setUserData(data);
+                      setShowTransferModal(false);
+                      setTransferUID('');
+                      setTransferPassword('');
+                      // 메인 화면으로 자동 이동하여 새로고침된 데이터 확인 가능
+                      setTimeout(() => {
+                        router.push('/(tabs)/');
+                      }, 500);
+                    })
+                    .catch((error) => {
+                      console.error('사용자 데이터 새로고침 실패:', error);
+                    });
+                }
               } else {
-                Alert.alert('연동 실패', result.error || '기기 연동에 실패했습니다.');
+                showToast(result.error || '기기 연동에 실패했습니다.', 'error');
               }
             } catch (error: any) {
               console.error('연동 실행 실패:', error);
-              Alert.alert('오류', error.message || '기기 연동 중 오류가 발생했습니다.');
+              showToast(error.message || '기기 연동 중 오류가 발생했습니다.', 'error');
             } finally {
               setTransferLoading(false);
             }
@@ -272,6 +291,21 @@ export default function MyPageScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>마이페이지</Text>
       </View>
+      
+      {/* 연동 대기 중 배너 (모달이 닫혀있을 때 표시) */}
+      {isWaitingForTransfer && !showPrepareModal && (
+        <TouchableOpacity
+          style={styles.transferWaitingBanner}
+          onPress={() => setShowPrepareModal(true)}
+          activeOpacity={0.8}
+        >
+          <ActivityIndicator size="small" color={colors.primary} style={{ marginRight: 8 }} />
+          <Text style={styles.transferWaitingBannerText}>
+            연동 대기 중... 다른 기기에서 연동을 완료하면 알려드립니다.
+          </Text>
+          <Ionicons name="chevron-forward" size={20} color={colors.primary} />
+        </TouchableOpacity>
+      )}
       
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         {/* 프로필 섹션 */}
@@ -506,7 +540,7 @@ export default function MyPageScreen() {
                   onPress={async () => {
                     if (user?.uid) {
                       await Clipboard.setString(user.uid);
-                      Alert.alert('복사 완료', '사용자 ID가 클립보드에 복사되었습니다.');
+                      showToast('사용자 ID가 클립보드에 복사되었습니다.', 'success');
                     }
                   }}
                   style={styles.copyButton}
@@ -535,17 +569,39 @@ export default function MyPageScreen() {
                 <Ionicons name="warning-outline" size={20} color="#FF9500" />
                 <Text style={styles.transferWarningText}>
                   이 정보를 다른 기기에서 입력하면 현재 기기의 데이터가 삭제되고 새 기기로 이전됩니다.{'\n'}
-                  비밀번호는 24시간 동안 유효합니다.
+                  비밀번호는 24시간 동안 유효합니다.{'\n\n'}
+                  <Text style={{ fontWeight: '600' }}>⚠️ 네트워크 연결이 필요합니다.</Text>{'\n'}
+                  연동을 진행하려면 와이파이 또는 모바일 데이터에 연결되어 있어야 합니다.
                 </Text>
               </View>
+
+              {/* 연동 대기 중 표시 */}
+              {isWaitingForTransfer && (
+                <View style={[styles.transferWarningBox, { backgroundColor: colors.primary + '15', borderColor: colors.primary, marginTop: 16 }]}>
+                  <ActivityIndicator size="small" color={colors.primary} style={{ marginRight: 8 }} />
+                  <Text style={[styles.transferWarningText, { color: colors.primary, flex: 1 }]}>
+                    연동 대기 중... 다른 기기에서 연동을 완료하면 알려드립니다.
+                  </Text>
+                </View>
+              )}
             </View>
             
-            <TouchableOpacity
-              style={styles.modalButton}
-              onPress={handlePrepareModalClose}
-            >
-              <Text style={styles.modalButtonText}>확인</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              {isWaitingForTransfer && (
+                <TouchableOpacity
+                  style={[styles.modalButton, { flex: 1, backgroundColor: colors.textLight }]}
+                  onPress={handleCancelTransfer}
+                >
+                  <Text style={styles.modalButtonText}>취소</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[styles.modalButton, isWaitingForTransfer && { flex: 1 }]}
+                onPress={handlePrepareModalClose}
+              >
+                <Text style={styles.modalButtonText}>{isWaitingForTransfer ? '백그라운드 대기' : '확인'}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -604,7 +660,9 @@ export default function MyPageScreen() {
               <View style={styles.transferWarningBox}>
                 <Ionicons name="information-circle-outline" size={20} color={colors.primary} />
                 <Text style={styles.transferWarningText}>
-                  연동하면 원본 기기의 데이터가 삭제되고 현재 기기로 모든 정보가 이전됩니다.
+                  연동하면 기존 기기의 데이터가 삭제되고 현재 기기로 모든 정보가 이전됩니다.{'\n\n'}
+                  <Text style={{ fontWeight: '600' }}>⚠️ 네트워크 연결이 필요합니다.</Text>{'\n'}
+                  연동을 진행하려면 와이파이 또는 모바일 데이터에 연결되어 있어야 합니다.
                 </Text>
               </View>
             </View>
@@ -624,7 +682,7 @@ export default function MyPageScreen() {
         </View>
       </Modal>
 
-      {/* 연동 완료 모달 (A기기에서 표시) */}
+      {/* 연동 완료 모달 (데이터를 보낸 기기에서 표시) */}
       <Modal
         visible={showTransferCompletedModal}
         transparent={true}
@@ -644,7 +702,7 @@ export default function MyPageScreen() {
                   연동이 완료되었습니다.
                 </Text>
                 <Text style={[styles.transferWarningText, { textAlign: 'center' }]}>
-                  기존 유저 정보가 삭제되었습니다.{'\n'}
+                  기존 정보는 삭제되었고{'\n'}
                   새 유저를 생성합니다.
                 </Text>
               </View>
@@ -1070,5 +1128,21 @@ const styles = StyleSheet.create({
   },
   modalCloseButton: {
     padding: 4,
+  },
+  transferWaitingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary + '15',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.primary + '30',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  transferWaitingBannerText: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '500',
+    marginLeft: 4,
   },
 });

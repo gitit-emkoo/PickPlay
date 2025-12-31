@@ -123,13 +123,22 @@ export async function createLivePickQuestion(
     let tutorialCompleted = false;
     try {
       const result = await updateTutorialProgress(uid, 'livepickCreated');
-      // 3개 미션 모두 완료되고 보상을 받았다면 tutorialCompleted = true
-      if (result?.userData?.tutorial?.mainAnswered && 
+      // 실제로 업데이트가 수행되었고, 3개 미션 모두 완료되어 방금 보상을 받은 경우에만 tutorialCompleted = true
+      // (이미 보상을 받은 상태에서 다시 질문을 생성하는 경우는 제외)
+      if (result?.wasUpdated && 
+          result?.userData?.tutorial?.mainAnswered && 
           result?.userData?.tutorial?.livepickParticipated && 
           result?.userData?.tutorial?.livepickCreated &&
           result?.userData?.tutorial?.rewardGiven500) {
+        // 보상이 방금 지급되었는지 확인 (이전 상태를 확인할 수 없으므로, 
+        // updateTutorialProgress 내부에서 보상 지급이 발생했는지 확인)
+        // updateTutorialProgress는 보상을 지급하면 wasUpdated = true를 반환하므로
+        // wasUpdated가 true이고 rewardGiven500이 true이면 방금 보상을 받은 것
         tutorialCompleted = true;
         console.log('[LivePick] 🎉 튜토리얼 완료! 500P 보상 지급됨');
+      } else if (result && !result.wasUpdated) {
+        // 이미 완료된 미션이면 tutorialCompleted = false (중복 팝업 방지)
+        console.log('[LivePick] 이미 완료된 튜토리얼 미션입니다.');
       }
     } catch (e) {
       console.warn('[LivePick] 튜토리얼 상태 업데이트 실패(무시 가능):', (e as any)?.message || e);
@@ -152,24 +161,55 @@ export async function createLivePickQuestion(
  * 활성 상태의 LivePick 질문 목록을 조회합니다.
  * @param limit 최대 조회 개수 (기본값: 20)
  * @param startAfterDate 이 날짜(createdAt) 이후의 문서부터 조회 (페이지네이션용, 선택사항)
+ * @param sortBy 정렬 기준 ('latest' | 'popular') - 기본값: 'latest'
+ * @param startAfterValue 페이지네이션용 값 (sortBy에 따라 createdAt 또는 participantCount)
  * @returns 질문 목록
  */
 export async function getLivePickQuestions(
   limit: number = 20,
-  startAfterDate?: Date
+  startAfterDate?: Date,
+  sortBy: 'latest' | 'popular' = 'latest',
+  startAfterValue?: any
 ): Promise<LivePickQuestion[]> {
   try {
     let query = firestore()
       .collection(COLLECTIONS.QUESTIONS)
-      .where('status', '==', 'active')
-      .orderBy('createdAt', 'desc');
+      .where('status', '==', 'active');
 
-    if (startAfterDate) {
-      // createdAt 내림차순 기준, startAfter로 페이지네이션
-      query = query.startAfter(startAfterDate);
+    // 정렬 기준에 따라 다른 orderBy 사용
+    let snapshot;
+    try {
+      if (sortBy === 'popular') {
+        query = query.orderBy('participantCount', 'desc');
+        if (startAfterValue !== undefined) {
+          query = query.startAfter(startAfterValue);
+        }
+      } else {
+        // 최신순 (기본값)
+        query = query.orderBy('createdAt', 'desc');
+        if (startAfterDate) {
+          query = query.startAfter(startAfterDate);
+        }
+      }
+
+      // 서버에서 최신 데이터를 가져오도록 설정 (캐시 무시)
+      snapshot = await query.limit(limit).get({ source: 'server' });
+    } catch (error: any) {
+      // 인덱스가 아직 생성되지 않은 경우 최신순으로 폴백
+      if (error?.code === 'failed-precondition' && sortBy === 'popular') {
+        console.warn('[LivePick] 인기순 정렬 인덱스가 아직 생성되지 않았습니다. 최신순으로 대체합니다.');
+        query = firestore()
+          .collection(COLLECTIONS.QUESTIONS)
+          .where('status', '==', 'active')
+          .orderBy('createdAt', 'desc');
+        if (startAfterDate) {
+          query = query.startAfter(startAfterDate);
+        }
+        snapshot = await query.limit(limit).get({ source: 'server' });
+      } else {
+        throw error;
+      }
     }
-
-    const snapshot = await query.limit(limit).get();
 
     const questions: LivePickQuestion[] = [];
     snapshot.forEach((doc) => {

@@ -47,7 +47,7 @@ export default function TabsLayout() {
         options={{
           title: '애니마코드',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="color-palette" size={size} color={color} />
+            <Ionicons name="paw" size={size} color={color} />
           ),
         }}
       />

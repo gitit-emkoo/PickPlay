@@ -1,6 +1,6 @@
 import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { UserData } from '../types';
-import { getDeviceUID } from './firebase';
+import { getDeviceUID, getFunctions } from './firebase';
 
 /**
  * 기기 이전을 위한 임시 비밀번호 생성
@@ -24,20 +24,46 @@ export async function prepareDeviceTransfer(uid: string): Promise<string> {
   const expiresAt = new Date();
   expiresAt.setHours(expiresAt.getHours() + 24); // 24시간 후 만료
   
-  await transferRef.set({
-    uid,
-    password,
-    createdAt: firestore.FieldValue.serverTimestamp(),
-    expiresAt: firestore.Timestamp.fromDate(expiresAt),
-    used: false,
-  });
+  // 문서 존재 여부 확인
+  const existingDoc = await transferRef.get();
+  
+  if (!existingDoc.exists) {
+    // 문서가 없으면 create
+    await transferRef.set({
+      uid,
+      password,
+      createdAt: firestore.FieldValue.serverTimestamp(),
+      expiresAt: firestore.Timestamp.fromDate(expiresAt),
+      used: false,
+    });
+  } else {
+    // 문서가 있으면 update
+    // used: true인 경우에도 재생성 허용 (새로운 연동 준비)
+    const existingData = existingDoc.data();
+    
+    // used: false인 경우 또는 used: true인 경우 모두 재생성 가능
+    await transferRef.update({
+      uid,
+      password,
+      createdAt: firestore.FieldValue.serverTimestamp(),
+      expiresAt: firestore.Timestamp.fromDate(expiresAt),
+      used: false, // 재생성 시 used를 false로 리셋
+    });
+  }
+  
+  // 문서 생성 확인
+  const verifyDoc = await transferRef.get();
+  if (!verifyDoc.exists) {
+    throw new Error('연동 준비 정보 저장에 실패했습니다. 다시 시도해주세요.');
+  }
   
   console.log(`[DeviceTransfer] 연동 준비 완료: ${uid}, 비밀번호: ${password}`);
+  console.log(`[DeviceTransfer] 문서 확인: 존재=${verifyDoc.exists}, 데이터=${JSON.stringify(verifyDoc.data())}`);
   return password;
 }
 
 /**
- * 기기 이전 실행
+ * 기기 이전 실행 (Cloud Functions 호출)
  * @param sourceUID 원본 기기 UID
  * @param password 임시 비밀번호
  * @param targetUID 대상 기기 UID
@@ -51,530 +77,86 @@ export async function executeDeviceTransfer(
   console.log(`[DeviceTransfer] 연동 실행 시작: ${sourceUID} → ${targetUID}`);
   
   try {
-    // 1. 연동 정보 확인
-    const transferRef = firestore().collection('device_transfers').doc(sourceUID);
-    const transferDoc = await transferRef.get();
-    
-    if (!transferDoc.exists) {
-      return { success: false, error: '연동 준비 정보를 찾을 수 없습니다.' };
-    }
-    
-    const transferData = transferDoc.data();
-    if (!transferData) {
-      return { success: false, error: '연동 정보가 유효하지 않습니다.' };
-    }
-    
-    // 비밀번호 확인
-    if (transferData.password !== password) {
-      return { success: false, error: '비밀번호가 일치하지 않습니다.' };
-    }
-    
-    // 만료 확인
-    if (transferData.expiresAt) {
-      const expiresAt = (transferData.expiresAt as FirebaseFirestoreTypes.Timestamp).toDate();
-      if (expiresAt < new Date()) {
-        return { success: false, error: '연동 준비가 만료되었습니다. (24시간 초과)' };
-      }
-    }
-    
-    // 사용 여부 확인
-    if (transferData.used === true) {
-      return { success: false, error: '이미 사용된 연동 정보입니다.' };
-    }
-    
-    // 같은 UID로 이전 시도 방지
-    if (sourceUID === targetUID) {
-      return { success: false, error: '같은 기기로는 연동할 수 없습니다.' };
-    }
-    
-    // 2. 원본 사용자 데이터 가져오기
-    const sourceUserRef = firestore().collection('users').doc(sourceUID);
-    const sourceUserDoc = await sourceUserRef.get();
-    
-    if (!sourceUserDoc.exists) {
-      return { success: false, error: '원본 사용자 데이터를 찾을 수 없습니다.' };
-    }
-    
-    const sourceUserData = sourceUserDoc.data() as UserData;
-    
-    // 3. 대상 기기 deviceUID 가져오기
+    // 대상 기기 deviceUID 가져오기
     const targetDeviceUID = await getDeviceUID();
     
-    // 4. 대상 기기의 기존 데이터 삭제 (B기기의 새 유저 데이터 제거)
-    console.log(`[DeviceTransfer] 대상 기기(B기기) 기존 데이터 삭제 시작: ${targetUID}`);
+    // Cloud Functions 호출 (asia-northeast3 리전에 배포된 함수)
+    // React Native Firebase는 region() 메서드를 지원하지 않으므로 URL로 직접 호출
+    const functions = getFunctions();
+    const executeTransfer = functions.httpsCallableFromUrl(
+      'https://asia-northeast3-today-balance-fa0a5.cloudfunctions.net/executeDeviceTransfer'
+    );
     
-    // 4-1. 대상 기기 users 문서 삭제 (나중에 A기기 데이터로 교체)
-    const targetUserRef = firestore().collection('users').doc(targetUID);
-    const targetUserDoc = await targetUserRef.get();
-    if (targetUserDoc.exists) {
-      await targetUserRef.delete();
-      console.log(`[DeviceTransfer] 대상 기기 users 문서 삭제 완료: ${targetUID}`);
-    }
-    
-    // 4-2. 대상 기기 answers 삭제
-    const targetAnswersQuery = await firestore()
-      .collection('answers')
-      .where('uid', '==', targetUID)
-      .get();
-    
-    if (!targetAnswersQuery.empty) {
-      const batch = firestore().batch();
-      let batchCount = 0;
-      const BATCH_LIMIT = 500;
-      
-      for (const answerDoc of targetAnswersQuery.docs) {
-        batch.delete(answerDoc.ref);
-        batchCount++;
-        
-        if (batchCount >= BATCH_LIMIT) {
-          await batch.commit();
-          console.log(`[DeviceTransfer] 대상 기기 answers 삭제 배치 커밋: ${batchCount}개`);
-          batchCount = 0;
-        }
-      }
-      
-      if (batchCount > 0) {
-        await batch.commit();
-        console.log(`[DeviceTransfer] 대상 기기 answers 삭제 최종 배치 커밋: ${batchCount}개`);
-      }
-      
-      console.log(`[DeviceTransfer] 대상 기기 answers 삭제 완료: ${targetAnswersQuery.size}개 문서`);
-    }
-    
-    // 4-3. 대상 기기 point_history 삭제
-    const targetPointHistoryQuery = await firestore()
-      .collection('point_history')
-      .where('uid', '==', targetUID)
-      .get();
-    
-    if (!targetPointHistoryQuery.empty) {
-      const batch = firestore().batch();
-      let batchCount = 0;
-      const BATCH_LIMIT = 500;
-      
-      for (const historyDoc of targetPointHistoryQuery.docs) {
-        batch.delete(historyDoc.ref);
-        batchCount++;
-        
-        if (batchCount >= BATCH_LIMIT) {
-          await batch.commit();
-          console.log(`[DeviceTransfer] 대상 기기 point_history 삭제 배치 커밋: ${batchCount}개`);
-          batchCount = 0;
-        }
-      }
-      
-      if (batchCount > 0) {
-        await batch.commit();
-        console.log(`[DeviceTransfer] 대상 기기 point_history 삭제 최종 배치 커밋: ${batchCount}개`);
-      }
-      
-      console.log(`[DeviceTransfer] 대상 기기 point_history 삭제 완료: ${targetPointHistoryQuery.size}개 문서`);
-    }
-    
-    // 4-4. 대상 기기 livepick_participations 삭제
-    const targetParticipationsQuery = await firestore()
-      .collection('livepick_participations')
-      .where('uid', '==', targetUID)
-      .get();
-    
-    if (!targetParticipationsQuery.empty) {
-      const batch = firestore().batch();
-      let batchCount = 0;
-      const BATCH_LIMIT = 500;
-      
-      for (const participationDoc of targetParticipationsQuery.docs) {
-        batch.delete(participationDoc.ref);
-        batchCount++;
-        
-        if (batchCount >= BATCH_LIMIT) {
-          await batch.commit();
-          console.log(`[DeviceTransfer] 대상 기기 livepick_participations 삭제 배치 커밋: ${batchCount}개`);
-          batchCount = 0;
-        }
-      }
-      
-      if (batchCount > 0) {
-        await batch.commit();
-        console.log(`[DeviceTransfer] 대상 기기 livepick_participations 삭제 최종 배치 커밋: ${batchCount}개`);
-      }
-      
-      console.log(`[DeviceTransfer] 대상 기기 livepick_participations 삭제 완료: ${targetParticipationsQuery.size}개 문서`);
-    }
-    
-    // 4-5. 대상 기기 user_push_tokens 삭제
-    try {
-      const targetPushTokenRef = firestore().collection('user_push_tokens').doc(targetUID);
-      const targetPushTokenDoc = await targetPushTokenRef.get();
-      if (targetPushTokenDoc.exists) {
-        await targetPushTokenRef.delete();
-        console.log(`[DeviceTransfer] 대상 기기 user_push_tokens 삭제 완료`);
-      }
-    } catch (pushTokenDeleteError) {
-      console.warn('[DeviceTransfer] 대상 기기 user_push_tokens 삭제 실패 (무시):', pushTokenDeleteError);
-    }
-    
-    // 4-6. 대상 기기 user_notifications 삭제
-    const targetNotificationsQuery = await firestore()
-      .collection('user_notifications')
-      .where('uid', '==', targetUID)
-      .get();
-    
-    if (!targetNotificationsQuery.empty) {
-      const batch = firestore().batch();
-      let batchCount = 0;
-      const BATCH_LIMIT = 500;
-      
-      for (const notificationDoc of targetNotificationsQuery.docs) {
-        batch.delete(notificationDoc.ref);
-        batchCount++;
-        
-        if (batchCount >= BATCH_LIMIT) {
-          await batch.commit();
-          console.log(`[DeviceTransfer] 대상 기기 user_notifications 삭제 배치 커밋: ${batchCount}개`);
-          batchCount = 0;
-        }
-      }
-      
-      if (batchCount > 0) {
-        await batch.commit();
-        console.log(`[DeviceTransfer] 대상 기기 user_notifications 삭제 최종 배치 커밋: ${batchCount}개`);
-      }
-      
-      console.log(`[DeviceTransfer] 대상 기기 user_notifications 삭제 완료: ${targetNotificationsQuery.size}개 문서`);
-    }
-    
-    console.log(`[DeviceTransfer] 대상 기기(B기기) 기존 데이터 삭제 완료: ${targetUID}`);
-    
-    // 5. 대상 기기에 A기기 데이터 복사
-    const targetUserData: UserData = {
-      ...sourceUserData,
-      uid: targetUID,
-      deviceUID: targetDeviceUID,
-      // createdAt은 유지 (기존 사용자의 시작일 유지)
-    };
-    
-    await targetUserRef.set(targetUserData);
-    console.log(`[DeviceTransfer] 대상 기기 데이터 복사 완료: ${targetUID}`);
-    
-    // 6. answers 컬렉션 마이그레이션
-    let sourceAnswersQuery: FirebaseFirestoreTypes.QuerySnapshot | null = null;
-    sourceAnswersQuery = await firestore()
-      .collection('answers')
-      .where('uid', '==', sourceUID)
-      .get();
-    
-    if (sourceAnswersQuery && !sourceAnswersQuery.empty) {
-      const batch = firestore().batch();
-      let batchCount = 0;
-      const BATCH_LIMIT = 500;
-      
-      for (const answerDoc of sourceAnswersQuery.docs) {
-        const answerData = answerDoc.data();
-        const questionId = answerData.question_id;
-        const newAnswerDocId = `${targetUID}_${questionId}`;
-        const newAnswerRef = firestore().collection('answers').doc(newAnswerDocId);
-        
-        // B기기 기존 데이터는 이미 삭제했으므로 바로 추가
-        batch.set(newAnswerRef, {
-          ...answerData,
-          uid: targetUID,
-        });
-        batchCount++;
-        
-        if (batchCount >= BATCH_LIMIT) {
-          await batch.commit();
-          console.log(`[DeviceTransfer] answers 마이그레이션 배치 커밋: ${batchCount}개`);
-          batchCount = 0;
-        }
-      }
-      
-      if (batchCount > 0) {
-        await batch.commit();
-        console.log(`[DeviceTransfer] answers 마이그레이션 최종 배치 커밋: ${batchCount}개`);
-      }
-      
-      console.log(`[DeviceTransfer] answers 컬렉션 마이그레이션 완료: ${sourceAnswersQuery.size}개 문서`);
-    }
-    
-    // 7. point_history 컬렉션 마이그레이션
-    let sourcePointHistoryQuery: FirebaseFirestoreTypes.QuerySnapshot | null = null;
-    try {
-      sourcePointHistoryQuery = await firestore()
-        .collection('point_history')
-        .where('uid', '==', sourceUID)
-        .get();
-      
-      if (!sourcePointHistoryQuery.empty) {
-        const batch = firestore().batch();
-        let batchCount = 0;
-        const BATCH_LIMIT = 500;
-        
-        for (const historyDoc of sourcePointHistoryQuery.docs) {
-          const historyData = historyDoc.data();
-          const newHistoryRef = firestore().collection('point_history').doc();
-          
-          batch.set(newHistoryRef, {
-            ...historyData,
-            uid: targetUID,
-          });
-          batchCount++;
-          
-          if (batchCount >= BATCH_LIMIT) {
-            await batch.commit();
-            console.log(`[DeviceTransfer] point_history 마이그레이션 배치 커밋: ${batchCount}개`);
-            batchCount = 0;
-          }
-        }
-        
-        if (batchCount > 0) {
-          await batch.commit();
-          console.log(`[DeviceTransfer] point_history 마이그레이션 최종 배치 커밋: ${batchCount}개`);
-        }
-        
-        console.log(`[DeviceTransfer] point_history 컬렉션 마이그레이션 완료: ${sourcePointHistoryQuery.size}개 문서`);
-      }
-    } catch (pointHistoryError) {
-      console.warn('[DeviceTransfer] point_history 마이그레이션 실패 (무시):', pointHistoryError);
-    }
-    
-    // 8. livepick_participations 컬렉션 마이그레이션
-    let sourceParticipationsQuery: FirebaseFirestoreTypes.QuerySnapshot | null = null;
-    try {
-      sourceParticipationsQuery = await firestore()
-        .collection('livepick_participations')
-        .where('uid', '==', sourceUID)
-        .get();
-      
-      if (!sourceParticipationsQuery.empty) {
-        const batch = firestore().batch();
-        let batchCount = 0;
-        const BATCH_LIMIT = 500;
-        
-        for (const participationDoc of sourceParticipationsQuery.docs) {
-          const participationData = participationDoc.data();
-          const questionId = participationData.questionId;
-          const newParticipationDocId = `${targetUID}_${questionId}`;
-          const newParticipationRef = firestore().collection('livepick_participations').doc(newParticipationDocId);
-          
-          // B기기 기존 데이터는 이미 삭제했으므로 바로 추가
-          batch.set(newParticipationRef, {
-            ...participationData,
-            uid: targetUID,
-          });
-          batchCount++;
-          
-          if (batchCount >= BATCH_LIMIT) {
-            await batch.commit();
-            console.log(`[DeviceTransfer] livepick_participations 마이그레이션 배치 커밋: ${batchCount}개`);
-            batchCount = 0;
-          }
-        }
-        
-        if (batchCount > 0) {
-          await batch.commit();
-          console.log(`[DeviceTransfer] livepick_participations 마이그레이션 최종 배치 커밋: ${batchCount}개`);
-        }
-        
-        console.log(`[DeviceTransfer] livepick_participations 컬렉션 마이그레이션 완료: ${sourceParticipationsQuery.size}개 문서`);
-      }
-    } catch (participationsError) {
-      console.warn('[DeviceTransfer] livepick_participations 마이그레이션 실패 (무시):', participationsError);
-    }
-    
-    // 9. user_push_tokens 컬렉션 마이그레이션 (선택적 - 새 기기에서 다시 등록할 수 있음)
-    try {
-      const sourcePushTokenRef = firestore().collection('user_push_tokens').doc(sourceUID);
-      const sourcePushTokenDoc = await sourcePushTokenRef.get();
-      
-      if (sourcePushTokenDoc.exists) {
-        const pushTokenData = sourcePushTokenDoc.data();
-        if (pushTokenData) {
-          const targetPushTokenRef = firestore().collection('user_push_tokens').doc(targetUID);
-          await targetPushTokenRef.set({
-            ...pushTokenData,
-            uid: targetUID,
-          });
-          console.log(`[DeviceTransfer] user_push_tokens 마이그레이션 완료`);
-        }
-      }
-    } catch (pushTokenError) {
-      console.warn('[DeviceTransfer] user_push_tokens 마이그레이션 실패 (무시):', pushTokenError);
-    }
-    
-    // 10. user_notifications 컬렉션 마이그레이션
-    let sourceNotificationsQuery: FirebaseFirestoreTypes.QuerySnapshot | null = null;
-    try {
-      sourceNotificationsQuery = await firestore()
-        .collection('user_notifications')
-        .where('uid', '==', sourceUID)
-        .get();
-      
-      if (!sourceNotificationsQuery.empty) {
-        const batch = firestore().batch();
-        let batchCount = 0;
-        const BATCH_LIMIT = 500;
-        
-        for (const notificationDoc of sourceNotificationsQuery.docs) {
-          const notificationData = notificationDoc.data();
-          const newNotificationRef = firestore().collection('user_notifications').doc();
-          
-          batch.set(newNotificationRef, {
-            ...notificationData,
-            uid: targetUID,
-          });
-          batchCount++;
-          
-          if (batchCount >= BATCH_LIMIT) {
-            await batch.commit();
-            console.log(`[DeviceTransfer] user_notifications 마이그레이션 배치 커밋: ${batchCount}개`);
-            batchCount = 0;
-          }
-        }
-        
-        if (batchCount > 0) {
-          await batch.commit();
-          console.log(`[DeviceTransfer] user_notifications 마이그레이션 최종 배치 커밋: ${batchCount}개`);
-        }
-        
-        console.log(`[DeviceTransfer] user_notifications 컬렉션 마이그레이션 완료: ${sourceNotificationsQuery.size}개 문서`);
-      }
-    } catch (notificationsError) {
-      console.warn('[DeviceTransfer] user_notifications 마이그레이션 실패 (무시):', notificationsError);
-    }
-    
-    // 11. 원본 기기(A기기) 데이터 삭제 시작
-    console.log(`[DeviceTransfer] 원본 기기 데이터 삭제 시작: ${sourceUID}`);
-    
-    // 11-1. 원본 users 삭제
-    await sourceUserRef.delete();
-    console.log(`[DeviceTransfer] 원본 사용자 데이터 삭제 완료: ${sourceUID}`);
-    
-    // 11-2. 원본 answers 삭제
-    if (sourceAnswersQuery && !sourceAnswersQuery.empty) {
-      const batch = firestore().batch();
-      let batchCount = 0;
-      const BATCH_LIMIT = 500;
-      
-      for (const answerDoc of sourceAnswersQuery.docs) {
-        batch.delete(answerDoc.ref);
-        batchCount++;
-        
-        if (batchCount >= BATCH_LIMIT) {
-          await batch.commit();
-          console.log(`[DeviceTransfer] 원본 answers 삭제 배치 커밋: ${batchCount}개`);
-          batchCount = 0;
-        }
-      }
-      
-      if (batchCount > 0) {
-        await batch.commit();
-        console.log(`[DeviceTransfer] 원본 answers 삭제 최종 배치 커밋: ${batchCount}개`);
-      }
-      
-      console.log(`[DeviceTransfer] 원본 answers 삭제 완료: ${sourceAnswersQuery.size}개 문서`);
-    }
-    
-    // 11-3. 원본 point_history 삭제
-    if (sourcePointHistoryQuery && !sourcePointHistoryQuery.empty) {
-      const batch = firestore().batch();
-      let batchCount = 0;
-      const BATCH_LIMIT = 500;
-      
-      for (const historyDoc of sourcePointHistoryQuery.docs) {
-        batch.delete(historyDoc.ref);
-        batchCount++;
-        
-        if (batchCount >= BATCH_LIMIT) {
-          await batch.commit();
-          console.log(`[DeviceTransfer] 원본 point_history 삭제 배치 커밋: ${batchCount}개`);
-          batchCount = 0;
-        }
-      }
-      
-      if (batchCount > 0) {
-        await batch.commit();
-        console.log(`[DeviceTransfer] 원본 point_history 삭제 최종 배치 커밋: ${batchCount}개`);
-      }
-      
-      console.log(`[DeviceTransfer] 원본 point_history 삭제 완료: ${sourcePointHistoryQuery.size}개 문서`);
-    }
-    
-    // 11-4. 원본 livepick_participations 삭제
-    if (sourceParticipationsQuery && !sourceParticipationsQuery.empty) {
-      const batch = firestore().batch();
-      let batchCount = 0;
-      const BATCH_LIMIT = 500;
-      
-      for (const participationDoc of sourceParticipationsQuery.docs) {
-        batch.delete(participationDoc.ref);
-        batchCount++;
-        
-        if (batchCount >= BATCH_LIMIT) {
-          await batch.commit();
-          console.log(`[DeviceTransfer] 원본 livepick_participations 삭제 배치 커밋: ${batchCount}개`);
-          batchCount = 0;
-        }
-      }
-      
-      if (batchCount > 0) {
-        await batch.commit();
-        console.log(`[DeviceTransfer] 원본 livepick_participations 삭제 최종 배치 커밋: ${batchCount}개`);
-      }
-      
-      console.log(`[DeviceTransfer] 원본 livepick_participations 삭제 완료: ${sourceParticipationsQuery.size}개 문서`);
-    }
-    
-    // 11-5. 원본 user_push_tokens 삭제
-    try {
-      const sourcePushTokenRef = firestore().collection('user_push_tokens').doc(sourceUID);
-      const sourcePushTokenDoc = await sourcePushTokenRef.get();
-      if (sourcePushTokenDoc.exists) {
-        await sourcePushTokenRef.delete();
-        console.log(`[DeviceTransfer] 원본 user_push_tokens 삭제 완료`);
-      }
-    } catch (pushTokenDeleteError) {
-      console.warn('[DeviceTransfer] 원본 user_push_tokens 삭제 실패 (무시):', pushTokenDeleteError);
-    }
-    
-    // 11-6. 원본 user_notifications 삭제
-    if (sourceNotificationsQuery && !sourceNotificationsQuery.empty) {
-      const batch = firestore().batch();
-      let batchCount = 0;
-      const BATCH_LIMIT = 500;
-      
-      for (const notificationDoc of sourceNotificationsQuery.docs) {
-        batch.delete(notificationDoc.ref);
-        batchCount++;
-        
-        if (batchCount >= BATCH_LIMIT) {
-          await batch.commit();
-          console.log(`[DeviceTransfer] 원본 user_notifications 삭제 배치 커밋: ${batchCount}개`);
-          batchCount = 0;
-        }
-      }
-      
-      if (batchCount > 0) {
-        await batch.commit();
-        console.log(`[DeviceTransfer] 원본 user_notifications 삭제 최종 배치 커밋: ${batchCount}개`);
-      }
-      
-      console.log(`[DeviceTransfer] 원본 user_notifications 삭제 완료: ${sourceNotificationsQuery.size}개 문서`);
-    }
-    
-    console.log(`[DeviceTransfer] 원본 기기 모든 데이터 삭제 완료: ${sourceUID}`);
-    
-    // 12. 연동 정보를 사용됨으로 표시
-    await transferRef.update({
-      used: true,
-      transferredTo: targetUID,
-      transferredAt: firestore.FieldValue.serverTimestamp(),
+    const result = await executeTransfer({
+      sourceUID,
+      password,
+      targetUID,
+      targetDeviceUID,
     });
     
-    console.log(`[DeviceTransfer] 연동 완료: ${sourceUID} → ${targetUID}`);
-    return { success: true };
+    const resultData = result.data as { success?: boolean; error?: string };
+    
+    if (resultData.success) {
+      console.log(`[DeviceTransfer] 연동 완료: ${sourceUID} → ${targetUID}`);
+      return { success: true };
+    } else {
+      console.error(`[DeviceTransfer] 연동 실패:`, resultData.error);
+      return { success: false, error: resultData.error || '연동에 실패했습니다.' };
+    }
   } catch (error: any) {
     console.error('[DeviceTransfer] 연동 실패:', error);
-    return { success: false, error: error.message || '연동 중 오류가 발생했습니다.' };
+    console.error('[DeviceTransfer] 에러 상세:', {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      stack: error.stack,
+    });
+    
+    // React Native Firebase Functions 에러 코드 형식: 'functions/not-found', 'functions/permission-denied' 등
+    let errorCode = error.code;
+    if (typeof errorCode === 'string') {
+      // 'functions/not-found' -> 'not-found'로 변환
+      if (errorCode.startsWith('functions/')) {
+        errorCode = errorCode.replace('functions/', '');
+      }
+      // 'NOT_FOUND' -> 'not-found'로 변환 (대문자 언더스코어 형식)
+      if (errorCode.includes('_')) {
+        errorCode = errorCode.toLowerCase().replace(/_/g, '-');
+      }
+    }
+    
+    // 에러 메시지에서도 코드 추출 시도
+    if (!errorCode && error.message) {
+      const message = error.message.toUpperCase();
+      if (message.includes('NOT_FOUND') || message.includes('NOT FOUND')) {
+        errorCode = 'not-found';
+      } else if (message.includes('PERMISSION_DENIED') || message.includes('PERMISSION DENIED')) {
+        errorCode = 'permission-denied';
+      } else if (message.includes('INVALID_ARGUMENT') || message.includes('INVALID ARGUMENT')) {
+        errorCode = 'invalid-argument';
+      } else if (message.includes('DEADLINE_EXCEEDED') || message.includes('DEADLINE EXCEEDED')) {
+        errorCode = 'deadline-exceeded';
+      } else if (message.includes('ALREADY_EXISTS') || message.includes('ALREADY EXISTS')) {
+        errorCode = 'already-exists';
+      } else if (message.includes('UNAUTHENTICATED') || message.includes('UNAUTHENTICATED')) {
+        errorCode = 'unauthenticated';
+      }
+    }
+    
+    const errorMessages: Record<string, string> = {
+      'not-found': '연동 준비 정보를 찾을 수 없습니다. A기기에서 연동 준비를 다시 해주세요.',
+      'invalid-argument': '유효하지 않은 연동 정보입니다.',
+      'permission-denied': '비밀번호가 일치하지 않거나 권한이 없습니다.',
+      'deadline-exceeded': '연동 준비가 만료되었습니다. (24시간 초과)',
+      'already-exists': '이미 사용된 연동 정보입니다.',
+      'unauthenticated': '인증에 실패했습니다. 다시 로그인해주세요.',
+      'internal': error.message || '연동 중 오류가 발생했습니다.',
+    };
+    
+    return { 
+      success: false, 
+      error: errorMessages[errorCode || ''] || error.message || '연동 중 오류가 발생했습니다.' 
+    };
   }
 }
 
@@ -628,8 +210,16 @@ export function watchDeviceTransferCompletion(
   
   const transferRef = firestore().collection('device_transfers').doc(uid);
   
+  let hasCalledCallback = false; // 중복 호출 방지
+  let checkInterval: ReturnType<typeof setInterval> | null = null; // interval 추적
+  
   const unsubscribe = transferRef.onSnapshot(
     async (snapshot) => {
+      if (hasCalledCallback) {
+        console.log('[DeviceTransfer] 이미 콜백이 호출되었으므로 무시');
+        return;
+      }
+      
       if (!snapshot.exists) {
         console.log('[DeviceTransfer] 연동 정보 문서가 존재하지 않음');
         return;
@@ -640,11 +230,20 @@ export function watchDeviceTransferCompletion(
         return;
       }
       
+      // 연동 완료 확인: used가 true이거나 transferredTo가 있으면 연동 완료로 간주
       const isUsed = data.used === true;
-      console.log(`[DeviceTransfer] 연동 상태 확인: used=${isUsed}`);
+      const hasTransferredTo = data.transferredTo != null && data.transferredTo !== '';
       
-      if (isUsed) {
+      console.log(`[DeviceTransfer] 연동 상태 확인: used=${isUsed}, transferredTo=${hasTransferredTo ? data.transferredTo : '없음'}`);
+      
+      if (isUsed || hasTransferredTo) {
         console.log('[DeviceTransfer] ✅ 연동 완료 감지! 사용자 데이터 삭제 확인 중...');
+        
+        // 기존 interval이 있다면 먼저 정리
+        if (checkInterval) {
+          clearInterval(checkInterval);
+          checkInterval = null;
+        }
         
         // 사용자 데이터가 실제로 삭제되었는지 확인
         const userRef = firestore().collection('users').doc(uid);
@@ -652,19 +251,63 @@ export function watchDeviceTransferCompletion(
         
         if (!userDoc.exists) {
           console.log('[DeviceTransfer] ✅ 사용자 데이터 삭제 확인됨. 콜백 호출');
-          // 리스너 해제 (한 번만 실행되도록)
+          hasCalledCallback = true;
           unsubscribe();
           onTransferCompleted();
         } else {
           console.log('[DeviceTransfer] ⏳ 사용자 데이터가 아직 존재함. 삭제 대기 중...');
+          // 주기적으로 재확인 (최대 30초)
+          let checkCount = 0;
+          const maxChecks = 15; // 2초 * 15 = 30초
+          
+          checkInterval = setInterval(async () => {
+            if (hasCalledCallback) {
+              if (checkInterval) clearInterval(checkInterval);
+              return;
+            }
+            
+            checkCount++;
+            const retryUserDoc = await userRef.get();
+            
+            if (!retryUserDoc.exists) {
+              console.log(`[DeviceTransfer] ✅ 재확인 (${checkCount}/${maxChecks}): 사용자 데이터 삭제 확인됨. 콜백 호출`);
+              hasCalledCallback = true;
+              if (checkInterval) clearInterval(checkInterval);
+              unsubscribe();
+              onTransferCompleted();
+            } else if (checkCount >= maxChecks) {
+              console.log('[DeviceTransfer] ⚠️ 타임아웃: 사용자 데이터 삭제 확인 실패. 강제로 콜백 호출');
+              hasCalledCallback = true;
+              if (checkInterval) clearInterval(checkInterval);
+              unsubscribe();
+              onTransferCompleted();
+            } else {
+              console.log(`[DeviceTransfer] ⏳ 사용자 데이터가 아직 존재함. 계속 대기 중... (${checkCount}/${maxChecks})`);
+            }
+          }, 2000); // 2초마다 재확인
         }
       }
     },
-    (error) => {
+    (error: any) => {
       console.error('[DeviceTransfer] 연동 완료 감시 중 오류:', error);
+      console.error('[DeviceTransfer] 에러 상세:', {
+        code: error?.code,
+        message: error?.message,
+        details: error?.details,
+      });
+      // 에러 발생 시에도 interval 정리
+      if (checkInterval) {
+        clearInterval(checkInterval);
+      }
     }
   );
   
-  return unsubscribe;
+  // cleanup 함수 반환 (언마운트 시 호출)
+  return () => {
+    if (checkInterval) {
+      clearInterval(checkInterval);
+    }
+    unsubscribe();
+  };
 }
 

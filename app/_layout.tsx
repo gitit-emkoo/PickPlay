@@ -18,6 +18,7 @@ import ErrorScreen from './components/ErrorScreen';
 import AppSplashScreen from './splash';
 import { initAds } from '../src/services/ads';
 import { ensureAnonymousAuth } from '../src/services/firebase';
+import { ToastProvider } from './components/Toast';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -363,10 +364,12 @@ export default function RootLayout() {
     <SafeAreaProvider style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }} edges={['top','bottom']}>
         <StatusBar style="dark" />
-        <NotificationBootstrap />
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        </Stack>
+        <ToastProvider>
+          <NotificationBootstrap />
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          </Stack>
+        </ToastProvider>
       </SafeAreaView>
     </SafeAreaProvider>
   );

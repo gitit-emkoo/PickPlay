@@ -890,3 +890,698 @@ export const completeTutorialReward = functions
     }
   });
 
+/**
+ * 기기 연동 실행 (Cloud Functions)
+ * 원본 기기의 데이터를 대상 기기로 이전하고, 원본 기기 데이터를 삭제합니다.
+ * 
+ * @param sourceUID 원본 기기 UID
+ * @param password 연동 비밀번호
+ * @param targetUID 대상 기기 UID (현재 사용자)
+ * @param targetDeviceUID 대상 기기의 deviceUID
+ * @returns 연동 성공 여부
+ */
+export const executeDeviceTransfer = functions
+  .region('asia-northeast3')
+  .runWith({
+    timeoutSeconds: 540, // 최대 9분 (Firebase Functions 최대 제한)
+    memory: '512MB',
+  })
+  .https
+  .onCall(async (data, context) => {
+    // 인증 확인
+    if (!context.auth) {
+      throw new functions.https.HttpsError(
+        'unauthenticated',
+        '사용자가 인증되지 않았습니다.'
+      );
+    }
+
+    const { sourceUID, password, targetUID, targetDeviceUID } = data;
+
+    // 파라미터 검증
+    if (!sourceUID || !password || !targetUID || !targetDeviceUID) {
+      throw new functions.https.HttpsError(
+        'invalid-argument',
+        '필수 파라미터가 누락되었습니다: sourceUID, password, targetUID, targetDeviceUID'
+      );
+    }
+
+    // 본인만 연동 실행 가능
+    if (context.auth.uid !== targetUID) {
+      throw new functions.https.HttpsError(
+        'permission-denied',
+        '본인의 연동만 실행할 수 있습니다.'
+      );
+    }
+
+    // 같은 UID로 이전 시도 방지
+    if (sourceUID === targetUID) {
+      throw new functions.https.HttpsError(
+        'invalid-argument',
+        '같은 기기로는 연동할 수 없습니다.'
+      );
+    }
+
+    try {
+      console.log(`[executeDeviceTransfer] 연동 실행 시작: ${sourceUID} → ${targetUID}`);
+
+      // 1. 연동 정보 확인
+      const transferRef = admin.firestore().collection('device_transfers').doc(sourceUID);
+      const transferDoc = await transferRef.get();
+
+      if (!transferDoc.exists) {
+        throw new functions.https.HttpsError(
+          'not-found',
+          '연동 준비 정보를 찾을 수 없습니다.'
+        );
+      }
+
+      const transferData = transferDoc.data();
+      if (!transferData) {
+        throw new functions.https.HttpsError(
+          'invalid-argument',
+          '연동 정보가 유효하지 않습니다.'
+        );
+      }
+
+      // 비밀번호 확인
+      if (transferData.password !== password) {
+        throw new functions.https.HttpsError(
+          'permission-denied',
+          '비밀번호가 일치하지 않습니다.'
+        );
+      }
+
+      // 만료 확인
+      if (transferData.expiresAt) {
+        const expiresAt = transferData.expiresAt.toDate();
+        if (expiresAt < new Date()) {
+          throw new functions.https.HttpsError(
+            'deadline-exceeded',
+            '연동 준비가 만료되었습니다. (24시간 초과)'
+          );
+        }
+      }
+
+      // 사용 여부 확인
+      if (transferData.used === true) {
+        throw new functions.https.HttpsError(
+          'already-exists',
+          '이미 사용된 연동 정보입니다.'
+        );
+      }
+
+      // 2. 원본 사용자 데이터 가져오기
+      const sourceUserRef = admin.firestore().collection('users').doc(sourceUID);
+      const sourceUserDoc = await sourceUserRef.get();
+
+      if (!sourceUserDoc.exists) {
+        throw new functions.https.HttpsError(
+          'not-found',
+          '원본 사용자 데이터를 찾을 수 없습니다.'
+        );
+      }
+
+      const sourceUserData = sourceUserDoc.data();
+      if (!sourceUserData) {
+        throw new functions.https.HttpsError(
+          'invalid-argument',
+          '원본 사용자 데이터가 유효하지 않습니다.'
+        );
+      }
+
+      console.log(`[executeDeviceTransfer] 원본 사용자 데이터 확인 완료: ${sourceUID}`);
+
+      // 3. 대상 기기의 기존 데이터 삭제 (B기기의 새 유저 데이터 제거)
+      console.log(`[executeDeviceTransfer] 대상 기기(B기기) 기존 데이터 삭제 시작: ${targetUID}`);
+
+      const targetUserRef = admin.firestore().collection('users').doc(targetUID);
+      const targetUserDoc = await targetUserRef.get();
+      if (targetUserDoc.exists) {
+        await targetUserRef.delete();
+        console.log(`[executeDeviceTransfer] 대상 기기 users 문서 삭제 완료: ${targetUID}`);
+      }
+
+      // 3-2. 대상 기기 answers 삭제
+      const targetAnswersQuery = await admin.firestore()
+        .collection('answers')
+        .where('uid', '==', targetUID)
+        .get();
+
+      if (!targetAnswersQuery.empty) {
+        const batch = admin.firestore().batch();
+        let batchCount = 0;
+        const BATCH_LIMIT = 500;
+
+        for (const answerDoc of targetAnswersQuery.docs) {
+          batch.delete(answerDoc.ref);
+          batchCount++;
+
+          if (batchCount >= BATCH_LIMIT) {
+            await batch.commit();
+            console.log(`[executeDeviceTransfer] 대상 기기 answers 삭제 배치 커밋: ${batchCount}개`);
+            batchCount = 0;
+          }
+        }
+
+        if (batchCount > 0) {
+          await batch.commit();
+          console.log(`[executeDeviceTransfer] 대상 기기 answers 삭제 최종 배치 커밋: ${batchCount}개`);
+        }
+
+        console.log(`[executeDeviceTransfer] 대상 기기 answers 삭제 완료: ${targetAnswersQuery.size}개 문서`);
+      }
+
+      // 3-3. 대상 기기 point_history 삭제
+      const targetPointHistoryQuery = await admin.firestore()
+        .collection('point_history')
+        .where('uid', '==', targetUID)
+        .get();
+
+      if (!targetPointHistoryQuery.empty) {
+        const batch = admin.firestore().batch();
+        let batchCount = 0;
+        const BATCH_LIMIT = 500;
+
+        for (const historyDoc of targetPointHistoryQuery.docs) {
+          batch.delete(historyDoc.ref);
+          batchCount++;
+
+          if (batchCount >= BATCH_LIMIT) {
+            await batch.commit();
+            console.log(`[executeDeviceTransfer] 대상 기기 point_history 삭제 배치 커밋: ${batchCount}개`);
+            batchCount = 0;
+          }
+        }
+
+        if (batchCount > 0) {
+          await batch.commit();
+          console.log(`[executeDeviceTransfer] 대상 기기 point_history 삭제 최종 배치 커밋: ${batchCount}개`);
+        }
+
+        console.log(`[executeDeviceTransfer] 대상 기기 point_history 삭제 완료: ${targetPointHistoryQuery.size}개 문서`);
+      }
+
+      // 3-4. 대상 기기 livepick_participations 삭제
+      const targetParticipationsQuery = await admin.firestore()
+        .collection('livepick_participations')
+        .where('uid', '==', targetUID)
+        .get();
+
+      if (!targetParticipationsQuery.empty) {
+        const batch = admin.firestore().batch();
+        let batchCount = 0;
+        const BATCH_LIMIT = 500;
+
+        for (const participationDoc of targetParticipationsQuery.docs) {
+          batch.delete(participationDoc.ref);
+          batchCount++;
+
+          if (batchCount >= BATCH_LIMIT) {
+            await batch.commit();
+            console.log(`[executeDeviceTransfer] 대상 기기 livepick_participations 삭제 배치 커밋: ${batchCount}개`);
+            batchCount = 0;
+          }
+        }
+
+        if (batchCount > 0) {
+          await batch.commit();
+          console.log(`[executeDeviceTransfer] 대상 기기 livepick_participations 삭제 최종 배치 커밋: ${batchCount}개`);
+        }
+
+        console.log(`[executeDeviceTransfer] 대상 기기 livepick_participations 삭제 완료: ${targetParticipationsQuery.size}개 문서`);
+      }
+
+      // 3-5. 대상 기기 user_push_tokens 삭제
+      try {
+        const targetPushTokenRef = admin.firestore().collection('user_push_tokens').doc(targetUID);
+        const targetPushTokenDoc = await targetPushTokenRef.get();
+        if (targetPushTokenDoc.exists) {
+          await targetPushTokenRef.delete();
+          console.log(`[executeDeviceTransfer] 대상 기기 user_push_tokens 삭제 완료`);
+        }
+      } catch (pushTokenDeleteError) {
+        console.warn('[executeDeviceTransfer] 대상 기기 user_push_tokens 삭제 실패 (무시):', pushTokenDeleteError);
+      }
+
+      // 3-6. 대상 기기 user_notifications 삭제
+      const targetNotificationsQuery = await admin.firestore()
+        .collection('user_notifications')
+        .where('uid', '==', targetUID)
+        .get();
+
+      if (!targetNotificationsQuery.empty) {
+        const batch = admin.firestore().batch();
+        let batchCount = 0;
+        const BATCH_LIMIT = 500;
+
+        for (const notificationDoc of targetNotificationsQuery.docs) {
+          batch.delete(notificationDoc.ref);
+          batchCount++;
+
+          if (batchCount >= BATCH_LIMIT) {
+            await batch.commit();
+            console.log(`[executeDeviceTransfer] 대상 기기 user_notifications 삭제 배치 커밋: ${batchCount}개`);
+            batchCount = 0;
+          }
+        }
+
+        if (batchCount > 0) {
+          await batch.commit();
+          console.log(`[executeDeviceTransfer] 대상 기기 user_notifications 삭제 최종 배치 커밋: ${batchCount}개`);
+        }
+
+        console.log(`[executeDeviceTransfer] 대상 기기 user_notifications 삭제 완료: ${targetNotificationsQuery.size}개 문서`);
+      }
+
+      console.log(`[executeDeviceTransfer] 대상 기기(B기기) 기존 데이터 삭제 완료: ${targetUID}`);
+
+      // 4. 대상 기기에 A기기 데이터 복사
+      const targetUserData = {
+        ...sourceUserData,
+        uid: targetUID,
+        deviceUID: targetDeviceUID,
+        // createdAt은 유지 (기존 사용자의 시작일 유지)
+      };
+
+      await targetUserRef.set(targetUserData);
+      console.log(`[executeDeviceTransfer] 대상 기기 데이터 복사 완료: ${targetUID}`);
+
+      // 5. answers 컬렉션 마이그레이션
+      console.log(`[executeDeviceTransfer] answers 컬렉션 마이그레이션 시작: sourceUID=${sourceUID}, targetUID=${targetUID}`);
+      const sourceAnswersQuery = await admin.firestore()
+        .collection('answers')
+        .where('uid', '==', sourceUID)
+        .get();
+
+      console.log(`[executeDeviceTransfer] answers 쿼리 결과: ${sourceAnswersQuery.size}개 문서 발견`);
+      
+      if (!sourceAnswersQuery.empty) {
+        let batch = admin.firestore().batch();
+        let batchCount = 0;
+        const BATCH_LIMIT = 500;
+
+        for (const answerDoc of sourceAnswersQuery.docs) {
+          const answerData = answerDoc.data();
+          const questionId = answerData.question_id;
+          
+          if (!questionId) {
+            console.warn(`[executeDeviceTransfer] question_id가 없는 답변 문서 건너뜀: ${answerDoc.id}`);
+            continue;
+          }
+          
+          const newAnswerDocId = `${targetUID}_${questionId}`;
+          const newAnswerRef = admin.firestore().collection('answers').doc(newAnswerDocId);
+          
+          // set()을 사용하여 기존 문서가 있으면 덮어쓰기 (연동 시 덮어쓰는 것이 정상 동작)
+          batch.set(newAnswerRef, {
+            ...answerData,
+            uid: targetUID,
+          });
+          batchCount++;
+
+          if (batchCount >= BATCH_LIMIT) {
+            await batch.commit();
+            console.log(`[executeDeviceTransfer] answers 마이그레이션 배치 커밋: ${batchCount}개`);
+            batchCount = 0;
+            // 새로운 배치 생성
+            batch = admin.firestore().batch();
+          }
+        }
+
+        if (batchCount > 0) {
+          await batch.commit();
+          console.log(`[executeDeviceTransfer] answers 마이그레이션 최종 배치 커밋: ${batchCount}개`);
+        }
+
+        console.log(`[executeDeviceTransfer] answers 컬렉션 마이그레이션 완료: ${sourceAnswersQuery.size}개 문서 복사됨`);
+      } else {
+        console.log(`[executeDeviceTransfer] answers 컬렉션에 마이그레이션할 문서 없음`);
+      }
+
+      // 6. point_history 컬렉션 마이그레이션
+      try {
+        const sourcePointHistoryQuery = await admin.firestore()
+          .collection('point_history')
+          .where('uid', '==', sourceUID)
+          .get();
+
+        if (!sourcePointHistoryQuery.empty) {
+          const batch = admin.firestore().batch();
+          let batchCount = 0;
+          const BATCH_LIMIT = 500;
+
+          for (const historyDoc of sourcePointHistoryQuery.docs) {
+            const historyData = historyDoc.data();
+            const newHistoryRef = admin.firestore().collection('point_history').doc();
+
+            batch.set(newHistoryRef, {
+              ...historyData,
+              uid: targetUID,
+            });
+            batchCount++;
+
+            if (batchCount >= BATCH_LIMIT) {
+              await batch.commit();
+              console.log(`[executeDeviceTransfer] point_history 마이그레이션 배치 커밋: ${batchCount}개`);
+              batchCount = 0;
+            }
+          }
+
+          if (batchCount > 0) {
+            await batch.commit();
+            console.log(`[executeDeviceTransfer] point_history 마이그레이션 최종 배치 커밋: ${batchCount}개`);
+          }
+
+          console.log(`[executeDeviceTransfer] point_history 컬렉션 마이그레이션 완료: ${sourcePointHistoryQuery.size}개 문서`);
+        }
+      } catch (pointHistoryError) {
+        console.warn('[executeDeviceTransfer] point_history 마이그레이션 실패 (무시):', pointHistoryError);
+      }
+
+      // 7. livepick_participations 컬렉션 마이그레이션
+      let sourceParticipationsQuery: admin.firestore.QuerySnapshot | null = null;
+      try {
+        sourceParticipationsQuery = await admin.firestore()
+          .collection('livepick_participations')
+          .where('uid', '==', sourceUID)
+          .get();
+
+        if (!sourceParticipationsQuery.empty) {
+          const batch = admin.firestore().batch();
+          let batchCount = 0;
+          const BATCH_LIMIT = 500;
+
+          for (const participationDoc of sourceParticipationsQuery.docs) {
+            const participationData = participationDoc.data();
+            const questionId = participationData.questionId;
+            const newParticipationDocId = `${targetUID}_${questionId}`;
+            const newParticipationRef = admin.firestore().collection('livepick_participations').doc(newParticipationDocId);
+
+            batch.set(newParticipationRef, {
+              ...participationData,
+              uid: targetUID,
+            });
+            batchCount++;
+
+            if (batchCount >= BATCH_LIMIT) {
+              await batch.commit();
+              console.log(`[executeDeviceTransfer] livepick_participations 마이그레이션 배치 커밋: ${batchCount}개`);
+              batchCount = 0;
+            }
+          }
+
+          if (batchCount > 0) {
+            await batch.commit();
+            console.log(`[executeDeviceTransfer] livepick_participations 마이그레이션 최종 배치 커밋: ${batchCount}개`);
+          }
+
+          console.log(`[executeDeviceTransfer] livepick_participations 컬렉션 마이그레이션 완료: ${sourceParticipationsQuery.size}개 문서`);
+        }
+      } catch (participationsError) {
+        console.warn('[executeDeviceTransfer] livepick_participations 마이그레이션 실패 (무시):', participationsError);
+      }
+
+      // 7-1. livepick_questions 컬렉션 마이그레이션 (사용자가 만든 질문의 createdBy 업데이트)
+      let sourceQuestionsQuery: admin.firestore.QuerySnapshot | null = null;
+      try {
+        sourceQuestionsQuery = await admin.firestore()
+          .collection('livepick_questions')
+          .where('createdBy', '==', sourceUID)
+          .get();
+
+        if (!sourceQuestionsQuery.empty) {
+          const batch = admin.firestore().batch();
+          let batchCount = 0;
+          const BATCH_LIMIT = 500;
+
+          for (const questionDoc of sourceQuestionsQuery.docs) {
+            batch.update(questionDoc.ref, {
+              createdBy: targetUID,
+            });
+            batchCount++;
+
+            if (batchCount >= BATCH_LIMIT) {
+              await batch.commit();
+              console.log(`[executeDeviceTransfer] livepick_questions 마이그레이션 배치 커밋: ${batchCount}개`);
+              batchCount = 0;
+            }
+          }
+
+          if (batchCount > 0) {
+            await batch.commit();
+            console.log(`[executeDeviceTransfer] livepick_questions 마이그레이션 최종 배치 커밋: ${batchCount}개`);
+          }
+
+          console.log(`[executeDeviceTransfer] livepick_questions 컬렉션 마이그레이션 완료: ${sourceQuestionsQuery.size}개 문서`);
+        }
+      } catch (questionsError) {
+        console.warn('[executeDeviceTransfer] livepick_questions 마이그레이션 실패 (무시):', questionsError);
+      }
+
+      // 8. user_push_tokens 컬렉션 마이그레이션 (선택적 - 새 기기에서 다시 등록할 수 있음)
+      try {
+        const sourcePushTokenRef = admin.firestore().collection('user_push_tokens').doc(sourceUID);
+        const sourcePushTokenDoc = await sourcePushTokenRef.get();
+
+        if (sourcePushTokenDoc.exists) {
+          const pushTokenData = sourcePushTokenDoc.data();
+          if (pushTokenData) {
+            const targetPushTokenRef = admin.firestore().collection('user_push_tokens').doc(targetUID);
+            await targetPushTokenRef.set({
+              ...pushTokenData,
+              uid: targetUID,
+            });
+            console.log(`[executeDeviceTransfer] user_push_tokens 마이그레이션 완료`);
+          }
+        }
+      } catch (pushTokenError) {
+        console.warn('[executeDeviceTransfer] user_push_tokens 마이그레이션 실패 (무시):', pushTokenError);
+      }
+
+      // 9. user_notifications 컬렉션 마이그레이션
+      try {
+        const sourceNotificationsQuery = await admin.firestore()
+          .collection('user_notifications')
+          .where('uid', '==', sourceUID)
+          .get();
+
+        if (!sourceNotificationsQuery.empty) {
+          const batch = admin.firestore().batch();
+          let batchCount = 0;
+          const BATCH_LIMIT = 500;
+
+          for (const notificationDoc of sourceNotificationsQuery.docs) {
+            const notificationData = notificationDoc.data();
+            const newNotificationRef = admin.firestore().collection('user_notifications').doc();
+
+            batch.set(newNotificationRef, {
+              ...notificationData,
+              uid: targetUID,
+            });
+            batchCount++;
+
+            if (batchCount >= BATCH_LIMIT) {
+              await batch.commit();
+              console.log(`[executeDeviceTransfer] user_notifications 마이그레이션 배치 커밋: ${batchCount}개`);
+              batchCount = 0;
+            }
+          }
+
+          if (batchCount > 0) {
+            await batch.commit();
+            console.log(`[executeDeviceTransfer] user_notifications 마이그레이션 최종 배치 커밋: ${batchCount}개`);
+          }
+
+          console.log(`[executeDeviceTransfer] user_notifications 컬렉션 마이그레이션 완료: ${sourceNotificationsQuery.size}개 문서`);
+        }
+      } catch (notificationsError) {
+        console.warn('[executeDeviceTransfer] user_notifications 마이그레이션 실패 (무시):', notificationsError);
+      }
+
+      // 10. 원본 기기(A기기) 데이터 삭제 시작
+      console.log(`[executeDeviceTransfer] 원본 기기 데이터 삭제 시작: ${sourceUID}`);
+
+      // 10-1. 원본 users 삭제
+      await sourceUserRef.delete();
+      console.log(`[executeDeviceTransfer] 원본 사용자 데이터 삭제 완료: ${sourceUID}`);
+
+      // 10-2. 원본 answers 삭제 (다시 쿼리)
+      try {
+        const sourceAnswersDeleteQuery = await admin.firestore()
+          .collection('answers')
+          .where('uid', '==', sourceUID)
+          .get();
+
+        if (!sourceAnswersDeleteQuery.empty) {
+          const batch = admin.firestore().batch();
+          let batchCount = 0;
+          const BATCH_LIMIT = 500;
+
+          for (const answerDoc of sourceAnswersDeleteQuery.docs) {
+            batch.delete(answerDoc.ref);
+            batchCount++;
+
+            if (batchCount >= BATCH_LIMIT) {
+              await batch.commit();
+              console.log(`[executeDeviceTransfer] 원본 answers 삭제 배치 커밋: ${batchCount}개`);
+              batchCount = 0;
+            }
+          }
+
+          if (batchCount > 0) {
+            await batch.commit();
+            console.log(`[executeDeviceTransfer] 원본 answers 삭제 최종 배치 커밋: ${batchCount}개`);
+          }
+
+          console.log(`[executeDeviceTransfer] 원본 answers 삭제 완료: ${sourceAnswersDeleteQuery.size}개 문서`);
+        }
+      } catch (answersDeleteError) {
+        console.warn('[executeDeviceTransfer] 원본 answers 삭제 실패 (무시):', answersDeleteError);
+      }
+
+      // 10-3. 원본 point_history 삭제
+      try {
+        const sourcePointHistoryQuery = await admin.firestore()
+          .collection('point_history')
+          .where('uid', '==', sourceUID)
+          .get();
+
+        if (!sourcePointHistoryQuery.empty) {
+          const batch = admin.firestore().batch();
+          let batchCount = 0;
+          const BATCH_LIMIT = 500;
+
+          for (const historyDoc of sourcePointHistoryQuery.docs) {
+            batch.delete(historyDoc.ref);
+            batchCount++;
+
+            if (batchCount >= BATCH_LIMIT) {
+              await batch.commit();
+              console.log(`[executeDeviceTransfer] 원본 point_history 삭제 배치 커밋: ${batchCount}개`);
+              batchCount = 0;
+            }
+          }
+
+          if (batchCount > 0) {
+            await batch.commit();
+            console.log(`[executeDeviceTransfer] 원본 point_history 삭제 최종 배치 커밋: ${batchCount}개`);
+          }
+
+          console.log(`[executeDeviceTransfer] 원본 point_history 삭제 완료: ${sourcePointHistoryQuery.size}개 문서`);
+        }
+      } catch (pointHistoryDeleteError) {
+        console.warn('[executeDeviceTransfer] 원본 point_history 삭제 실패 (무시):', pointHistoryDeleteError);
+      }
+
+      // 10-4. 원본 livepick_participations 삭제 (다시 쿼리)
+      try {
+        const sourceParticipationsDeleteQuery = await admin.firestore()
+          .collection('livepick_participations')
+          .where('uid', '==', sourceUID)
+          .get();
+
+        if (!sourceParticipationsDeleteQuery.empty) {
+          const batch = admin.firestore().batch();
+          let batchCount = 0;
+          const BATCH_LIMIT = 500;
+
+          for (const participationDoc of sourceParticipationsDeleteQuery.docs) {
+            batch.delete(participationDoc.ref);
+            batchCount++;
+
+            if (batchCount >= BATCH_LIMIT) {
+              await batch.commit();
+              console.log(`[executeDeviceTransfer] 원본 livepick_participations 삭제 배치 커밋: ${batchCount}개`);
+              batchCount = 0;
+            }
+          }
+
+          if (batchCount > 0) {
+            await batch.commit();
+            console.log(`[executeDeviceTransfer] 원본 livepick_participations 삭제 최종 배치 커밋: ${batchCount}개`);
+          }
+
+          console.log(`[executeDeviceTransfer] 원본 livepick_participations 삭제 완료: ${sourceParticipationsDeleteQuery.size}개 문서`);
+        }
+      } catch (participationsDeleteError) {
+        console.warn('[executeDeviceTransfer] 원본 livepick_participations 삭제 실패 (무시):', participationsDeleteError);
+      }
+
+      // 10-4-1. 원본 livepick_questions 삭제는 하지 않음 (createdBy만 업데이트했으므로 질문은 유지)
+      // 질문 자체는 삭제하지 않고, createdBy만 targetUID로 업데이트했으므로 질문은 그대로 유지됩니다.
+
+      // 10-5. 원본 user_push_tokens 삭제
+      try {
+        const sourcePushTokenRef = admin.firestore().collection('user_push_tokens').doc(sourceUID);
+        const sourcePushTokenDoc = await sourcePushTokenRef.get();
+        if (sourcePushTokenDoc.exists) {
+          await sourcePushTokenRef.delete();
+          console.log(`[executeDeviceTransfer] 원본 user_push_tokens 삭제 완료`);
+        }
+      } catch (pushTokenDeleteError) {
+        console.warn('[executeDeviceTransfer] 원본 user_push_tokens 삭제 실패 (무시):', pushTokenDeleteError);
+      }
+
+      // 10-6. 원본 user_notifications 삭제
+      try {
+        const sourceNotificationsQuery = await admin.firestore()
+          .collection('user_notifications')
+          .where('uid', '==', sourceUID)
+          .get();
+
+        if (!sourceNotificationsQuery.empty) {
+          const batch = admin.firestore().batch();
+          let batchCount = 0;
+          const BATCH_LIMIT = 500;
+
+          for (const notificationDoc of sourceNotificationsQuery.docs) {
+            batch.delete(notificationDoc.ref);
+            batchCount++;
+
+            if (batchCount >= BATCH_LIMIT) {
+              await batch.commit();
+              console.log(`[executeDeviceTransfer] 원본 user_notifications 삭제 배치 커밋: ${batchCount}개`);
+              batchCount = 0;
+            }
+          }
+
+          if (batchCount > 0) {
+            await batch.commit();
+            console.log(`[executeDeviceTransfer] 원본 user_notifications 삭제 최종 배치 커밋: ${batchCount}개`);
+          }
+
+          console.log(`[executeDeviceTransfer] 원본 user_notifications 삭제 완료: ${sourceNotificationsQuery.size}개 문서`);
+        }
+      } catch (notificationsDeleteError) {
+        console.warn('[executeDeviceTransfer] 원본 user_notifications 삭제 실패 (무시):', notificationsDeleteError);
+      }
+
+      console.log(`[executeDeviceTransfer] 원본 기기 모든 데이터 삭제 완료: ${sourceUID}`);
+
+      // 11. 연동 정보를 사용됨으로 표시
+      await transferRef.update({
+        used: true,
+        transferredTo: targetUID,
+        transferredAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      console.log(`[executeDeviceTransfer] 연동 완료: ${sourceUID} → ${targetUID}`);
+      return { success: true };
+
+    } catch (error: any) {
+      console.error('[executeDeviceTransfer] 연동 실패:', error);
+      
+      // HttpsError는 그대로 throw
+      if (error instanceof functions.https.HttpsError) {
+        throw error;
+      }
+      
+      // 기타 에러는 internal로 변환
+      throw new functions.https.HttpsError(
+        'internal',
+        error.message || '연동 중 오류가 발생했습니다.'
+      );
+    }
+  });
+

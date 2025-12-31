@@ -258,10 +258,14 @@ export default function QuestionDetailScreen() {
             }
           },
           onFailedToShow: (error: any) => {
-            console.error('❌ [LivePick] 광고 표시 실패:', error?.message);
+            // 개발 모드에서만 에러 로그 표시
+            if (__DEV__) {
+              console.error('❌ [LivePick] 광고 표시 실패:', error?.message);
+            }
             setAdLoaded(false);
             setIsLoadingAd(false);
-            Alert.alert('광고 오류', `광고를 표시할 수 없습니다: ${error?.message || '알 수 없는 오류'}`);
+            // 광고가 준비되지 않았을 때 사용자 친화적인 메시지 표시
+            Alert.alert('광고 준비 중', '광고를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
           },
           onFailedToLoad: (error: any) => {
             const errorMessage = error?.message || String(error || '알 수 없는 오류');
@@ -510,8 +514,11 @@ export default function QuestionDetailScreen() {
               rewardedAdRef.current.show();
               console.log('✅ [LivePick] 광고 표시 시작 (로드 완료 후)');
             } catch (error: any) {
-              console.error('❌ [LivePick] 광고 표시 실패:', error?.message);
-              Alert.alert('알림', '아직 광고가 로드중입니다. 잠시후 다시 시도하세요.');
+              // 개발 모드에서만 에러 로그 표시
+              if (__DEV__) {
+                console.error('❌ [LivePick] 광고 표시 실패:', error?.message);
+              }
+              Alert.alert('광고 준비 중', '광고를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
             }
           } else {
             Alert.alert('알림', '아직 광고가 로드중입니다. 잠시후 다시 시도하세요.');
@@ -543,14 +550,21 @@ export default function QuestionDetailScreen() {
           try {
             rewardedAdRef.current?.show();
           } catch (retryError: any) {
-            console.error('❌ [LivePick] 광고 표시 재시도 실패:', retryError?.message);
-            Alert.alert('광고 오류', '광고를 표시할 수 없습니다. 잠시 후 다시 시도해주세요.');
+            // 개발 모드에서만 에러 로그 표시
+            if (__DEV__) {
+              console.error('❌ [LivePick] 광고 표시 재시도 실패:', retryError?.message);
+            }
+            Alert.alert('광고 준비 중', '광고를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
             setAdLoaded(false);
           }
         }, 500);
       } else {
-        console.error('❌ [LivePick] 광고 표시 실패:', errorMessage);
-        Alert.alert('광고 오류', errorMessage || '광고를 표시할 수 없습니다.');
+        // 개발 모드에서만 에러 로그 표시
+        if (__DEV__) {
+          console.error('❌ [LivePick] 광고 표시 실패:', errorMessage);
+        }
+        // 광고가 준비되지 않았을 때 사용자 친화적인 메시지 표시
+        Alert.alert('광고 준비 중', '광고를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
         setAdLoaded(false);
       }
     }
@@ -681,7 +695,10 @@ export default function QuestionDetailScreen() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => router.push('/(tabs)/livepick')}
+          onPress={() => {
+            // 목록 화면으로 이동 (목록 화면이 다시 마운트되면 자동으로 갱신됨)
+            router.push('/(tabs)/livepick');
+          }}
           activeOpacity={0.7}
         >
           <Ionicons name="arrow-back" size={24} color={colors.text} />
@@ -690,7 +707,10 @@ export default function QuestionDetailScreen() {
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+      <ScrollView 
+        style={styles.content} 
+        contentContainerStyle={styles.contentContainer}
+      >
         {/* 질문 제목 */}
         <Text style={styles.questionTitle}>{question.title}</Text>
 
@@ -821,6 +841,22 @@ export default function QuestionDetailScreen() {
             </Text>
           </TouchableOpacity>
         )}
+
+        {/* 다른 질문 보기 버튼 (스크롤 하단) */}
+        <TouchableOpacity
+          style={styles.goToListButton}
+          onPress={async () => {
+            // 목록 화면으로 이동하면서 강제로 새로고침
+            // 약간의 딜레이를 주어 Firestore 인덱싱 시간 확보
+            await new Promise(resolve => setTimeout(resolve, 500));
+            // router.push를 사용하여 화면 스택에 추가 (replace는 완전히 교체하므로 포커스 이벤트가 발생하지 않을 수 있음)
+            router.push('/(tabs)/livepick');
+          }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="list" size={20} color="white" />
+          <Text style={styles.goToListButtonText}>다른 질문 보기</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       {/* 참여 모달 */}
@@ -861,7 +897,11 @@ export default function QuestionDetailScreen() {
         visible={showRewardModal}
         points={rewardPoints}
         isLadderReward={isLadderReward}
-        onClose={handleRewardModalClose}
+        onClose={() => {
+          setShowRewardModal(false);
+          // 목록 화면으로 돌아가서 투표 결과가 반영되도록
+          router.push('/(tabs)/livepick');
+        }}
       />
 
       {/* 축하 팝업 (라이브픽 참여 완료) */}
@@ -1350,6 +1390,23 @@ const styles = StyleSheet.create({
     color: colors.textLight,
     textAlign: 'right',
     marginTop: 4,
+  },
+  goToListButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    marginTop: 24,
+    marginBottom: 20,
+  },
+  goToListButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: 'white',
   },
   reportSubmitButton: {
     backgroundColor: colors.error,
