@@ -83,6 +83,38 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
       // 기존 Firestore 문서가 있으면 참조 추가 및 answers 마이그레이션
       if (recoveryData.existingUID && recoveryData.existingUID !== uid) {
         try {
+          // Firestore에서 찾은 사용자의 최신 데이터 가져오기
+          const existingUserDoc = await firestore().collection('users').doc(recoveryData.existingUID).get();
+          if (existingUserDoc.exists) {
+            const existingUserData = existingUserDoc.data() as UserData;
+            console.log('✅ [ensureUser] Firestore에서 찾은 사용자의 최신 데이터 사용:', {
+              nickname: existingUserData.nickname,
+              points: existingUserData.points,
+              streakCount: existingUserData.streakCount,
+              totalSelections: existingUserData.totalSelections,
+            });
+            
+            // AsyncStorage의 최신 데이터를 우선 사용 (V2 사용자가 앱을 사용하면서 계속 업데이트됨)
+            // Firestore의 데이터는 참고용으로만 사용 (AsyncStorage가 더 최신일 수 있음)
+            recoveredUserData.points = recoveryData.points ?? existingUserData.points ?? 0;
+            recoveredUserData.streakCount = recoveryData.streakCount ?? existingUserData.streakCount ?? 0;
+            recoveredUserData.totalSelections = recoveryData.totalSelections ?? existingUserData.totalSelections ?? 0;
+            recoveredUserData.nickname = recoveryData.nickname || existingUserData.nickname || generateRandomNickname();
+            recoveredUserData.characterId = recoveryData.characterId || existingUserData.characterId || null;
+            recoveredUserData.adjective1 = recoveryData.adjective1 || existingUserData.adjective1 || null;
+            recoveredUserData.adjective2 = recoveryData.adjective2 || existingUserData.adjective2 || null;
+            recoveredUserData.lastAnswerDate = normalizeLastAnswerDate(recoveryData.lastAnswerDate) || normalizeLastAnswerDate(existingUserData.lastAnswerDate);
+            
+            // Firestore의 createdAt이 있으면 사용 (더 정확함)
+            if (existingUserData.createdAt) {
+              recoveredUserData.createdAt = convertTimestamp(existingUserData.createdAt);
+            }
+            
+            // 업데이트된 데이터로 Firestore에 저장
+            await userRef.set(recoveredUserData as any);
+          }
+          
+          // answers 마이그레이션
           await migrateAnswers(recoveryData.existingUID, uid);
           await firestore().collection('users').doc(recoveryData.existingUID).update({
             recoveredToUID: uid,
@@ -94,19 +126,30 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
         }
       } else if (!recoveryData.existingUID && recoveryData.deviceUID) {
         // V2 사용자의 경우: existingUID가 null이지만 deviceUID가 있으면
-        // 현재 UID로 votes 컬렉션을 확인하여 V2 사용자의 votes를 answers로 변환
-        // (V2 사용자는 Firestore에 deviceUID를 저장하지 않았으므로
-        //  현재 UID로 votes를 조회하면 V2의 기존 UID를 찾을 수 없음)
-        // 하지만 migrateAnswers에서 현재 UID로 votes를 확인하여 변환할 수 있음
-        // 주의: V2 사용자가 이전에 다른 UID로 votes를 저장했다면 복구 불가능
-        // 하지만 V2 사용자가 현재 UID로 votes를 저장했다면 복구 가능
+        // V2 사용자는 Firestore에 users 문서와 answers를 저장했지만 deviceUID 필드는 없음
+        // 따라서 Firestore에서 닉네임이나 다른 정보로 V2 사용자의 이전 UID를 찾아야 함
+        // 하지만 이는 비효율적이므로, 현재 UID로 answers를 확인하여 마이그레이션 시도
         try {
-          console.log('🔍 [ensureUser] V2 사용자 votes 마이그레이션 시도 (현재 UID로)');
-          // migrateAnswers는 oldUID와 newUID가 같아도 votes 컬렉션을 확인함
-          await migrateAnswers(uid, uid); // 현재 UID로 votes를 확인하여 answers로 변환
+          console.log('🔍 [ensureUser] V2 사용자 answers 마이그레이션 시도');
+          // V2 사용자가 현재 UID로 answers를 저장했다면 마이그레이션 불필요 (이미 있음)
+          // V2 사용자가 다른 UID로 answers를 저장했다면 찾을 수 없음
+          // 하지만 일단 현재 UID로 answers를 확인하여 중복 체크
+          const currentAnswersQuery = await firestore()
+            .collection('answers')
+            .where('uid', '==', uid)
+            .limit(1)
+            .get();
+          
+          if (currentAnswersQuery.empty) {
+            // 현재 UID로 answers가 없으면 V2 사용자의 이전 UID를 찾을 수 없음
+            // (V2 사용자가 다른 UID로 answers를 저장했을 수 있음)
+            console.log('⚠️ [ensureUser] V2 사용자의 이전 UID로 answers를 찾을 수 없음. 현재 UID로 answers가 없음');
+          } else {
+            console.log('✅ [ensureUser] V2 사용자의 answers가 이미 현재 UID로 존재함. 마이그레이션 불필요');
+          }
         } catch (migrateError: any) {
           // 마이그레이션 실패는 경고만 (복구 데이터는 이미 저장됨)
-          console.warn('⚠️ [ensureUser] V2 votes 마이그레이션 실패:', migrateError);
+          console.warn('⚠️ [ensureUser] V2 answers 확인 실패:', migrateError);
         }
       }
       
@@ -310,42 +353,101 @@ async function findExistingUser(uid: string, deviceUID: string): Promise<any | n
           });
           
           // V2 사용자의 기존 Firebase UID 찾기
-          // V2는 Firestore에 사용자 데이터를 저장했지만 deviceUID 필드는 없음
-          // 따라서 votes 컬렉션에서 사용자의 기존 UID를 찾을 수 있음
+          // V2는 Firestore에 사용자 데이터를 저장했고 answers 컬렉션도 사용함
+          // V2 사용자의 이전 UID를 찾기 위해 answers 컬렉션에서 확인
           let v2ExistingUID: string | null = null;
           try {
-            // V2 사용자가 Firestore에 저장한 데이터가 있다면
-            // votes 컬렉션에서 사용자의 기존 UID를 찾을 수 있음
-            // 하지만 현재 UID로 votes를 조회하면 V2의 기존 UID를 찾을 수 없음
-            // 대신, AsyncStorage에 저장된 사용자 데이터에 uid 필드가 있을 수 있음
-            // (V2는 AsyncStorage에 uid를 저장하지 않았지만, 확인해봄)
-            
-            // V2 사용자의 기존 Firebase UID를 찾기 위해
-            // 현재 UID와 다른 모든 사용자 문서를 확인하는 것은 비효율적이므로
-            // V2 사용자의 기존 UID를 찾지 못하면 null로 설정
-            // (V2 사용자가 Firestore에 데이터를 저장하지 않았을 수 있음)
-            
-            // 하지만 V2 사용자가 Firestore에 저장한 데이터가 있다면
-            // 그 데이터를 찾기 위해 다른 방법을 사용해야 함
-            // 예: votes 컬렉션에서 사용자의 기존 UID를 찾을 수 있음
-            // 하지만 현재 UID로 votes를 조회하면 V2의 기존 UID를 찾을 수 없음
-            
-            // 실제로는 V2 사용자의 기존 Firebase UID를 찾는 것이 어려움
-            // 따라서 null로 설정하고, migrateAnswers에서 votes 컬렉션을 확인하여
-            // V2 사용자의 votes를 answers로 변환함
-            v2ExistingUID = null;
-            
-            console.log('ℹ️ [Recovery] V2 사용자의 기존 Firebase UID 찾기 시도 (votes 컬렉션은 migrateAnswers에서 처리)');
+            // 방법 1: AsyncStorage의 userData에 uid가 저장되어 있는지 확인 (가장 확실한 방법)
+            if (parsedData.uid && typeof parsedData.uid === 'string') {
+              console.log('✅ [Recovery] V2 사용자의 기존 Firebase UID 발견 (AsyncStorage):', parsedData.uid);
+              v2ExistingUID = parsedData.uid;
+            } else {
+              // 방법 2: Firestore users 컬렉션에서 V2 사용자의 이전 UID 찾기
+              // V2 사용자는 Firestore에 users 문서를 저장했고, uid 필드와 문서 ID가 일치함
+              // deviceUID 필드가 없고, 포인트와 totalSelections가 일치하는 문서를 찾기
+              console.log('🔍 [Recovery] V2 사용자의 기존 Firebase UID 찾기 시도 (Firestore users 컬렉션)');
+              
+              try {
+                // 포인트와 totalSelections 조합으로 찾기 (더 확실함)
+                const usersQuery = await firestore()
+                  .collection('users')
+                  .where('points', '==', parsedData.points ?? 0)
+                  .where('totalSelections', '==', parsedData.totalSelections ?? 0)
+                  .limit(10)
+                  .get();
+                
+                if (!usersQuery.empty) {
+                  // deviceUID 필드가 없고 (V2 사용자 특징), uid 필드가 있는 문서 찾기
+                  for (const userDoc of usersQuery.docs) {
+                    const userData = userDoc.data();
+                    const docUID = userDoc.id;
+                    
+                    // V2 사용자 특징: deviceUID 필드가 없고, uid 필드가 문서 ID와 일치
+                    if (
+                      !userData.deviceUID && // V2 사용자는 deviceUID가 없음
+                      userData.uid === docUID && // V2에서 uid 필드와 문서 ID가 일치
+                      userData.streakCount === parsedData.streakCount && // 추가 검증
+                      docUID !== uid // 현재 UID와 다름
+                    ) {
+                      console.log('✅ [Recovery] V2 사용자의 기존 Firebase UID 발견 (Firestore users):', docUID);
+                      v2ExistingUID = docUID;
+                      break;
+                    }
+                  }
+                }
+                
+                if (!v2ExistingUID) {
+                  // 방법 3: 현재 UID로 answers 확인
+                  console.log('🔍 [Recovery] Firestore users에서 찾지 못함. 현재 UID로 answers 확인');
+                  
+                  const currentAnswersQuery = await firestore()
+                    .collection('answers')
+                    .where('uid', '==', uid)
+                    .limit(1)
+                    .get();
+                  
+                  if (!currentAnswersQuery.empty) {
+                    // 현재 UID로 answers가 있으면 현재 UID가 V2 사용자의 UID일 가능성이 높음
+                    console.log('✅ [Recovery] 현재 UID로 answers 발견, V2 사용자의 기존 UID로 사용:', uid);
+                    v2ExistingUID = uid;
+                  } else {
+                    console.log('⚠️ [Recovery] V2 사용자의 이전 UID를 찾을 수 없음');
+                    console.log('ℹ️ [Recovery] V2 사용자의 이전 UID를 찾지 못했지만, AsyncStorage의 사용자 데이터는 복구됨');
+                    v2ExistingUID = null;
+                  }
+                }
+              } catch (firestoreError: any) {
+                console.warn('⚠️ [Recovery] Firestore users 조회 실패:', firestoreError?.message);
+                v2ExistingUID = null;
+              }
+            }
           } catch (v2UIDError: any) {
             console.warn('⚠️ [Recovery] V2 사용자의 기존 Firebase UID 찾기 실패:', v2UIDError?.message);
+            v2ExistingUID = null;
           }
           
           // V2 사용자 데이터를 반환
-          return {
+          const recoveryResult = {
             ...parsedData,
             existingUID: v2ExistingUID, // V2 사용자의 기존 Firebase UID (찾지 못하면 null)
             deviceUID: existingDeviceUID, // V2의 deviceUID 유지
           };
+          
+          // V2 → V3 마이그레이션: 찾은 UID를 AsyncStorage에 저장 (다음 업데이트를 위해)
+          if (v2ExistingUID && !parsedData.uid) {
+            try {
+              const updatedUserData = {
+                ...parsedData,
+                uid: v2ExistingUID, // 이전 Firebase UID 저장
+              };
+              await AsyncStorage.setItem(userDataKey, JSON.stringify(updatedUserData));
+              console.log('✅ [Recovery] V2 → V3 마이그레이션: AsyncStorage에 UID 저장 완료:', v2ExistingUID);
+            } catch (saveError) {
+              console.warn('⚠️ [Recovery] AsyncStorage에 UID 저장 실패:', saveError);
+            }
+          }
+          
+          return recoveryResult;
         } catch (parseError) {
           console.error('❌ [Recovery] V2 사용자 데이터 파싱 실패:', parseError);
         }
