@@ -1162,7 +1162,43 @@ export const executeDeviceTransfer = functions
         uid: targetUID,
         deviceUID: targetDeviceUID,
         // createdAt은 유지 (기존 사용자의 시작일 유지)
+        // tutorial 필드도 포함되어 마이그레이션됨 (rewardGiven500 포함)
       };
+
+      // createdAt 필드 마이그레이션 확인 로그
+      if (sourceUserData.createdAt) {
+        const createdAtValue = sourceUserData.createdAt;
+        if (createdAtValue.toDate) {
+          console.log(`[executeDeviceTransfer] createdAt 마이그레이션:`, {
+            timestamp: createdAtValue.toDate().toISOString(),
+            source: 'Timestamp',
+          });
+        } else if (createdAtValue instanceof Date) {
+          console.log(`[executeDeviceTransfer] createdAt 마이그레이션:`, {
+            date: createdAtValue.toISOString(),
+            source: 'Date',
+          });
+        } else {
+          console.log(`[executeDeviceTransfer] createdAt 마이그레이션:`, {
+            value: createdAtValue,
+            source: 'unknown',
+          });
+        }
+      } else {
+        console.warn(`[executeDeviceTransfer] ⚠️ createdAt 필드가 없습니다!`);
+      }
+
+      // tutorial 필드 마이그레이션 확인 로그
+      if (sourceUserData.tutorial) {
+        console.log(`[executeDeviceTransfer] tutorial 필드 마이그레이션:`, {
+          mainAnswered: sourceUserData.tutorial.mainAnswered,
+          livepickParticipated: sourceUserData.tutorial.livepickParticipated,
+          livepickCreated: sourceUserData.tutorial.livepickCreated,
+          rewardGiven500: sourceUserData.tutorial.rewardGiven500,
+        });
+      } else {
+        console.log(`[executeDeviceTransfer] tutorial 필드 없음 (새 유저)`);
+      }
 
       await targetUserRef.set(targetUserData);
       console.log(`[executeDeviceTransfer] 대상 기기 데이터 복사 완료: ${targetUID}`);
@@ -1175,6 +1211,15 @@ export const executeDeviceTransfer = functions
         .get();
 
       console.log(`[executeDeviceTransfer] answers 쿼리 결과: ${sourceAnswersQuery.size}개 문서 발견`);
+      
+      // answers 마이그레이션 전 요약 로그
+      if (!sourceAnswersQuery.empty) {
+        const answerQuestionIds = sourceAnswersQuery.docs
+          .map(doc => doc.data().question_id)
+          .filter(id => id) // question_id가 있는 것만
+          .slice(0, 10); // 최대 10개만 로그
+        console.log(`[executeDeviceTransfer] answers 마이그레이션 대상 (샘플):`, answerQuestionIds);
+      }
       
       if (!sourceAnswersQuery.empty) {
         let batch = admin.firestore().batch();
