@@ -1,4 +1,5 @@
 import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserData } from '../types';
 import { getDeviceUID, getFunctions } from './firebase';
 
@@ -48,6 +49,8 @@ export async function prepareDeviceTransfer(uid: string): Promise<string> {
       createdAt: firestore.FieldValue.serverTimestamp(),
       expiresAt: firestore.Timestamp.fromDate(expiresAt),
       used: false, // 재생성 시 used를 false로 리셋
+      transferredTo: firestore.FieldValue.delete(), // 이전 연동 정보 삭제
+      transferredAt: firestore.FieldValue.delete(), // 이전 연동 시간 삭제
     });
   }
   
@@ -230,13 +233,13 @@ export function watchDeviceTransferCompletion(
         return;
       }
       
-      // 연동 완료 확인: used가 true이거나 transferredTo가 있으면 연동 완료로 간주
+      // 연동 완료 확인: used가 true일 때만 연동 완료로 간주
+      // transferredTo만으로는 판단하지 않음 (이전 연동의 잔여 데이터일 수 있음)
       const isUsed = data.used === true;
-      const hasTransferredTo = data.transferredTo != null && data.transferredTo !== '';
       
-      console.log(`[DeviceTransfer] 연동 상태 확인: used=${isUsed}, transferredTo=${hasTransferredTo ? data.transferredTo : '없음'}`);
+      console.log(`[DeviceTransfer] 연동 상태 확인: used=${isUsed}, transferredTo=${data.transferredTo || '없음'}`);
       
-      if (isUsed || hasTransferredTo) {
+      if (isUsed) {
         console.log('[DeviceTransfer] ✅ 연동 완료 감지! 사용자 데이터 삭제 확인 중...');
         
         // 기존 interval이 있다면 먼저 정리
@@ -304,10 +307,49 @@ export function watchDeviceTransferCompletion(
   
   // cleanup 함수 반환 (언마운트 시 호출)
   return () => {
+    console.log('[DeviceTransfer] 연동 감시 취소 - 리스너 해제');
+    hasCalledCallback = true; // 취소 시 콜백 호출 방지
     if (checkInterval) {
       clearInterval(checkInterval);
+      checkInterval = null;
     }
     unsubscribe();
   };
+}
+
+/**
+ * A기기에서 연동 완료 후 AsyncStorage를 정리합니다.
+ * 기존 유저 데이터와 previousUID를 삭제하여 새 유저 생성 시 복구 로직이 실행되지 않도록 합니다.
+ * @param oldUID 연동된 기존 UID (삭제할 유저 데이터의 deviceUID를 찾기 위해 사용)
+ */
+export async function cleanupAfterDeviceTransfer(oldUID: string): Promise<void> {
+  console.log(`[DeviceTransfer] 연동 완료 후 AsyncStorage 정리 시작: ${oldUID}`);
+  
+  try {
+    // 1. previousUID 삭제 (복구 로직이 실행되지 않도록)
+    await AsyncStorage.removeItem('previousFirebaseUID');
+    console.log('[DeviceTransfer] previousFirebaseUID 삭제 완료');
+    
+    // 2. 기존 deviceUID로 저장된 유저 데이터 삭제
+    // deviceUID는 하드웨어 기반이므로 유지하되, 해당 deviceUID로 저장된 유저 데이터는 삭제
+    const deviceUID = await getDeviceUID();
+    const userDataKey = `userData_${deviceUID}`;
+    await AsyncStorage.removeItem(userDataKey);
+    console.log(`[DeviceTransfer] 기존 유저 데이터 삭제 완료: ${userDataKey}`);
+    
+    // 3. 추가로 oldUID로 저장된 데이터가 있을 수 있으므로 확인 및 삭제
+    // (V2 사용자의 경우 oldUID로 저장된 데이터가 있을 수 있음)
+    const oldUserDataKey = `userData_${oldUID}`;
+    const oldUserData = await AsyncStorage.getItem(oldUserDataKey);
+    if (oldUserData) {
+      await AsyncStorage.removeItem(oldUserDataKey);
+      console.log(`[DeviceTransfer] oldUID 기반 유저 데이터 삭제 완료: ${oldUserDataKey}`);
+    }
+    
+    console.log('[DeviceTransfer] ✅ AsyncStorage 정리 완료');
+  } catch (error) {
+    console.error('[DeviceTransfer] ❌ AsyncStorage 정리 실패:', error);
+    // 에러가 발생해도 계속 진행 (새 유저 생성은 가능)
+  }
 }
 

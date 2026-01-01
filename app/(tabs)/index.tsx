@@ -345,6 +345,14 @@ export default function HomeScreen() {
       if (!user) return;
       setLoading(true);
       try {
+      // 연동 완료 후 강제 새로고침 확인
+      const forceRefresh = await AsyncStorage.getItem('forceRefreshAfterTransfer');
+      if (forceRefresh === 'true') {
+        console.log('[App] 연동 완료 후 강제 새로고침 플래그 발견, 데이터 새로고침');
+        await AsyncStorage.removeItem('forceRefreshAfterTransfer');
+      }
+      
+      // 온라인 전용: 항상 Firestore에서 직접 로드
       const data = await ensureUser(user.uid);
       setUserData(data);
       
@@ -431,7 +439,7 @@ export default function HomeScreen() {
       setLoading(false);
     };
     init();
-  }, [user]);
+  }, [user?.uid]); // user.uid를 의존성으로 사용하여 UID 변경 시마다 실행
 
 
   const handleVote = async (index: 0 | 1) => {
