@@ -1,19 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, TextInput, Alert, Clipboard } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
 import LottieView from 'lottie-react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
+import * as Updates from 'expo-updates';
 import colors from '../../src/styles/colors';
 import { watchAuth, ensureAnonymousAuth } from '../../src/services/firebase';
+import auth from '@react-native-firebase/auth';
 import { ensureUser } from '../../src/services/store';
 import { PointHistory, UserData } from '../../src/types';
 import { getPointHistory } from '../../src/services/pointHistory';
-import { prepareDeviceTransfer, executeDeviceTransfer, watchDeviceTransferCompletion } from '../../src/services/deviceTransfer';
+import { prepareDeviceTransfer, executeDeviceTransfer, watchDeviceTransferCompletion, cleanupAfterDeviceTransfer } from '../../src/services/deviceTransfer';
+import { useToast } from '../../app/components/Toast';
 
 export default function MyPageScreen() {
   const router = useRouter();
+  const { showToast } = useToast();
   const [user, setUser] = useState<{ uid: string } | null>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -30,7 +35,8 @@ export default function MyPageScreen() {
   const [transferUID, setTransferUID] = useState('');
   const [transferLoading, setTransferLoading] = useState(false);
   const [preparedPassword, setPreparedPassword] = useState<string | null>(null);
-  const [transferWatchUnsubscribe, setTransferWatchUnsubscribe] = useState<(() => void) | null>(null);
+  const transferWatchUnsubscribeRef = useRef<(() => void) | null>(null); // ref로 관리하여 불필요한 cleanup 방지
+  const [isWaitingForTransfer, setIsWaitingForTransfer] = useState(false); // 연동 대기 중 상태
 
   // 사용자 인증 및 데이터 로드
   useEffect(() => {
@@ -52,32 +58,32 @@ export default function MyPageScreen() {
   // 컴포넌트 언마운트 시 연동 감시 리스너 해제
   useEffect(() => {
     return () => {
-      if (transferWatchUnsubscribe) {
-        transferWatchUnsubscribe();
-        console.log('[MyPage] 연동 감시 리스너 해제');
+      // 컴포넌트 언마운트 시에만 리스너 해제
+      if (transferWatchUnsubscribeRef.current) {
+        transferWatchUnsubscribeRef.current();
+        console.log('[MyPage] 컴포넌트 언마운트: 연동 감시 리스너 해제');
       }
     };
-  }, [transferWatchUnsubscribe]);
+  }, []); // 빈 배열: 컴포넌트 언마운트 시에만 실행
 
   // 화면이 포커스될 때마다 사용자 데이터 갱신 (메인페이지에서 투표 후 업데이트된 데이터 반영)
-  useFocusEffect(
-    React.useCallback(() => {
-      if (user) {
-        ensureUser(user.uid)
-          .then((data) => {
-            setUserData(data);
-            console.log('✅ [MyPage] 사용자 데이터 갱신 완료:', {
-              streakCount: data.streakCount,
-              points: data.points,
-              totalSelections: data.totalSelections,
-            });
-          })
-          .catch((error) => {
-            console.error('❌ [MyPage] 사용자 데이터 갱신 실패:', error);
+  // useFocusEffect 대신 useEffect로 처리 (expo-router 호환성 문제로 인해)
+  useEffect(() => {
+    if (user) {
+      ensureUser(user.uid)
+        .then((data) => {
+          setUserData(data);
+          console.log('✅ [MyPage] 사용자 데이터 갱신 완료:', {
+            streakCount: data.streakCount,
+            points: data.points,
+            totalSelections: data.totalSelections,
           });
-      }
-    }, [user])
-  );
+        })
+        .catch((error) => {
+          console.error('❌ [MyPage] 사용자 데이터 갱신 실패:', error);
+        });
+    }
+  }, [user]);
 
   const openLink = async (url: string) => {
     try {
@@ -137,9 +143,9 @@ export default function MyPageScreen() {
       setTransferLoading(true);
       
       // 이전 리스너가 있으면 먼저 해제 (중복 방지)
-      if (transferWatchUnsubscribe) {
-        transferWatchUnsubscribe();
-        setTransferWatchUnsubscribe(null);
+      if (transferWatchUnsubscribeRef.current) {
+        transferWatchUnsubscribeRef.current();
+        transferWatchUnsubscribeRef.current = null;
       }
       
       const password = await prepareDeviceTransfer(user.uid);
@@ -147,16 +153,23 @@ export default function MyPageScreen() {
       setShowPrepareModal(true);
       
       // 연동 완료 감시 시작
+      setIsWaitingForTransfer(true); // 연동 대기 중 상태로 변경
       const unsubscribe = watchDeviceTransferCompletion(user.uid, () => {
         console.log('[MyPage] 연동 완료 감지! 팝업 표시');
-        setShowTransferCompletedModal(true);
+        setIsWaitingForTransfer(false); // 연동 대기 중 상태 해제
         setShowPrepareModal(false); // 연동 준비 모달 닫기
+        // 연동 완료 모달 표시 전에 토스트 메시지 표시
+        showToast('연동이 완료되었습니다. 기존 정보는 삭제되었고 새 유저를 생성했습니다.', 'success');
+        // 약간의 딜레이 후 모달 표시 (토스트가 먼저 보이도록)
+        setTimeout(() => {
+          setShowTransferCompletedModal(true);
+        }, 500);
       });
       
-      setTransferWatchUnsubscribe(unsubscribe);
+      transferWatchUnsubscribeRef.current = unsubscribe;
     } catch (error: any) {
       console.error('연동 준비 실패:', error);
-      Alert.alert('오류', error.message || '연동 준비에 실패했습니다.');
+      showToast(error.message || '연동 준비에 실패했습니다.', 'error');
     } finally {
       setTransferLoading(false);
     }
@@ -166,31 +179,129 @@ export default function MyPageScreen() {
   const handlePrepareModalClose = () => {
     setShowPrepareModal(false);
     // 리스너는 유지 (연동 완료까지 감시 필요)
-    // 사용자가 명시적으로 취소하려면 별도 취소 버튼 필요
+    // 연동 대기 중 상태는 유지 (백그라운드에서 계속 감시)
+  };
+
+  // 연동 준비 취소 핸들러 (연동 감시 중단)
+  const handleCancelTransfer = () => {
+    if (transferWatchUnsubscribeRef.current) {
+      transferWatchUnsubscribeRef.current();
+      transferWatchUnsubscribeRef.current = null;
+    }
+    setIsWaitingForTransfer(false);
+    setShowPrepareModal(false);
+    setPreparedPassword(null);
   };
 
   // 연동 완료 모달 닫기 및 새 유저 생성
   const handleTransferCompletedModalClose = async () => {
     setShowTransferCompletedModal(false);
+    setIsWaitingForTransfer(false); // 연동 대기 중 상태 해제
     
     // 감시 리스너 해제
-    if (transferWatchUnsubscribe) {
-      transferWatchUnsubscribe();
-      setTransferWatchUnsubscribe(null);
+    if (transferWatchUnsubscribeRef.current) {
+      transferWatchUnsubscribeRef.current();
+      transferWatchUnsubscribeRef.current = null;
     }
     
-    // 새 유저 생성 (익명 로그인으로 새 UID 생성)
+    // 새 유저 생성 (기존 사용자 로그아웃 후 watchAuth가 자동으로 새 유저 생성)
     try {
       console.log('[MyPage] 새 유저 생성 시작...');
-      const newUser = await ensureAnonymousAuth();
-      if (newUser) {
-        console.log('[MyPage] 새 유저 생성 완료:', newUser.uid);
-        // watchAuth가 자동으로 새 유저를 감지하고 데이터를 로드할 것입니다
-        // 여기서는 명시적으로 데이터를 새로고침
-        const newUserData = await ensureUser(newUser.uid);
-        setUserData(newUserData);
-        setUser({ uid: newUser.uid });
+      
+      // 현재 사용자 UID 저장 (AsyncStorage 정리용)
+      const authInstance = auth();
+      const currentUser = authInstance.currentUser;
+      const oldUID = currentUser?.uid;
+      
+      if (currentUser) {
+        console.log('[MyPage] 기존 사용자 로그아웃:', oldUID);
+        
+        // 연동 완료 후 AsyncStorage 정리 (복구 로직이 실행되지 않도록)
+        if (oldUID) {
+          await cleanupAfterDeviceTransfer(oldUID);
+        }
+        
+        // 로그아웃 (watchAuth가 자동으로 새 익명 유저를 생성함)
+        await authInstance.signOut();
+        console.log('[MyPage] 로그아웃 완료 - watchAuth가 자동으로 새 유저 생성');
       }
+      
+      // watchAuth의 onAuthStateChanged가 null을 감지하고 자동으로 새 유저를 생성함
+      // 새 유저가 생성되면 watchAuth가 자동으로 콜백을 호출하여 setUser가 업데이트됨
+      // watchAuth가 새 유저를 생성할 시간을 충분히 확보 (최대 3초 대기)
+      let waitCount = 0;
+      const maxWait = 6; // 0.5초 * 6 = 3초
+      const checkNewUser = setInterval(() => {
+        waitCount++;
+        const newUser = authInstance.currentUser;
+        if (newUser && newUser.uid !== oldUID) {
+          // 새 유저가 생성되었으면 자동으로 앱 리로드 시도
+          clearInterval(checkNewUser);
+          console.log('[MyPage] 새 유저 생성 확인:', newUser.uid);
+          
+          // 자동 리로드 시도 (약간의 지연 후)
+          setTimeout(async () => {
+            try {
+              console.log('[MyPage] 자동 앱 리로드 시작...');
+              await Updates.reloadAsync();
+            } catch (error) {
+              console.error('[MyPage] 자동 앱 리로드 실패, 팝업 표시:', error);
+              // 자동 리로드 실패 시 팝업 표시
+              Alert.alert(
+                '연동 완료',
+                '기기 연동이 완료되었습니다.\n\n앱을 새로고침하세요.',
+                [
+                  {
+                    text: '확인',
+                    onPress: async () => {
+                      try {
+                        console.log('[MyPage] 수동 앱 리로드 시작...');
+                        await Updates.reloadAsync();
+                      } catch (reloadError) {
+                        console.error('[MyPage] 수동 앱 리로드 실패:', reloadError);
+                        router.replace('/(tabs)/');
+                      }
+                    },
+                  },
+                ]
+              );
+            }
+          }, 500); // 0.5초 지연 후 리로드
+        } else if (waitCount >= maxWait) {
+          // 최대 대기 시간 초과 시 자동 리로드 시도
+          clearInterval(checkNewUser);
+          console.log('[MyPage] 새 유저 생성 대기 시간 초과, 자동 리로드 시도');
+          
+          // 자동 리로드 시도 (약간의 지연 후)
+          setTimeout(async () => {
+            try {
+              console.log('[MyPage] 자동 앱 리로드 시작...');
+              await Updates.reloadAsync();
+            } catch (error) {
+              console.error('[MyPage] 자동 앱 리로드 실패, 팝업 표시:', error);
+              // 자동 리로드 실패 시 팝업 표시
+              Alert.alert(
+                '연동 완료',
+                '기기 연동이 완료되었습니다.\n\n앱을 새로고침하세요.',
+                [
+                  {
+                    text: '확인',
+                    onPress: async () => {
+                      try {
+                        console.log('[MyPage] 수동 앱 리로드 시작...');
+                        await Updates.reloadAsync();
+                      } catch (reloadError) {
+                        console.error('[MyPage] 수동 앱 리로드 실패:', reloadError);
+                        router.replace('/(tabs)/');
+                      }
+                    },
+                  },
+                ]
+              );
+            }
+          }, 500); // 0.5초 지연 후 리로드
+        }
+      }, 500); // 0.5초마다 확인
     } catch (error) {
       console.error('[MyPage] 새 유저 생성 실패:', error);
       Alert.alert('오류', '새 유저 생성 중 문제가 발생했습니다.');
@@ -200,13 +311,13 @@ export default function MyPageScreen() {
   // 연동 실행 핸들러
   const handleExecuteTransfer = async () => {
     if (!user || !transferUID.trim() || !transferPassword.trim()) {
-      Alert.alert('입력 오류', 'UID와 비밀번호를 모두 입력해주세요.');
+      showToast('UID와 비밀번호를 모두 입력해주세요.', 'warning');
       return;
     }
 
     Alert.alert(
       '기기 연동',
-      '기기 연동을 진행하시겠습니까?\n\n원본 기기의 데이터는 삭제되고, 현재 기기로 모든 정보가 이전됩니다.',
+      '기기 연동을 진행하시겠습니까?\n\n기존 기기의 데이터는 삭제되고, 현재 기기로 모든 정보가 이전됩니다.\n\n⚠️ 네트워크 연결이 필요합니다.',
       [
         { text: '취소', style: 'cancel' },
         {
@@ -218,32 +329,91 @@ export default function MyPageScreen() {
               const result = await executeDeviceTransfer(transferUID.trim(), transferPassword.trim(), user.uid);
               
               if (result.success) {
-                Alert.alert('성공', '기기 연동이 완료되었습니다.', [
-                  {
-                    text: '확인',
-                    onPress: () => {
-                      // 사용자 데이터 새로고침
-                      if (user) {
-                        ensureUser(user.uid)
-                          .then((data) => {
-                            setUserData(data);
-                            setShowTransferModal(false);
-                            setTransferUID('');
-                            setTransferPassword('');
-                          })
-                          .catch((error) => {
-                            console.error('사용자 데이터 새로고침 실패:', error);
-                          });
-                      }
-                    },
-                  },
-                ]);
+                showToast('기기 연동이 완료되었습니다.', 'success');
+                // 사용자 데이터 새로고침 (B기기: 연동 완료 후 최신 데이터 로드)
+                if (user) {
+                  // 온라인 전용: 항상 Firestore에서 직접 로드
+                  // 연동 직후이므로 약간의 지연을 두고 데이터 로드 (Cloud Functions 처리 시간 고려)
+                  setTimeout(async () => {
+                    try {
+                      // 최신 데이터 로드 (서버에서 직접)
+                      const data = await ensureUser(user.uid);
+                      
+                      // 마이페이지 state 업데이트
+                      setUserData(data);
+                      
+                      // 모달 닫기 및 입력 필드 초기화
+                      setShowTransferModal(false);
+                      setTransferUID('');
+                      setTransferPassword('');
+                      
+                      // 자동 리로드 시도 (약간의 지연 후)
+                      setTimeout(async () => {
+                        try {
+                          console.log('[MyPage] 자동 앱 리로드 시작...');
+                          await Updates.reloadAsync();
+                        } catch (error) {
+                          console.error('[MyPage] 자동 앱 리로드 실패, 팝업 표시:', error);
+                          // 자동 리로드 실패 시 팝업 표시
+                          Alert.alert(
+                            '연동 완료',
+                            '기기 연동이 완료되었습니다.\n\n앱을 새로고침하세요.',
+                            [
+                              {
+                                text: '확인',
+                                onPress: async () => {
+                                  try {
+                                    console.log('[MyPage] 수동 앱 리로드 시작...');
+                                    await Updates.reloadAsync();
+                                  } catch (reloadError) {
+                                    console.error('[MyPage] 수동 앱 리로드 실패:', reloadError);
+                                    router.replace('/(tabs)/');
+                                  }
+                                },
+                              },
+                            ]
+                          );
+                        }
+                      }, 500); // 0.5초 지연 후 리로드
+                    } catch (error) {
+                      console.error('사용자 데이터 새로고침 실패:', error);
+                      // 에러가 발생해도 자동 리로드 시도
+                      setTimeout(async () => {
+                        try {
+                          console.log('[MyPage] 자동 앱 리로드 시작...');
+                          await Updates.reloadAsync();
+                        } catch (error) {
+                          console.error('[MyPage] 자동 앱 리로드 실패, 팝업 표시:', error);
+                          // 자동 리로드 실패 시 팝업 표시
+                          Alert.alert(
+                            '연동 완료',
+                            '기기 연동이 완료되었습니다.\n\n앱을 새로고침하세요.',
+                            [
+                              {
+                                text: '확인',
+                                onPress: async () => {
+                                  try {
+                                    console.log('[MyPage] 수동 앱 리로드 시작...');
+                                    await Updates.reloadAsync();
+                                  } catch (reloadError) {
+                                    console.error('[MyPage] 수동 앱 리로드 실패:', reloadError);
+                                    router.replace('/(tabs)/');
+                                  }
+                                },
+                              },
+                            ]
+                          );
+                        }
+                      }, 500); // 0.5초 지연 후 리로드
+                    }
+                  }, 2000); // 2초 대기 (Cloud Functions 처리 시간 확보)
+                }
               } else {
-                Alert.alert('연동 실패', result.error || '기기 연동에 실패했습니다.');
+                showToast(result.error || '기기 연동에 실패했습니다.', 'error');
               }
             } catch (error: any) {
               console.error('연동 실행 실패:', error);
-              Alert.alert('오류', error.message || '기기 연동 중 오류가 발생했습니다.');
+              showToast(error.message || '기기 연동 중 오류가 발생했습니다.', 'error');
             } finally {
               setTransferLoading(false);
             }
@@ -272,6 +442,21 @@ export default function MyPageScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>마이페이지</Text>
       </View>
+      
+      {/* 연동 대기 중 배너 (모달이 닫혀있을 때 표시) */}
+      {isWaitingForTransfer && !showPrepareModal && (
+        <TouchableOpacity
+          style={styles.transferWaitingBanner}
+          onPress={() => setShowPrepareModal(true)}
+          activeOpacity={0.8}
+        >
+          <ActivityIndicator size="small" color={colors.primary} style={{ marginRight: 8 }} />
+          <Text style={styles.transferWaitingBannerText}>
+            연동 대기 중... 다른 기기에서 연동을 완료하면 알려드립니다.
+          </Text>
+          <Ionicons name="chevron-forward" size={20} color={colors.primary} />
+        </TouchableOpacity>
+      )}
       
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         {/* 프로필 섹션 */}
@@ -506,7 +691,7 @@ export default function MyPageScreen() {
                   onPress={async () => {
                     if (user?.uid) {
                       await Clipboard.setString(user.uid);
-                      Alert.alert('복사 완료', '사용자 ID가 클립보드에 복사되었습니다.');
+                      showToast('사용자 ID가 클립보드에 복사되었습니다.', 'success');
                     }
                   }}
                   style={styles.copyButton}
@@ -535,17 +720,39 @@ export default function MyPageScreen() {
                 <Ionicons name="warning-outline" size={20} color="#FF9500" />
                 <Text style={styles.transferWarningText}>
                   이 정보를 다른 기기에서 입력하면 현재 기기의 데이터가 삭제되고 새 기기로 이전됩니다.{'\n'}
-                  비밀번호는 24시간 동안 유효합니다.
+                  비밀번호는 24시간 동안 유효합니다.{'\n\n'}
+                  <Text style={{ fontWeight: '600' }}>⚠️ 네트워크 연결이 필요합니다.</Text>{'\n'}
+                  연동을 진행하려면 와이파이 또는 모바일 데이터에 연결되어 있어야 합니다.
                 </Text>
               </View>
+
+              {/* 연동 대기 중 표시 */}
+              {isWaitingForTransfer && (
+                <View style={[styles.transferWarningBox, { backgroundColor: colors.primary + '15', borderColor: colors.primary, marginTop: 16 }]}>
+                  <ActivityIndicator size="small" color={colors.primary} style={{ marginRight: 8 }} />
+                  <Text style={[styles.transferWarningText, { color: colors.primary, flex: 1 }]}>
+                    연동 대기 중... 다른 기기에서 연동을 완료하면 알려드립니다.
+                  </Text>
+                </View>
+              )}
             </View>
             
-            <TouchableOpacity
-              style={styles.modalButton}
-              onPress={handlePrepareModalClose}
-            >
-              <Text style={styles.modalButtonText}>확인</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              {isWaitingForTransfer && (
+                <TouchableOpacity
+                  style={[styles.modalButton, { flex: 1, backgroundColor: colors.textLight }]}
+                  onPress={handleCancelTransfer}
+                >
+                  <Text style={styles.modalButtonText}>취소</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[styles.modalButton, isWaitingForTransfer && { flex: 1 }]}
+                onPress={handlePrepareModalClose}
+              >
+                <Text style={styles.modalButtonText}>{isWaitingForTransfer ? '백그라운드 대기' : '확인'}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -594,7 +801,7 @@ export default function MyPageScreen() {
                 style={styles.transferInput}
                 value={transferPassword}
                 onChangeText={setTransferPassword}
-                placeholder="기존 기기에서 확인한 연동 비밀번호를 입력하세요"
+                placeholder="기존 기기에서 확인한 연동 비밀번호를 입력"
                 placeholderTextColor={colors.textLight}
                 autoCapitalize="characters"
                 autoCorrect={false}
@@ -604,7 +811,9 @@ export default function MyPageScreen() {
               <View style={styles.transferWarningBox}>
                 <Ionicons name="information-circle-outline" size={20} color={colors.primary} />
                 <Text style={styles.transferWarningText}>
-                  연동하면 원본 기기의 데이터가 삭제되고 현재 기기로 모든 정보가 이전됩니다.
+                  연동하면 기존 기기의 데이터가 삭제되고 현재 기기로 모든 정보가 이전됩니다.{'\n\n'}
+                  <Text style={{ fontWeight: '600' }}>⚠️ 네트워크 연결이 필요합니다.</Text>{'\n'}
+                  연동을 진행하려면 와이파이 또는 모바일 데이터에 연결되어 있어야 합니다.
                 </Text>
               </View>
             </View>
@@ -624,7 +833,7 @@ export default function MyPageScreen() {
         </View>
       </Modal>
 
-      {/* 연동 완료 모달 (A기기에서 표시) */}
+      {/* 연동 완료 모달 (데이터를 보낸 기기에서 표시) */}
       <Modal
         visible={showTransferCompletedModal}
         transparent={true}
@@ -638,13 +847,13 @@ export default function MyPageScreen() {
             </View>
             
             <View style={styles.modalBody}>
-              <View style={styles.transferWarningBox}>
+              <View style={styles.transferCompletedBox}>
                 <Ionicons name="checkmark-circle" size={48} color={colors.primary} style={{ marginBottom: 16 }} />
                 <Text style={[styles.modalTitle, { textAlign: 'center', marginBottom: 12 }]}>
                   연동이 완료되었습니다.
                 </Text>
-                <Text style={[styles.transferWarningText, { textAlign: 'center' }]}>
-                  기존 유저 정보가 삭제되었습니다.{'\n'}
+                <Text style={styles.transferCompletedText}>
+                  기존 정보는 삭제되었고{'\n'}
                   새 유저를 생성합니다.
                 </Text>
               </View>
@@ -1050,6 +1259,18 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: colors.text,
   },
+  transferCompletedBox: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  transferCompletedText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.text,
+    textAlign: 'center',
+  },
   transferInputContainer: {
     marginBottom: 24,
   },
@@ -1070,5 +1291,21 @@ const styles = StyleSheet.create({
   },
   modalCloseButton: {
     padding: 4,
+  },
+  transferWaitingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary + '15',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.primary + '30',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  transferWaitingBannerText: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '500',
+    marginLeft: 4,
   },
 });

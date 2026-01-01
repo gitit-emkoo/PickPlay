@@ -170,13 +170,22 @@ service cloud.firestore {
         // 4. 존재하는 질문에 대한 답변인가?
         && exists(/databases/$(database)/documents/questions/$(getQuestionId()));
 
-      // 업데이트 규칙: 보상 완료 플래그(rewarded)만 본인이 true로 갱신 가능
-      // - 다른 필드는 변경/추가/삭제 불가
-      allow update: if signedIn() && request.auth.uid == getUid()
-        && resource.data.diff(request.resource.data).changedKeys().hasOnly(['rewarded'])
-        && resource.data.diff(request.resource.data).addedKeys().size() == 0
-        && resource.data.diff(request.resource.data).removedKeys().size() == 0
-        && request.resource.data.rewarded is bool;
+      // 업데이트 규칙: 
+      // 1. 보상 완료 플래그(rewarded)만 본인이 true로 갱신 가능
+      // 2. AI 태그(tags) 필드 업데이트 가능 (백그라운드에서 생성된 태그 저장을 위해)
+      allow update: if signedIn() && request.auth.uid == getUid() && (
+        // Case 1: rewarded 필드만 업데이트 (보상 완료 플래그)
+        (resource.data.diff(request.resource.data).changedKeys().hasOnly(['rewarded'])
+          && resource.data.diff(request.resource.data).addedKeys().size() == 0
+          && resource.data.diff(request.resource.data).removedKeys().size() == 0
+          && request.resource.data.rewarded is bool) ||
+        // Case 2: tags 필드만 업데이트 (AI 태그 생성 후)
+        (resource.data.diff(request.resource.data).changedKeys().hasOnly(['tags'])
+          && resource.data.diff(request.resource.data).addedKeys().size() == 0
+          && resource.data.diff(request.resource.data).removedKeys().size() == 0
+          && request.resource.data.tags is list
+          && resource.data.tags.size() == 0) // 빈 배열에서만 업데이트 가능 (초기 저장 후 AI 태그 추가만 허용)
+      );
 
       // 삭제/기타 변경은 관리자만 가능
       allow delete: if isAdmin();
@@ -394,15 +403,25 @@ service cloud.firestore {
         && (request.resource.data.createdAt == request.time || request.resource.data.createdAt is timestamp)
         && request.resource.data.expiresAt is timestamp;
       
-      // 업데이트: 연동 완료 시 used 플래그와 transferredTo 업데이트
-      // - 본인 또는 관리자만 가능
-      // - used가 false에서 true로만 변경 가능
+      // 업데이트: 
+      // 1. 연동 완료 시 used 플래그와 transferredTo 업데이트 (used: false → true)
+      // 2. 연동 준비 재생성 시 전체 필드 업데이트 (used: false 또는 true인 경우 모두 가능)
       allow update: if signedIn() && (
-        (request.auth.uid == uid || isAdmin())
-        && resource.data.used == false
-        && request.resource.data.used == true
-        && request.resource.data.diff(resource.data).unchangedKeys().hasAll(['uid', 'password', 'createdAt', 'expiresAt'])
-        && (request.resource.data.transferredTo == null || request.resource.data.transferredTo is string)
+        (request.auth.uid == uid || isAdmin()) && (
+          // 케이스 1: 연동 완료 (used: false → true)
+          (resource.data.used == false
+            && request.resource.data.used == true
+            && request.resource.data.diff(resource.data).unchangedKeys().hasAll(['uid', 'password', 'createdAt', 'expiresAt'])
+            && (request.resource.data.transferredTo == null || request.resource.data.transferredTo is string)) ||
+          // 케이스 2: 연동 준비 재생성 (used: false 또는 true인 경우 모두 전체 필드 업데이트 가능)
+          (request.resource.data.used == false
+            && request.resource.data.uid == uid
+            && request.resource.data.password is string
+            && request.resource.data.password.size() >= 8
+            && request.resource.data.password.size() <= 10
+            && (request.resource.data.createdAt == request.time || request.resource.data.createdAt is timestamp)
+            && request.resource.data.expiresAt is timestamp)
+        )
       );
       
       // 삭제는 관리자만

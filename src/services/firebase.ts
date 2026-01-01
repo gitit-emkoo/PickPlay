@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
+import functionsModule from '@react-native-firebase/functions';
 import * as Device from 'expo-device';
 import * as Application from 'expo-application';
 import { Platform, NativeModules } from 'react-native';
@@ -12,6 +13,10 @@ export { ensureAnonymousAuth as forceAnonymousAuth } from './authGuard';
 // 이렇게 하면 Firebase가 완전히 초기화된 후에만 호출됩니다.
 // React Native Firebase 공식 문서 권장사항: 모듈 레벨에서 즉시 호출하지 말고 함수로 감싸기
 export const getDb = () => firestore();
+
+// Firebase Functions 초기화
+// React Native Firebase는 region() 메서드를 지원하지 않으므로, httpsCallableFromUrl을 사용해야 합니다.
+export const getFunctions = () => functionsModule();
 
 /**
  * 기기 고유 ID를 가져옵니다.
@@ -26,45 +31,55 @@ export const getDb = () => firestore();
  * @returns deviceUID와 함께 하드웨어 ID 기반인지 여부를 반환
  */
 export async function getDeviceUID(): Promise<string> {
+  let deviceUID: string; // deviceUID 변수 선언
+  
   try {
-    // 1. AsyncStorage에서 먼저 확인 (앱 업데이트 시 유지)
-    let deviceUID = await AsyncStorage.getItem('deviceUID');
-    
-    if (deviceUID) {
-      // 기존 deviceUID가 하드웨어 ID 기반인지 확인
-      const isHardwareBased = deviceUID.startsWith('device_') && !deviceUID.includes('_') || deviceUID.match(/^device_[a-f0-9]{16}$/i);
-      if (isHardwareBased) {
-        console.log('📱 기존 기기 ID 사용 (AsyncStorage, 하드웨어 기반):', deviceUID);
-      } else {
-        console.log('📱 기존 기기 ID 사용 (AsyncStorage, 랜덤 기반):', deviceUID);
-        console.warn('⚠️ [getDeviceUID] 랜덤 기반 deviceUID 사용 중. 앱 재설치 시 기존 사용자 데이터 복구가 어려울 수 있습니다.');
+    // 0. V2 사용자 복구를 위해 기존 AsyncStorage의 deviceUID를 먼저 확인
+    // (V2에서 랜덤 기반으로 저장했을 수 있지만, V2 사용자 데이터 복구를 위해 필요)
+    try {
+      const existingUID = await AsyncStorage.getItem('deviceUID');
+      if (existingUID && existingUID.startsWith('device_')) {
+        // V2 사용자 복구를 위해 기존 deviceUID가 있으면 먼저 확인
+        // (하드웨어 기반이 아니어도 V2 데이터 복구를 위해 사용)
+        console.log('📦 [getDeviceUID] 기존 deviceUID 발견 (V2 복구 가능성):', existingUID);
+        
+        // 기존 deviceUID로 AsyncStorage에 사용자 데이터가 있는지 확인
+        const userDataKey = `userData_${existingUID}`;
+        const existingUserData = await AsyncStorage.getItem(userDataKey);
+        if (existingUserData) {
+          console.log('✅ [getDeviceUID] V2 사용자 데이터 발견! 기존 deviceUID 유지:', existingUID);
+          // V2 사용자 데이터가 있으면 기존 deviceUID를 유지하여 복구 가능하게 함
+          return existingUID;
+        }
       }
-      return deviceUID;
+    } catch (storageError) {
+      console.warn('⚠️ [getDeviceUID] 기존 deviceUID 확인 실패:', storageError);
     }
     
-    // 2. AsyncStorage에 없으면 기기 고유 ID 사용
+    // 1. 하드웨어 ID를 가져와서 사용 (신규 사용자 또는 V2 데이터가 없는 경우)
+    
+    // 2. 기기 고유 ID 사용 (우선순위: expo-application installationId)
     let hardwareId: string | null = null;
     let hardwareIdSource: string = 'unknown';
     
     if (Platform.OS === 'android') {
-      // Android: expo-application의 installationId 사용 (앱 재설치 시에도 유지됨)
+      // Android: expo-application의 getAndroidId() 사용
       // 주의: 같은 앱 서명으로 재설치하는 경우에만 동일한 ID가 생성됨
       try {
-        // 방법 1: expo-application의 installationId 사용 (우선순위 1)
+        // 방법 1: expo-application의 getAndroidId() 사용 (공식 API)
         try {
-          const installationId = await Application.getInstallationIdAsync();
-          if (installationId && installationId.length > 0) {
-            hardwareId = installationId;
-            hardwareIdSource = 'installationId';
-            console.log('📱 Android Installation ID 가져오기 성공 (expo-application):', hardwareId);
+          const androidId = Application.getAndroidId();
+          if (androidId && androidId.length > 0) {
+            hardwareId = androidId;
+            hardwareIdSource = 'androidId';
+            console.log('📱 Android ID 가져오기 성공 (expo-application.getAndroidId):', hardwareId);
           }
-        } catch (installError) {
-          console.warn('⚠️ [getDeviceUID] expo-application에서 Installation ID 가져오기 실패:', installError);
+        } catch (androidIdError) {
+          console.warn('⚠️ [getDeviceUID] expo-application.getAndroidId() 실패:', androidIdError);
         }
         
         // 방법 2: React Native NativeModules를 통한 직접 접근 (최후의 수단)
         // 주의: NativeModules.PlatformConstants.AndroidID는 React Native에서 직접 제공하지 않음
-        // 실제로는 네이티브 모듈을 만들어야 하지만, 여기서는 시도만 함
         if (!hardwareId) {
           try {
             const { PlatformConstants } = NativeModules;
@@ -80,25 +95,25 @@ export async function getDeviceUID(): Promise<string> {
         
         if (!hardwareId) {
           console.error('❌ [getDeviceUID] 모든 방법으로 Android ID를 가져올 수 없습니다.');
-          console.error('❌ [getDeviceUID] expo-application, NativeModules 모두 실패');
+          console.error('❌ [getDeviceUID] expo-application.getAndroidId(), NativeModules 모두 실패');
         }
       } catch (e) {
         console.error('❌ [getDeviceUID] Android ID 가져오기 전체 프로세스 실패:', e);
       }
     } else if (Platform.OS === 'ios') {
-      // iOS: Identifier for Vendor (IDFV) 또는 installationId 사용
+      // iOS: Identifier for Vendor (IDFV) 사용
       // 주의: 앱 삭제 후 재설치 시 변경될 수 있음
       try {
-        // 방법 1: expo-application의 installationId 사용 (앱 재설치 시에도 유지됨)
+        // 방법 1: expo-application의 getIosIdForVendorAsync() 사용 (공식 API)
         try {
-          const installationId = await Application.getInstallationIdAsync();
-          if (installationId && installationId.length > 0) {
-            hardwareId = installationId;
-            hardwareIdSource = 'installationId';
-            console.log('📱 iOS Installation ID 가져오기 성공 (expo-application):', hardwareId);
+          const iosId = await Application.getIosIdForVendorAsync();
+          if (iosId && iosId.length > 0) {
+            hardwareId = iosId;
+            hardwareIdSource = 'iosIdForVendor';
+            console.log('📱 iOS ID for Vendor 가져오기 성공 (expo-application.getIosIdForVendorAsync):', hardwareId);
           }
-        } catch (installError) {
-          console.warn('⚠️ [getDeviceUID] expo-application에서 Installation ID 가져오기 실패:', installError);
+        } catch (iosIdError) {
+          console.warn('⚠️ [getDeviceUID] expo-application.getIosIdForVendorAsync() 실패:', iosIdError);
         }
         
         // 방법 2: expo-device의 osInternalBuildId 사용
@@ -139,20 +154,18 @@ export async function getDeviceUID(): Promise<string> {
     console.error('❌ [getDeviceUID] Platform:', Platform.OS, 'Version:', Platform.Version);
     
     // 최후의 수단: 기존 AsyncStorage에 저장된 deviceUID가 있다면 사용
-    // (이전에 하드웨어 기반으로 생성된 경우)
+    // (이전에 하드웨어 기반으로 생성된 경우만)
     try {
-      const allKeys = await AsyncStorage.getAllKeys();
-      const deviceUIDKey = allKeys.find(key => key === 'deviceUID');
-      
-      if (deviceUIDKey) {
-        const existingUID = await AsyncStorage.getItem('deviceUID');
-        if (existingUID && existingUID.startsWith('device_')) {
-          // 하드웨어 기반인지 확인 (랜덤 기반이 아닌 경우)
-          const isHardwareBased = !existingUID.includes('_') || existingUID.match(/^device_[a-f0-9]{16,}$/i);
-          if (isHardwareBased) {
-            console.warn('⚠️ [getDeviceUID] 기존 deviceUID 사용 (하드웨어 기반으로 추정):', existingUID);
-            return existingUID;
-          }
+      const existingUID = await AsyncStorage.getItem('deviceUID');
+      if (existingUID && existingUID.startsWith('device_')) {
+        // 랜덤 기반인지 확인 (타임스탬프나 랜덤 문자열 포함 여부)
+        const isRandomBased = existingUID.match(/device_\d{13}_/); // device_타임스탬프_형식
+        if (!isRandomBased) {
+          // 하드웨어 기반으로 추정되는 경우만 사용
+          console.warn('⚠️ [getDeviceUID] 기존 deviceUID 사용 (하드웨어 기반으로 추정):', existingUID);
+          return existingUID;
+        } else {
+          console.warn('⚠️ [getDeviceUID] 기존 deviceUID가 랜덤 기반입니다. 무시하고 새로 생성합니다.');
         }
       }
     } catch (storageError) {

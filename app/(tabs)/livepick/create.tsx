@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, Modal } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../../../src/styles/colors';
 import { watchAuth } from '../../../src/services/firebase';
@@ -50,17 +50,16 @@ export default function CreateQuestionScreen() {
   }, []);
 
   // 화면이 포커스될 때마다 튜토리얼 상태 갱신
-  useFocusEffect(
-    React.useCallback(() => {
-      if (user) {
-        getTutorialStatus(user.uid).then(status => {
-          setTutorialStatus(status);
-        }).catch(e => {
-          console.warn('[Tutorial] 튜토리얼 상태 갱신 실패:', e);
-        });
-      }
-    }, [user])
-  );
+  // useFocusEffect 대신 useEffect로 처리 (expo-router 호환성 문제로 인해)
+  useEffect(() => {
+    if (user) {
+      getTutorialStatus(user.uid).then(status => {
+        setTutorialStatus(status);
+      }).catch(e => {
+        console.warn('[Tutorial] 튜토리얼 상태 갱신 실패:', e);
+      });
+    }
+  }, [user]);
 
   // 포인트 소멸 확인 모달 표시
   const handleSubmitPress = () => {
@@ -160,7 +159,8 @@ export default function CreateQuestionScreen() {
         {/* 상단 안내 문구 */}
         <View style={styles.infoBanner}>
           <Text style={styles.infoBannerText}>
-            질문을 만들고 다른 유저들의 선택을 받아보세요!
+            질문을 만들고 다른 유저들의 선택을 받아보세요!{'\n'}
+            <Text style={styles.infoBannerWarning}>※ 질문은 생성 후 삭제 및 수정이 불가능합니다.</Text>
           </Text>
         </View>
 
@@ -392,7 +392,11 @@ export default function CreateQuestionScreen() {
               onPress={() => {
                 setShowTutorialCompleteModal(false);
                 if (createdQuestionId) {
+                  // 질문 상세 화면으로 이동
                   router.replace(`/(tabs)/livepick/${createdQuestionId}`);
+                } else {
+                  // 질문 ID가 없으면 목록 화면으로 이동
+                  router.replace('/(tabs)/livepick');
                 }
               }}
               activeOpacity={0.7}
@@ -453,6 +457,12 @@ const styles = StyleSheet.create({
     color: colors.primary,
     textAlign: 'center',
     lineHeight: 24,
+  },
+  infoBannerWarning: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.warning,
+    marginTop: 4,
   },
   inputSection: {
     marginBottom: 24,
