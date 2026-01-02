@@ -10,9 +10,19 @@ const MAX_ENSURE_AUTH_RETRIES = 3;
 /**
  * 이전 Firebase UID를 AsyncStorage에 저장합니다.
  * 앱 업데이트 시 새로운 UID가 생성되면, 이전 UID를 사용하여 기존 사용자 데이터를 복구할 수 있습니다.
+ * 중요: 기존 previousUID가 있으면 덮어쓰지 않습니다 (복구 로직에서 사용되므로).
  */
-async function savePreviousUID(uid: string): Promise<void> {
+async function savePreviousUID(uid: string, force: boolean = false): Promise<void> {
   try {
+    // force가 false이고 기존 previousUID가 있으면 덮어쓰지 않음
+    if (!force) {
+      const existingPreviousUID = await AsyncStorage.getItem('previousFirebaseUID');
+      if (existingPreviousUID && existingPreviousUID !== uid) {
+        console.log(`[savePreviousUID] ⚠️ 기존 previousUID 발견 (${existingPreviousUID}). 덮어쓰지 않음 (복구 로직 보호)`);
+        return;
+      }
+    }
+    
     await AsyncStorage.setItem('previousFirebaseUID', uid);
     console.log(`[savePreviousUID] 이전 Firebase UID 저장 완료: ${uid}`);
   } catch (error) {
@@ -141,7 +151,8 @@ export async function ensureAnonymousAuth(): Promise<FirebaseAuthTypes.User | nu
     const current = auth().currentUser;
     if (current) {
       console.log(`[ensureAnonymousAuth] ✅ 기존 사용자 발견: ${current.uid}`);
-      await savePreviousUID(current.uid);
+      // previousUID 덮어쓰기 방지: 기존 previousUID가 있으면 덮어쓰지 않음
+      await savePreviousUID(current.uid, false);
       return Promise.resolve(current);
     }
     
@@ -266,7 +277,8 @@ export function watchAuth(cb: (user: { uid: string } | null) => void): () => voi
           
           if (u) {
             console.log(`[watchAuth] ✅ 사용자 인증됨: ${u.uid}`);
-            await savePreviousUID(u.uid);
+            // previousUID 덮어쓰기 방지: 기존 previousUID가 있으면 덮어쓰지 않음
+            await savePreviousUID(u.uid, false);
             cb({ uid: u.uid });
             return;
           }
@@ -282,7 +294,8 @@ export function watchAuth(cb: (user: { uid: string } | null) => void): () => voi
               const currentUser = auth().currentUser;
               if (currentUser) {
                 console.log(`[watchAuth] ✅ 대기 중 토큰 복원 성공: ${currentUser.uid}`);
-                await savePreviousUID(currentUser.uid);
+                // previousUID 덮어쓰기 방지: 기존 previousUID가 있으면 덮어쓰지 않음
+                await savePreviousUID(currentUser.uid, false);
                 cb({ uid: currentUser.uid });
                 return;
               }

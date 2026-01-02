@@ -332,11 +332,15 @@ export default function MyPageScreen() {
                 showToast('기기 연동이 완료되었습니다.', 'success');
                 // 사용자 데이터 새로고침 (B기기: 연동 완료 후 최신 데이터 로드)
                 if (user) {
+                  // 연동 완료 후 복구 로직 스킵 플래그 설정
+                  await AsyncStorage.setItem('skipRecoveryAfterTransfer', 'true');
+                  console.log('[MyPage] 연동 완료 - 복구 로직 스킵 플래그 설정');
+                  
                   // 온라인 전용: 항상 Firestore에서 직접 로드
                   // 연동 직후이므로 약간의 지연을 두고 데이터 로드 (Cloud Functions 처리 시간 고려)
                   setTimeout(async () => {
                     try {
-                      // 최신 데이터 로드 (서버에서 직접)
+                      // 최신 데이터 로드 (서버에서 직접) - 복구 로직 스킵
                       const data = await ensureUser(user.uid);
                       
                       // 마이페이지 state 업데이트

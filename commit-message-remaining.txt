@@ -1,0 +1,7 @@
+fix: 기기 연동 관련 추가 수정사항
+
+- functions/src/index.ts: 기기 연동 Cloud Functions 수정
+- src/services/firebase.ts: deviceUID 관련 로직 개선
+- src/services/store/userManagement.ts: 사용자 마이그레이션 로직 개선
+
+

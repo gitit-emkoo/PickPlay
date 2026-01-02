@@ -117,7 +117,8 @@ export async function getTutorialStatus(uid: string): Promise<{
   allCompleted: boolean;
 } | null> {
   try {
-    const userDoc = await firestore().collection('users').doc(uid).get();
+    const userRef = firestore().collection('users').doc(uid);
+    const userDoc = await userRef.get();
     if (!userDoc.exists) {
       return null;
     }

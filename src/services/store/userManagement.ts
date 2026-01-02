@@ -17,6 +17,15 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
   try {
     const deviceUID = await getDeviceUID();
 
+    // 연동 후 복구 로직 스킵 확인
+    const skipRecovery = await AsyncStorage.getItem('skipRecoveryAfterTransfer');
+    const shouldSkipRecovery = skipRecovery === 'true';
+    if (shouldSkipRecovery) {
+      console.log('🔵 [ensureUser] 연동 후 복구 로직 스킵 플래그 발견 - 복구 로직 실행 안 함');
+      // 플래그 제거 (한 번만 스킵)
+      await AsyncStorage.removeItem('skipRecoveryAfterTransfer');
+    }
+
     // 온라인 전용: 항상 Firestore에서 직접 로드 (캐시 사용 안 함)
     // 1. 현재 UID로 Firestore 조회 (서버에서 직접 가져오기)
     const doc = await userRef.get({ source: 'server' });
@@ -41,18 +50,23 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
     }
 
     // 2. 복구 시도: 기존 사용자 찾기 (온라인 전용)
+    // 연동 후에는 복구 로직 실행 안 함
     let recoveryData = null;
-    try {
-      recoveryData = await findExistingUser(uid, deviceUID);
-    } catch (recoveryError: any) {
-      // 온라인 전용: 네트워크 에러는 throw
-      console.error('❌ [ensureUser] 복구 시도 실패:', recoveryError);
-      // 네트워크 에러인 경우 throw하여 상위에서 처리
-      const errorCode = recoveryError?.code || '';
-      const errorMessage = recoveryError?.message || '';
-      if (errorCode === 'unavailable' || errorMessage.includes('network') || errorMessage.includes('offline')) {
-        throw recoveryError; // 온라인 전용이므로 오프라인 에러는 throw
+    if (!shouldSkipRecovery) {
+      try {
+        recoveryData = await findExistingUser(uid, deviceUID);
+      } catch (recoveryError: any) {
+        // 온라인 전용: 네트워크 에러는 throw
+        console.error('❌ [ensureUser] 복구 시도 실패:', recoveryError);
+        // 네트워크 에러인 경우 throw하여 상위에서 처리
+        const errorCode = recoveryError?.code || '';
+        const errorMessage = recoveryError?.message || '';
+        if (errorCode === 'unavailable' || errorMessage.includes('network') || errorMessage.includes('offline')) {
+          throw recoveryError; // 온라인 전용이므로 오프라인 에러는 throw
+        }
       }
+    } else {
+      console.log('🔵 [ensureUser] 연동 후이므로 복구 로직 스킵');
     }
     
     if (recoveryData) {
@@ -328,6 +342,103 @@ async function findExistingUser(uid: string, deviceUID: string): Promise<any | n
     }
   } catch (error: any) {
     console.error('❌ [Recovery] deviceUID 조회 실패:', error?.code || error?.message);
+  }
+
+  // 2-2. deviceUID 검색 실패 시: answers 컬렉션으로 V2 사용자 찾기 (deviceUID가 없는 사용자)
+  // V2 사용자는 deviceUID 필드가 없으므로, answers 컬렉션에서 최근 답변을 가진 사용자를 찾음
+  console.log('🔍 [Recovery] deviceUID 검색 실패. answers 컬렉션으로 V2 사용자 찾기 시도');
+  try {
+    // 현재 UID로 answers가 있는지 확인 (토큰 복원으로 같은 UID가 유지되었을 가능성)
+    const currentUIDAnswersQuery = await firestore()
+      .collection('answers')
+      .where('uid', '==', uid)
+      .orderBy('answeredAt', 'desc')
+      .limit(1)
+      .get();
+    
+    if (!currentUIDAnswersQuery.empty) {
+      // 현재 UID로 answers가 있으면 해당 UID로 users 문서 확인
+      const currentUserDoc = await firestore().collection('users').doc(uid).get();
+      if (currentUserDoc.exists) {
+        const currentUserData = currentUserDoc.data() as UserData;
+        // deviceUID가 없고 (V2 사용자), 데이터가 유효하면 복구
+        if (!currentUserData.deviceUID && (currentUserData.points > 0 || currentUserData.totalSelections > 0)) {
+          console.log('✅ [Recovery] 현재 UID로 V2 사용자 발견 (answers 존재):', uid);
+          console.log('📊 [Recovery] 발견된 데이터:', {
+            nickname: currentUserData.nickname,
+            points: currentUserData.points,
+            streakCount: currentUserData.streakCount,
+            totalSelections: currentUserData.totalSelections,
+          });
+          return { ...currentUserData, existingUID: uid };
+        }
+      }
+    }
+    
+    // 다른 UID로 answers를 찾기 (최근 답변을 가진 사용자 찾기)
+    // 주의: 이 방법은 비효율적이지만 V2 사용자 복구를 위한 최후의 수단
+    // 단순히 최근 answers를 가져와서 UID별로 그룹화 (인덱스 불필요)
+    const recentAnswersQuery = await firestore()
+      .collection('answers')
+      .orderBy('answeredAt', 'desc')
+      .limit(100)
+      .get();
+    
+    if (!recentAnswersQuery.empty) {
+      // UID별로 그룹화하고, deviceUID가 없는 사용자 찾기
+      const uidMap = new Map<string, { count: number; latestAnswer: any }>();
+      
+      for (const answerDoc of recentAnswersQuery.docs) {
+        const answerData = answerDoc.data();
+        const answerUID = answerData.uid;
+        
+        if (!answerUID || answerUID === uid) continue;
+        
+        if (!uidMap.has(answerUID)) {
+          uidMap.set(answerUID, { count: 0, latestAnswer: answerData });
+        }
+        const entry = uidMap.get(answerUID)!;
+        entry.count++;
+        if (answerData.answeredAt && (!entry.latestAnswer.answeredAt || 
+            answerData.answeredAt.toMillis() > entry.latestAnswer.answeredAt.toMillis())) {
+          entry.latestAnswer = answerData;
+        }
+      }
+      
+      // 가장 많은 답변을 가진 사용자부터 확인
+      const sortedUIDs = Array.from(uidMap.entries())
+        .sort((a, b) => b[1].count - a[1].count)
+        .map(entry => entry[0])
+        .slice(0, 10); // 상위 10개만 확인
+      
+      for (const candidateUID of sortedUIDs) {
+        try {
+          const candidateUserDoc = await firestore().collection('users').doc(candidateUID).get();
+          if (candidateUserDoc.exists) {
+            const candidateUserData = candidateUserDoc.data() as UserData;
+            // deviceUID가 없고 (V2 사용자), 데이터가 유효하면 복구
+            if (!candidateUserData.deviceUID && 
+                (candidateUserData.points > 0 || candidateUserData.totalSelections > 0)) {
+              console.log('✅ [Recovery] answers 컬렉션으로 V2 사용자 발견:', candidateUID);
+              console.log('📊 [Recovery] 발견된 데이터:', {
+                nickname: candidateUserData.nickname,
+                points: candidateUserData.points,
+                streakCount: candidateUserData.streakCount,
+                totalSelections: candidateUserData.totalSelections,
+              });
+              return { ...candidateUserData, existingUID: candidateUID };
+            }
+          }
+        } catch (checkError: any) {
+          console.warn(`⚠️ [Recovery] 사용자 확인 실패 (${candidateUID}):`, checkError?.message);
+          continue;
+        }
+      }
+    }
+    
+    console.log('ℹ️ [Recovery] answers 컬렉션으로 V2 사용자를 찾지 못함');
+  } catch (answersError: any) {
+    console.warn('⚠️ [Recovery] answers 컬렉션 조회 실패:', answersError?.code || answersError?.message);
   }
 
   // 3. V2 사용자 복구: AsyncStorage에서 기존 deviceUID와 사용자 데이터 확인
