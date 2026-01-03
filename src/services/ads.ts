@@ -210,19 +210,10 @@ export async function createRewardedInterstitial() {
   try {
     const { RewardedInterstitialAd, TestIds } = require('react-native-google-mobile-ads');
     
-    // TestIds를 사용하는 방법도 시도 (더 안정적일 수 있음)
-    let adUnitId: string;
-    
-    if (TestIds && TestIds.REWARDED_INTERSTITIAL) {
-      // TestIds가 제공되면 우선 사용
-      adUnitId = TestIds.REWARDED_INTERSTITIAL;
-      console.log('🆔 TestIds.REWARDED_INTERSTITIAL 사용:', adUnitId);
-    } else {
-      // TestIds가 없으면 수동 테스트 ID 사용
-      const platformAdUnitId = Platform.OS === 'ios' ? AD_UNITS.ios : AD_UNITS.android;
-      adUnitId = platformAdUnitId;
-      console.log('🆔 수동 테스트 ID 사용:', adUnitId);
-    }
+    // 실제 광고 ID 사용 (프로덕션)
+    const platformAdUnitId = Platform.OS === 'ios' ? AD_UNITS.ios : AD_UNITS.android;
+    const adUnitId = platformAdUnitId;
+    console.log('🆔 실제 광고 ID 사용:', adUnitId);
     
     // 광고 추적 권한 상태 확인
     const hasTrackingPermission = await checkTrackingPermission();
@@ -267,17 +258,10 @@ export async function createRewardedInterstitialForLivePick() {
   try {
     const { RewardedInterstitialAd, TestIds } = require('react-native-google-mobile-ads');
     
-    // 메인 화면과 완전히 동일한 로직 사용
-    let adUnitId: string;
-    
-    if (TestIds && TestIds.REWARDED_INTERSTITIAL) {
-      // TestIds가 제공되면 우선 사용 (메인 화면과 동일)
-      adUnitId = TestIds.REWARDED_INTERSTITIAL;
-    } else {
-      // TestIds가 없으면 메인 화면과 동일한 AD_UNITS 사용
-      const platformAdUnitId = Platform.OS === 'ios' ? AD_UNITS.ios : AD_UNITS.android;
-      adUnitId = platformAdUnitId;
-    }
+    // 메인 화면과 완전히 동일한 로직 사용 (실제 광고 ID)
+    const platformAdUnitId = Platform.OS === 'ios' ? AD_UNITS.ios : AD_UNITS.android;
+    const adUnitId = platformAdUnitId;
+    console.log('🆔 [LivePick] 실제 광고 ID 사용:', adUnitId);
     
     // 광고 추적 권한 상태 확인
     const hasTrackingPermission = await checkTrackingPermission();
