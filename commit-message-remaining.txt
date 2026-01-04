@@ -5,3 +5,6 @@ fix: 기기 연동 관련 추가 수정사항
 - src/services/store/userManagement.ts: 사용자 마이그레이션 로직 개선
 
 
+
+
+

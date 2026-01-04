@@ -3,7 +3,7 @@ import firestore from '@react-native-firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { generateRandomNickname } from '../../utils/nickname';
 import { UserData } from '../../types';
-import { getDeviceUID, getPreviousUID } from '../firebase';
+import { getDeviceUID, getPreviousUID, getFunctions } from '../firebase';
 
 /**
  * Firestore에서 사용자를 확인하고, 없으면 복구를 시도하며, 최종적으로 없으면 신규 사용자를 생성합니다.
@@ -94,49 +94,50 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
       // 온라인 전용: 쓰기 작업 실패 시 throw
       await userRef.set(recoveredUserData as any);
       
-      // 기존 Firestore 문서가 있으면 참조 추가 및 answers 마이그레이션
+      // 기존 Firestore 문서가 있으면 Cloud Function을 통한 마이그레이션 수행
       if (recoveryData.existingUID && recoveryData.existingUID !== uid) {
+        // Cloud Function을 통한 마이그레이션 (서버 측에서 수행)
+        // Cloud Function이 모든 데이터(users, answers, point_history 등)를 마이그레이션합니다
         try {
-          // Firestore에서 찾은 사용자의 최신 데이터 가져오기
-          const existingUserDoc = await firestore().collection('users').doc(recoveryData.existingUID).get();
-          if (existingUserDoc.exists) {
-            const existingUserData = existingUserDoc.data() as UserData;
-            console.log('✅ [ensureUser] Firestore에서 찾은 사용자의 최신 데이터 사용:', {
-              nickname: existingUserData.nickname,
-              points: existingUserData.points,
-              streakCount: existingUserData.streakCount,
-              totalSelections: existingUserData.totalSelections,
-            });
-            
-            // AsyncStorage의 최신 데이터를 우선 사용 (V2 사용자가 앱을 사용하면서 계속 업데이트됨)
-            // Firestore의 데이터는 참고용으로만 사용 (AsyncStorage가 더 최신일 수 있음)
-            recoveredUserData.points = recoveryData.points ?? existingUserData.points ?? 0;
-            recoveredUserData.streakCount = recoveryData.streakCount ?? existingUserData.streakCount ?? 0;
-            recoveredUserData.totalSelections = recoveryData.totalSelections ?? existingUserData.totalSelections ?? 0;
-            recoveredUserData.nickname = recoveryData.nickname || existingUserData.nickname || generateRandomNickname();
-            recoveredUserData.characterId = recoveryData.characterId || existingUserData.characterId || null;
-            recoveredUserData.adjective1 = recoveryData.adjective1 || existingUserData.adjective1 || null;
-            recoveredUserData.adjective2 = recoveryData.adjective2 || existingUserData.adjective2 || null;
-            recoveredUserData.lastAnswerDate = normalizeLastAnswerDate(recoveryData.lastAnswerDate) || normalizeLastAnswerDate(existingUserData.lastAnswerDate);
-            
-            // Firestore의 createdAt이 있으면 사용 (더 정확함)
-            if (existingUserData.createdAt) {
-              recoveredUserData.createdAt = convertTimestamp(existingUserData.createdAt);
-            }
-            
-            // 업데이트된 데이터로 Firestore에 저장
-            await userRef.set(recoveredUserData as any);
-          }
+          const functions = getFunctions();
+          const migrateUserData = functions.httpsCallableFromUrl(
+            'https://asia-northeast3-today-balance-fa0a5.cloudfunctions.net/migrateUserData'
+          );
           
-          // answers 마이그레이션
-          await migrateAnswers(recoveryData.existingUID, uid);
-          await firestore().collection('users').doc(recoveryData.existingUID).update({
-            recoveredToUID: uid,
-            recoveredAt: firestore.FieldValue.serverTimestamp(),
-          } as any);
+          console.log('🔵 [ensureUser] Cloud Function으로 마이그레이션 시작:', {
+            sourceUID: recoveryData.existingUID,
+            targetUID: uid,
+          });
+          
+          const result = await migrateUserData({
+            sourceUID: recoveryData.existingUID,
+            targetUID: uid,
+          });
+          
+          const resultData = result.data as { success?: boolean; message?: string };
+          if (resultData.success) {
+            console.log('✅ [ensureUser] Cloud Function 마이그레이션 완료:', resultData.message);
+            
+            // 마이그레이션 완료 후 최신 데이터 다시 로드
+            const updatedDoc = await userRef.get({ source: 'server' });
+            if (updatedDoc.exists) {
+              const updatedData = updatedDoc.data() as UserData;
+              const convertedCreatedAt = convertTimestamp(updatedData.createdAt);
+              const userDataToReturn = { ...updatedData, createdAt: convertedCreatedAt } as UserData;
+              console.log('✅ [ensureUser] 마이그레이션 후 최신 데이터 로드 완료');
+              return userDataToReturn;
+            }
+          } else {
+            console.warn('⚠️ [ensureUser] Cloud Function 마이그레이션 실패:', resultData.message);
+          }
         } catch (migrateError: any) {
           // 마이그레이션 실패는 경고만 (복구 데이터는 이미 저장됨)
-          console.warn('⚠️ [ensureUser] 마이그레이션 실패:', migrateError);
+          console.warn('⚠️ [ensureUser] Cloud Function 마이그레이션 실패:', migrateError);
+          console.warn('⚠️ [ensureUser] 에러 상세:', {
+            code: migrateError?.code,
+            message: migrateError?.message,
+            details: migrateError?.details,
+          });
         }
       } else if (!recoveryData.existingUID && recoveryData.deviceUID) {
         // V2 사용자의 경우: existingUID가 null이지만 deviceUID가 있으면

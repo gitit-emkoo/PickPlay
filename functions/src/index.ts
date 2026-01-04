@@ -1630,3 +1630,243 @@ export const executeDeviceTransfer = functions
     }
   });
 
+/**
+ * 사용자 데이터 복구 마이그레이션 Cloud Function
+ * deviceUID로 기존 사용자를 찾았을 때, 서버 측에서 마이그레이션을 수행합니다.
+ */
+export const migrateUserData = functions
+  .region('asia-northeast3')
+  .runWith({
+    timeoutSeconds: 540,
+    memory: '512MB',
+  })
+  .https
+  .onCall(async (data, context) => {
+    // 인증 확인
+    if (!context.auth) {
+      throw new functions.https.HttpsError(
+        'unauthenticated',
+        '사용자가 인증되지 않았습니다.'
+      );
+    }
+
+    const { sourceUID, targetUID } = data;
+
+    // 파라미터 검증
+    if (!sourceUID || !targetUID) {
+      throw new functions.https.HttpsError(
+        'invalid-argument',
+        '필수 파라미터가 누락되었습니다: sourceUID, targetUID'
+      );
+    }
+
+    // 현재 사용자가 targetUID와 일치하는지 확인
+    if (context.auth.uid !== targetUID) {
+      throw new functions.https.HttpsError(
+        'permission-denied',
+        '타인의 데이터를 마이그레이션할 수 없습니다.'
+      );
+    }
+
+    try {
+      console.log(`[migrateUserData] 마이그레이션 시작: sourceUID=${sourceUID}, targetUID=${targetUID}`);
+
+      // 1. 소스 사용자 문서 확인
+      const sourceUserRef = admin.firestore().collection('users').doc(sourceUID);
+      const sourceUserDoc = await sourceUserRef.get();
+
+      if (!sourceUserDoc.exists) {
+        throw new functions.https.HttpsError(
+          'not-found',
+          '소스 사용자 문서를 찾을 수 없습니다.'
+        );
+      }
+
+      const sourceUserData = sourceUserDoc.data() as any;
+      console.log(`[migrateUserData] 소스 사용자 데이터 확인:`, {
+        nickname: sourceUserData.nickname,
+        points: sourceUserData.points,
+        streakCount: sourceUserData.streakCount,
+        totalSelections: sourceUserData.totalSelections,
+      });
+
+      // 2. 타겟 사용자 문서 확인 (이미 생성되어 있어야 함)
+      const targetUserRef = admin.firestore().collection('users').doc(targetUID);
+      const targetUserDoc = await targetUserRef.get();
+
+      if (!targetUserDoc.exists) {
+        throw new functions.https.HttpsError(
+          'not-found',
+          '타겟 사용자 문서가 존재하지 않습니다. 먼저 사용자를 생성해주세요.'
+        );
+      }
+
+      // 3. 타겟 사용자 데이터 업데이트 (소스 데이터로 덮어쓰기)
+      const targetUserData = {
+        ...sourceUserData,
+        uid: targetUID,
+        // deviceUID는 타겟 사용자의 것을 유지
+        deviceUID: targetUserDoc.data()?.deviceUID || sourceUserData.deviceUID,
+        // createdAt은 소스 사용자의 것을 유지 (기존 사용자의 시작일 유지)
+        createdAt: sourceUserData.createdAt,
+      };
+
+      await targetUserRef.set(targetUserData);
+      console.log(`[migrateUserData] 타겟 사용자 데이터 업데이트 완료`);
+
+      // 4. answers 컬렉션 마이그레이션
+      console.log(`[migrateUserData] answers 컬렉션 마이그레이션 시작`);
+      const sourceAnswersQuery = await admin.firestore()
+        .collection('answers')
+        .where('uid', '==', sourceUID)
+        .get();
+
+      console.log(`[migrateUserData] answers 쿼리 결과: ${sourceAnswersQuery.size}개 문서 발견`);
+
+      if (!sourceAnswersQuery.empty) {
+        let batch = admin.firestore().batch();
+        let batchCount = 0;
+        const BATCH_LIMIT = 500;
+
+        for (const answerDoc of sourceAnswersQuery.docs) {
+          const answerData = answerDoc.data();
+          const questionId = answerData.question_id;
+
+          if (!questionId) {
+            console.warn(`[migrateUserData] question_id가 없는 답변 문서 건너뜀: ${answerDoc.id}`);
+            continue;
+          }
+
+          const newAnswerDocId = `${targetUID}_${questionId}`;
+          const newAnswerRef = admin.firestore().collection('answers').doc(newAnswerDocId);
+
+          batch.set(newAnswerRef, {
+            ...answerData,
+            uid: targetUID,
+          });
+          batchCount++;
+
+          if (batchCount >= BATCH_LIMIT) {
+            await batch.commit();
+            console.log(`[migrateUserData] answers 마이그레이션 배치 커밋: ${batchCount}개`);
+            batchCount = 0;
+            batch = admin.firestore().batch();
+          }
+        }
+
+        if (batchCount > 0) {
+          await batch.commit();
+          console.log(`[migrateUserData] answers 마이그레이션 최종 배치 커밋: ${batchCount}개`);
+        }
+
+        console.log(`[migrateUserData] answers 컬렉션 마이그레이션 완료: ${sourceAnswersQuery.size}개 문서 복사됨`);
+      } else {
+        console.log(`[migrateUserData] answers 컬렉션에 마이그레이션할 문서 없음`);
+      }
+
+      // 5. point_history 컬렉션 마이그레이션
+      try {
+        const sourcePointHistoryQuery = await admin.firestore()
+          .collection('point_history')
+          .where('uid', '==', sourceUID)
+          .get();
+
+        if (!sourcePointHistoryQuery.empty) {
+          let batch = admin.firestore().batch();
+          let batchCount = 0;
+          const BATCH_LIMIT = 500;
+
+          for (const historyDoc of sourcePointHistoryQuery.docs) {
+            const historyData = historyDoc.data();
+            const newHistoryRef = admin.firestore().collection('point_history').doc();
+
+            batch.set(newHistoryRef, {
+              ...historyData,
+              uid: targetUID,
+            });
+            batchCount++;
+
+            if (batchCount >= BATCH_LIMIT) {
+              await batch.commit();
+              console.log(`[migrateUserData] point_history 마이그레이션 배치 커밋: ${batchCount}개`);
+              batchCount = 0;
+              batch = admin.firestore().batch();
+            }
+          }
+
+          if (batchCount > 0) {
+            await batch.commit();
+            console.log(`[migrateUserData] point_history 마이그레이션 최종 배치 커밋: ${batchCount}개`);
+          }
+
+          console.log(`[migrateUserData] point_history 컬렉션 마이그레이션 완료: ${sourcePointHistoryQuery.size}개 문서 복사됨`);
+        }
+      } catch (pointHistoryError) {
+        console.warn('[migrateUserData] point_history 마이그레이션 실패 (무시):', pointHistoryError);
+      }
+
+      // 6. livepick_participations 마이그레이션
+      try {
+        const sourceParticipationsQuery = await admin.firestore()
+          .collection('livepick_participations')
+          .where('uid', '==', sourceUID)
+          .get();
+
+        if (!sourceParticipationsQuery.empty) {
+          let batch = admin.firestore().batch();
+          let batchCount = 0;
+          const BATCH_LIMIT = 500;
+
+          for (const participationDoc of sourceParticipationsQuery.docs) {
+            const participationData = participationDoc.data();
+            const newParticipationRef = admin.firestore().collection('livepick_participations').doc();
+
+            batch.set(newParticipationRef, {
+              ...participationData,
+              uid: targetUID,
+            });
+            batchCount++;
+
+            if (batchCount >= BATCH_LIMIT) {
+              await batch.commit();
+              console.log(`[migrateUserData] livepick_participations 마이그레이션 배치 커밋: ${batchCount}개`);
+              batchCount = 0;
+              batch = admin.firestore().batch();
+            }
+          }
+
+          if (batchCount > 0) {
+            await batch.commit();
+            console.log(`[migrateUserData] livepick_participations 마이그레이션 최종 배치 커밋: ${batchCount}개`);
+          }
+
+          console.log(`[migrateUserData] livepick_participations 컬렉션 마이그레이션 완료: ${sourceParticipationsQuery.size}개 문서 복사됨`);
+        }
+      } catch (participationsError) {
+        console.warn('[migrateUserData] livepick_participations 마이그레이션 실패 (무시):', participationsError);
+      }
+
+      // 7. 소스 사용자 문서에 복구 정보 추가
+      await sourceUserRef.update({
+        recoveredToUID: targetUID,
+        recoveredAt: admin.firestore.FieldValue.serverTimestamp(),
+      } as any);
+      console.log(`[migrateUserData] 소스 사용자 문서에 복구 정보 추가 완료`);
+
+      console.log(`[migrateUserData] 마이그레이션 완료: sourceUID=${sourceUID}, targetUID=${targetUID}`);
+      return {
+        success: true,
+        message: '사용자 데이터 마이그레이션이 완료되었습니다.',
+      };
+    } catch (error: any) {
+      console.error('[migrateUserData] 마이그레이션 실패:', error);
+      if (error instanceof functions.https.HttpsError) {
+        throw error;
+      }
+      throw new functions.https.HttpsError(
+        'internal',
+        `마이그레이션 중 오류가 발생했습니다: ${error.message}`
+      );
+    }
+  });
+

@@ -262,8 +262,9 @@ export function watchAuth(cb: (user: { uid: string } | null) => void): () => voi
       try {
         // onAuthStateChanged가 첫 번째 호출(기존 유저 여부 확인)을 마칠 때까지 기다림
         // 이렇게 해야 토큰 복원이 완료된 후에 새 계정을 생성할 수 있음
+        // 제안된 패턴: onAuthStateChanged 내부에서 직접 signInAnonymously() 호출
         let firstCallCompleted = false;
-        let firstCallWasNull = false; // 첫 호출이 null이었는지 추적
+        let hasAttemptedSignIn = false; // 익명 로그인 시도 여부 추적 (중복 방지)
         
         unsub = auth().onAuthStateChanged(async (u) => {
           console.log(`[watchAuth] 🔔 onAuthStateChanged 호출됨: ${u ? `사용자 있음 (${u.uid})` : '사용자 없음'}`);
@@ -271,49 +272,47 @@ export function watchAuth(cb: (user: { uid: string } | null) => void): () => voi
           // 첫 번째 호출 완료 표시
           if (!firstCallCompleted) {
             firstCallCompleted = true;
-            firstCallWasNull = (u === null);
-            console.log(`[watchAuth] ✅ onAuthStateChanged 첫 번째 호출 완료 (기존 유저 여부 확인 완료, null: ${firstCallWasNull})`);
+            console.log(`[watchAuth] ✅ onAuthStateChanged 첫 번째 호출 완료 (기존 유저 여부 확인 완료, null: ${u === null})`);
           }
           
+          // ✅ 기존 유저가 존재함! 유저의 UID를 사용하면 됩니다.
           if (u) {
-            console.log(`[watchAuth] ✅ 사용자 인증됨: ${u.uid}`);
+            console.log(`[watchAuth] ✅ 기존 유저가 존재함! 유저의 UID를 사용: ${u.uid}`);
             // previousUID 덮어쓰기 방지: 기존 previousUID가 있으면 덮어쓰지 않음
             await savePreviousUID(u.uid, false);
             cb({ uid: u.uid });
             return;
           }
           
-          // 유저가 null이고, 첫 번째 호출이 완료되었고, 로그인 진행 중이 아닐 때만 익명 로그인 시도
-          if (firstCallCompleted && !signingIn) {
-            // 첫 호출이 null이었던 경우, 토큰 복원을 위해 짧은 대기 시간 추가
-            // (React Native Firebase의 네이티브 브릿지를 통한 토큰 복원이 완료될 시간 확보)
-            if (firstCallWasNull) {
-              console.log('[watchAuth] ⏳ 첫 호출이 null이었음 - 토큰 복원 대기 중 (500ms)...');
-              await new Promise(resolve => setTimeout(resolve, 500));
-              // 대기 후 다시 한 번 확인 (토큰 복원으로 인해 유저가 생겼을 수 있음)
-              const currentUser = auth().currentUser;
-              if (currentUser) {
-                console.log(`[watchAuth] ✅ 대기 중 토큰 복원 성공: ${currentUser.uid}`);
-                // previousUID 덮어쓰기 방지: 기존 previousUID가 있으면 덮어쓰지 않음
-                await savePreviousUID(currentUser.uid, false);
-                cb({ uid: currentUser.uid });
-                return;
-              }
-              console.log('[watchAuth] 대기 후에도 유저 없음, 익명 로그인 시도...');
-            } else {
-              console.log('[watchAuth] 로그인되지 않음, 익명 로그인 시도...');
-            }
+          // ❌ 유저가 없을 때만 익명 로그인 진행
+          // 첫 번째 호출이 완료되었고, 이미 시도하지 않았고, 로그인 진행 중이 아닐 때만
+          if (firstCallCompleted && !hasAttemptedSignIn && !signingIn) {
+            hasAttemptedSignIn = true; // 중복 시도 방지
+            console.log('[watchAuth] ❌ 유저가 없음 - 익명 로그인 진행');
             
             try {
-              const user = await ensureAnonymousAuth();
-              console.log(`[watchAuth] 익명 로그인 결과: ${user ? `성공 (${user.uid})` : '실패'}`);
-              cb(user ? { uid: user.uid } : null);
-            } catch (error) {
-              console.warn('[watchAuth] ❌ ensureAnonymousAuth 실패:', error);
+              // onAuthStateChanged 내부에서 직접 signInAnonymously() 호출
+              // (토큰 복원이 완료된 후이므로 안전함)
+              signingIn = true;
+              const credential = await auth().signInAnonymously();
+              const newUser = credential.user;
+              console.log(`[watchAuth] ✅ 신규 익명 계정 생성: ${newUser.uid}`);
+              
+              // previousUID 저장 (새 계정이므로 저장)
+              await savePreviousUID(newUser.uid, true);
+              
+              cb({ uid: newUser.uid });
+            } catch (error: any) {
+              console.error('[watchAuth] ❌ 익명 로그인 실패:', error?.code || error?.message || error);
+              hasAttemptedSignIn = false; // 실패 시 재시도 가능하도록
               cb(null);
+            } finally {
+              signingIn = false;
             }
           } else if (!firstCallCompleted) {
             console.log('[watchAuth] ⏳ 첫 번째 호출 대기 중... (토큰 복원 대기)');
+          } else if (hasAttemptedSignIn) {
+            console.log('[watchAuth] 이미 익명 로그인 시도 완료, 대기...');
           } else if (signingIn) {
             console.log('[watchAuth] 이미 로그인 진행 중, 대기...');
           }
