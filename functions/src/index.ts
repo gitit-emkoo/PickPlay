@@ -891,6 +891,7 @@ export const completeTutorialReward = functions
   });
 
 /**
+<<<<<<< HEAD
  * 기기 연동 실행 (Cloud Functions)
  * 원본 기기의 데이터를 대상 기기로 이전하고, 원본 기기 데이터를 삭제합니다.
  * 
@@ -1632,13 +1633,13 @@ export const executeDeviceTransfer = functions
 
 /**
  * 사용자 데이터 복구 마이그레이션 Cloud Function
- * deviceUID로 기존 사용자를 찾았을 때, 서버 측에서 마이그레이션을 수행합니다.
+ * 관리자 또는 본인이 호출할 수 있습니다.
  */
 export const migrateUserData = functions
   .region('asia-northeast3')
   .runWith({
     timeoutSeconds: 540,
-    memory: '512MB',
+    memory: '1GB',
   })
   .https
   .onCall(async (data, context) => {
@@ -1660,16 +1661,25 @@ export const migrateUserData = functions
       );
     }
 
-    // 현재 사용자가 targetUID와 일치하는지 확인
-    if (context.auth.uid !== targetUID) {
+    // 관리자 이메일 목록 (Firestore 규칙과 일치)
+    const adminEmails: string[] = [
+      'admin@pickplay.kr', // 실제 관리자 이메일로 변경 필요
+    ];
+
+    // 권한 확인: 관리자이거나 targetUID가 본인인 경우만 허용
+    const userEmail = context.auth.token?.email || '';
+    const isAdmin = adminEmails.includes(userEmail);
+    const isSelf = context.auth.uid === targetUID;
+
+    if (!isAdmin && !isSelf) {
       throw new functions.https.HttpsError(
         'permission-denied',
-        '타인의 데이터를 마이그레이션할 수 없습니다.'
+        '관리자 또는 본인만 데이터를 마이그레이션할 수 있습니다.'
       );
     }
 
     try {
-      console.log(`[migrateUserData] 마이그레이션 시작: sourceUID=${sourceUID}, targetUID=${targetUID}`);
+      console.log(`[migrateUserData] 마이그레이션 시작: sourceUID=${sourceUID}, targetUID=${targetUID}, caller=${context.auth.uid}, isAdmin=${isAdmin}`);
 
       // 1. 소스 사용자 문서 확인
       const sourceUserRef = admin.firestore().collection('users').doc(sourceUID);
@@ -1690,23 +1700,42 @@ export const migrateUserData = functions
         totalSelections: sourceUserData.totalSelections,
       });
 
-      // 2. 타겟 사용자 문서 확인 (이미 생성되어 있어야 함)
+      // 2. 타겟 사용자 문서 확인 (없으면 생성)
       const targetUserRef = admin.firestore().collection('users').doc(targetUID);
       const targetUserDoc = await targetUserRef.get();
 
       if (!targetUserDoc.exists) {
-        throw new functions.https.HttpsError(
-          'not-found',
-          '타겟 사용자 문서가 존재하지 않습니다. 먼저 사용자를 생성해주세요.'
-        );
+        // 타겟 사용자 문서가 없으면 생성 (기본 데이터로)
+        await targetUserRef.set({
+          uid: targetUID,
+          deviceUID: sourceUserData.deviceUID || null,
+          createdAt: sourceUserData.createdAt || admin.firestore.FieldValue.serverTimestamp(),
+          totalSelections: 0,
+          characterId: null,
+          adjective1: null,
+          adjective2: null,
+          points: 0,
+          streakCount: 0,
+          lastAnswerDate: 0,
+          nickname: sourceUserData.nickname || '복구된 사용자',
+          tutorial: sourceUserData.tutorial || {
+            mainAnswered: false,
+            livepickParticipated: false,
+            livepickCreated: false,
+            rewardGiven500: false,
+          },
+        });
+        console.log(`[migrateUserData] 타겟 사용자 문서 생성 완료`);
       }
 
       // 3. 타겟 사용자 데이터 업데이트 (소스 데이터로 덮어쓰기)
       const targetUserData = {
         ...sourceUserData,
         uid: targetUID,
-        // deviceUID는 타겟 사용자의 것을 유지
-        deviceUID: targetUserDoc.data()?.deviceUID || sourceUserData.deviceUID,
+        // deviceUID는 타겟 사용자의 것을 유지 (없으면 소스 것 사용)
+        deviceUID: targetUserDoc.exists && targetUserDoc.data()?.deviceUID 
+          ? targetUserDoc.data()?.deviceUID 
+          : sourceUserData.deviceUID,
         // createdAt은 소스 사용자의 것을 유지 (기존 사용자의 시작일 유지)
         createdAt: sourceUserData.createdAt,
       };
@@ -1739,6 +1768,13 @@ export const migrateUserData = functions
 
           const newAnswerDocId = `${targetUID}_${questionId}`;
           const newAnswerRef = admin.firestore().collection('answers').doc(newAnswerDocId);
+
+          // 이미 존재하는지 확인
+          const existingDoc = await newAnswerRef.get();
+          if (existingDoc.exists) {
+            console.log(`[migrateUserData] 이미 존재하는 답변 건너뜀: ${newAnswerDocId}`);
+            continue;
+          }
 
           batch.set(newAnswerRef, {
             ...answerData,
@@ -1850,6 +1886,7 @@ export const migrateUserData = functions
       await sourceUserRef.update({
         recoveredToUID: targetUID,
         recoveredAt: admin.firestore.FieldValue.serverTimestamp(),
+        recoveredBy: context.auth.uid,
       } as any);
       console.log(`[migrateUserData] 소스 사용자 문서에 복구 정보 추가 완료`);
 
