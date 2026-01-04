@@ -1,0 +1,7 @@
+관리자 페이지 사용자 복구 기능 추가
+
+- Cloud Function migrateUserData 추가 (관리자 또는 본인 호출 가능)
+- 기존 사용자 데이터를 새 사용자로 마이그레이션하는 기능
+- users, answers, point_history, livepick_participations 컬렉션 마이그레이션 지원
+- 관리자 UID 목록 확인 기능 (추후 관리자 UID 추가 필요)
+

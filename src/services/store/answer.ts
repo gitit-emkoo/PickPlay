@@ -237,9 +237,10 @@ export const saveAnswerAndProcessLogic = async (userData: UserData, question: Qu
         }
       }
       
-      // 트랜잭션 업데이트
+      // 트랜잭션 업데이트 (FieldValue.increment 대신 실제 값 사용 - Firestore 규칙 검증을 위해)
+      const newTotalSelections = (currentUserData.totalSelections || 0) + 1;
       transaction.update(userRef, {
-        totalSelections: firestore.FieldValue.increment(1),
+        totalSelections: newTotalSelections,
         streakCount: newStreakCount,
         lastAnswerDate: todayKey,
       });
