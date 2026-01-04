@@ -891,7 +891,6 @@ export const completeTutorialReward = functions
   });
 
 /**
-<<<<<<< HEAD
  * 기기 연동 실행 (Cloud Functions)
  * 원본 기기의 데이터를 대상 기기로 이전하고, 원본 기기 데이터를 삭제합니다.
  * 
@@ -1661,6 +1660,7 @@ export const migrateUserData = functions
       );
     }
 
+<<<<<<< HEAD
     // 관리자 이메일 목록 (Firestore 규칙과 일치)
     const adminEmails: string[] = [
       'admin@pickplay.kr', // 실제 관리자 이메일로 변경 필요
@@ -1669,6 +1669,17 @@ export const migrateUserData = functions
     // 권한 확인: 관리자이거나 targetUID가 본인인 경우만 허용
     const userEmail = context.auth.token?.email || '';
     const isAdmin = adminEmails.includes(userEmail);
+=======
+    // 관리자 이메일 목록 (Firestore 규칙과 동일)
+    const adminEmails: string[] = [
+      'cream83779@gmail.com',
+      'kwcc2020@naver.com',
+    ];
+
+    // 권한 확인: 관리자이거나 targetUID가 본인인 경우만 허용
+    const userEmail = context.auth.token.email as string | undefined;
+    const isAdmin = userEmail ? adminEmails.includes(userEmail) : false;
+>>>>>>> cb79e61 (愿由ъ옄 泥댄겕瑜??대찓??湲곕컲?쇰줈 ?섏젙 (Firestore 洹쒖튃怨??쇱튂))
     const isSelf = context.auth.uid === targetUID;
 
     if (!isAdmin && !isSelf) {
