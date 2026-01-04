@@ -1,12 +1,12 @@
 ﻿import React, { useEffect, useState, useRef } from 'react';
-import { Alert, ScrollView, Text, TouchableOpacity, View, StyleSheet, Image, Share } from 'react-native';
+import { Alert, ScrollView, Text, TouchableOpacity, View, StyleSheet, Image, Share, Platform } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { loadData, ensureUser, getTodayQuestionForUser, saveAnswerAndProcessLogic, aggregate, getTodayAnswer, rewardWithMajority } from '../../src/services/store';
+import { loadData, ensureUser, getTodayQuestionForUser, saveAnswerAndProcessLogic, saveAnswerQuick, aggregate, getTodayAnswer, rewardWithMajority } from '../../src/services/store';
 import { Question, UserData } from '../../src/types';
 import { watchAuth } from '../../src/services/firebase';
 import LoadingScreen from '../components/LoadingScreen';
 import ErrorScreen from '../components/ErrorScreen';
-import SplashScreen from '../splash';
 import TutorialScreen from '../components/TutorialScreen';
 import NotificationModal from '../components/NotificationModal';
 import AnimaCodeRevealModal from '../components/AnimaCodeRevealModal';
@@ -28,7 +28,6 @@ import Constants from 'expo-constants';
 
 export default function HomeScreen() {
   // 화면 흐름 상태
-  const [showSplash, setShowSplash] = useState(true);
   const [showPermissionIntro, setShowPermissionIntro] = useState(false);
   const [permissionIntroChecked, setPermissionIntroChecked] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
@@ -86,6 +85,71 @@ export default function HomeScreen() {
     rewardGiven500: boolean;
     allCompleted: boolean;
   } | null>(null);
+  
+  // 튜토리얼 말풍선 표시 여부 (한 번만 표시)
+  const [hasSeenMainTooltip, setHasSeenMainTooltip] = useState(false);
+
+  const navigation = useNavigation();
+
+  // 권한/튜토리얼 첫 로드 체크 (스플래시와 분리된 초기 진입 로직)
+  useEffect(() => {
+    const checkIntroAndTutorial = async () => {
+      try {
+        // 1) 권한 안내 노출 여부
+        const hasSeenPermissionIntro = await AsyncStorage.getItem('hasSeenPermissionIntro');
+        if (!hasSeenPermissionIntro) {
+          // 권한 안내 화면을 아직 보지 않은 경우: 권한 인트로부터 시작
+          setShowPermissionIntro(true);
+          return;
+        }
+        setPermissionIntroChecked(true);
+
+        // 2) 튜토리얼 노출 여부
+        const hasSeenTutorial = await AsyncStorage.getItem('hasSeenTutorial');
+        if (!hasSeenTutorial) {
+          setShowTutorial(true);
+        }
+        setTutorialChecked(true);
+      } catch (e) {
+        console.warn('[App] 권한/튜토리얼 초기 체크 실패:', (e as any)?.message || e);
+        // 문제가 있어도 메인 화면은 볼 수 있도록 체크 완료로 처리
+        setPermissionIntroChecked(true);
+        setTutorialChecked(true);
+      }
+    };
+
+    checkIntroAndTutorial();
+  }, []);
+
+  // 권한 안내 / 튜토리얼 시에는 하단 탭 네비게이션 숨기기
+  useEffect(() => {
+    // 탭 네비게이션은 HomeScreen의 부모(Stack)의 부모에 위치
+    const tabNavigator = navigation.getParent()?.getParent();
+    if (!tabNavigator) return;
+
+    const shouldHideTabBar =
+      (showPermissionIntro && !permissionIntroChecked) ||
+      showTutorial;
+
+    if (shouldHideTabBar) {
+      tabNavigator.setOptions({
+        tabBarStyle: {
+          display: 'none',
+        },
+      });
+    } else {
+      tabNavigator.setOptions({
+        tabBarStyle: {
+          backgroundColor: colors.background,
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
+          height: Platform.OS === 'ios' ? 88 : 60,
+          paddingBottom: Platform.OS === 'ios' ? 28 : 8,
+          paddingTop: 8,
+        },
+      });
+    }
+  }, [navigation, showPermissionIntro, permissionIntroChecked, showTutorial]);
 
 
   // 서비스 점검 상태 체크 (앱 시작 시 최우선)
@@ -150,21 +214,6 @@ export default function HomeScreen() {
 
     checkUpdate();
   }, [checkingServiceStatus, serviceStatus]);
-
-  // 스플래시 완료 후 권한 안내 화면 확인
-  const handleSplashFinish = async () => {
-    setShowSplash(false);
-    
-    // 권한 안내 화면을 본 적이 있는지 확인
-    const hasSeenPermissionIntro = await AsyncStorage.getItem('hasSeenPermissionIntro');
-    if (!hasSeenPermissionIntro) {
-      setShowPermissionIntro(true);
-      return;
-    }
-
-    // 권한 안내를 이미 봤다면 튜토리얼 체크로 진행
-    await handlePermissionIntroComplete();
-  };
 
   // 권한 안내 화면 완료
   const handlePermissionIntroComplete = async () => {
@@ -296,6 +345,14 @@ export default function HomeScreen() {
       if (!user) return;
       setLoading(true);
       try {
+      // 연동 완료 후 강제 새로고침 확인
+      const forceRefresh = await AsyncStorage.getItem('forceRefreshAfterTransfer');
+      if (forceRefresh === 'true') {
+        console.log('[App] 연동 완료 후 강제 새로고침 플래그 발견, 데이터 새로고침');
+        await AsyncStorage.removeItem('forceRefreshAfterTransfer');
+      }
+      
+      // 온라인 전용: 항상 Firestore에서 직접 로드
       const data = await ensureUser(user.uid);
       setUserData(data);
       
@@ -303,6 +360,10 @@ export default function HomeScreen() {
       try {
         const status = await getTutorialStatus(user.uid);
         setTutorialStatus(status);
+        
+        // 메인 튜토리얼 말풍선 표시 여부 확인
+        const hasSeenMain = await AsyncStorage.getItem('hasSeenMainTutorialTooltip');
+        setHasSeenMainTooltip(hasSeenMain === 'true');
       } catch (e) {
         console.warn('[Tutorial] 튜토리얼 상태 로드 실패:', e);
       }
@@ -378,7 +439,8 @@ export default function HomeScreen() {
       setLoading(false);
     };
     init();
-  }, [user]);
+  }, [user?.uid]); // user.uid를 의존성으로 사용하여 UID 변경 시마다 실행
+
 
   const handleVote = async (index: 0 | 1) => {
     if (!user || !userData || !question) return;
@@ -405,20 +467,16 @@ export default function HomeScreen() {
     return { total: nextTotal, c0: nextC0, c1: nextC1, p0, p1 };
   });
     
-    // 2. 백그라운드에서 AI 태그 생성 및 저장 처리
+    // 2. 빠르게 답변 저장 (AI 태그 없이, 보상받기 버튼 즉시 표시를 위해)
     setTimeout(async () => {
       try {
-        const previousTotalSelections = userData.totalSelections;
-        const updatedUserData = await saveAnswerAndProcessLogic(userData, question, index);
-        setUserData(updatedUserData);
-        const result = await aggregate(question.question_id);
-        setAgg(result);
-        console.log('✅ 백그라운드 투표 처리 완료');
+        // 빠르게 답변 저장 (AI 태그는 백그라운드에서 생성)
+        await saveAnswerQuick(userData, question, index);
+        console.log('✅ 빠른 답변 저장 완료');
         
-        // 튜토리얼 상태 업데이트 (메인 질문 답변)
+        // 튜토리얼 상태 즉시 업데이트 (보상받기 버튼 표시를 위해)
         try {
           await updateTutorialProgress(user.uid, 'mainAnswered');
-          // 튜토리얼 상태 다시 로드
           const updatedStatus = await getTutorialStatus(user.uid);
           if (updatedStatus) {
             setTutorialStatus(updatedStatus);
@@ -427,26 +485,45 @@ export default function HomeScreen() {
           console.warn('[Tutorial] 메인 질문 답변 튜토리얼 업데이트 실패:', e);
         }
         
-        // 애니마코드 팝업 표시 체크
-        const newTotalSelections = updatedUserData.totalSelections;
-        await checkAndShowAnimaCodeModal(previousTotalSelections, newTotalSelections, updatedUserData);
+        // 집계 데이터 업데이트
+        const result = await aggregate(question.question_id);
+        setAgg(result);
         
-        // 테스트 유저는 투표 후 다음 질문으로 넘어감
-        if (TEST_UIDS.includes(user.uid)) {
-          const nextQuestion = getTodayQuestionForUser(updatedUserData);
-          if (nextQuestion) {
-            setQuestion(nextQuestion);
-            setUserChoice(null);
-            setRewardCompleted(false);
-            setMsg('');
-            // 새로운 질문의 집계 데이터 로드
-            const nextAgg = await aggregate(nextQuestion.question_id);
-            setAgg(nextAgg);
-            console.log(`🧪 [Test] 다음 질문으로 이동: Q${nextQuestion.question_id}`);
+        // 3. 백그라운드에서 전체 로직 처리 (연속 참여일수, 캐릭터 로직 등)
+        try {
+          const previousTotalSelections = userData.totalSelections;
+          const updatedUserData = await saveAnswerAndProcessLogic(userData, question, index);
+          setUserData(updatedUserData);
+          console.log('✅ 백그라운드 전체 로직 처리 완료');
+          
+          // 집계 데이터 다시 업데이트 (정확한 수치를 위해)
+          const finalResult = await aggregate(question.question_id);
+          setAgg(finalResult);
+          
+          // 애니마코드 팝업 표시 체크
+          const newTotalSelections = updatedUserData.totalSelections;
+          await checkAndShowAnimaCodeModal(previousTotalSelections, newTotalSelections, updatedUserData);
+          
+          // 테스트 유저는 투표 후 다음 질문으로 넘어감
+          if (TEST_UIDS.includes(user.uid)) {
+            const nextQuestion = getTodayQuestionForUser(updatedUserData);
+            if (nextQuestion) {
+              setQuestion(nextQuestion);
+              setUserChoice(null);
+              setRewardCompleted(false);
+              setMsg('');
+              // 새로운 질문의 집계 데이터 로드
+              const nextAgg = await aggregate(nextQuestion.question_id);
+              setAgg(nextAgg);
+              console.log(`🧪 [Test] 다음 질문으로 이동: Q${nextQuestion.question_id}`);
+            }
           }
+        } catch (e: any) {
+          console.error('❌ 백그라운드 전체 로직 처리 실패:', e);
+          // 에러 발생 시에도 UI는 이미 업데이트됨 (사용자 경험 유지)
         }
       } catch (e: any) {
-        console.error('❌ 백그라운드 투표 처리 실패:', e);
+        console.error('❌ 빠른 답변 저장 실패:', e);
         // 에러 발생 시에도 UI는 이미 업데이트됨 (사용자 경험 유지)
       }
     }, 0);
@@ -593,12 +670,7 @@ export default function HomeScreen() {
     }
   };
 
-  // 1. 스플래시 화면
-  if (showSplash) {
-    return <SplashScreen onFinish={handleSplashFinish} />;
-  }
-
-  // 2. 서비스 점검 화면 (최우선, 점검 중이면 여기서 멈춤)
+  // 1. 서비스 점검 화면 (최우선, 점검 중이면 여기서 멈춤)
   if (checkingServiceStatus) {
     return <LoadingScreen />;
   }
@@ -699,8 +771,8 @@ export default function HomeScreen() {
           {/* 질문 카드 */}
           {question ? (
           <View style={{ backgroundColor: colors.surface, borderRadius: 20, padding: 24, marginBottom: 24, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 4, position: 'relative' }}>
-            {/* 튜토리얼 말풍선 (메인 질문 안내) - 튜토리얼 미완료 시 표시 */}
-            {tutorialStatus && !tutorialStatus.mainAnswered && userChoice === null && (
+            {/* 튜토리얼 말풍선 (메인 질문 안내) - 튜토리얼 미완료 시 한 번만 표시 */}
+            {tutorialStatus && !tutorialStatus.mainAnswered && userChoice === null && !hasSeenMainTooltip && (
               <TutorialTooltip
                 title="튜토리얼 하기!"
                 message="보상 : 500P!"
@@ -708,6 +780,10 @@ export default function HomeScreen() {
                 style={{ top: -50, left: 100, right: 20 }}
                 color="#FF5722"
                 blink={true}
+                onDismiss={async () => {
+                  await AsyncStorage.setItem('hasSeenMainTutorialTooltip', 'true');
+                  setHasSeenMainTooltip(true);
+                }}
               />
             )}
             <Text style={{ fontSize: 20, fontWeight: '700', color: colors.primary, textAlign: 'center', lineHeight: 28, marginBottom: 24 }}>
@@ -748,8 +824,8 @@ export default function HomeScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', marginBottom: 8, width: '100%' }}>
               <Image source={require('../../assets/images/img_calendar.png')} style={{ width: 60, height: 60, borderRadius: 8, marginRight: 16 }} resizeMode="contain" />
               <View style={{ flex: 1, justifyContent: 'center' }}>
-                <Text style={{ fontWeight: '700', fontSize: 18, color: colors.accent, lineHeight: 24, marginBottom: 8 }}>연속참여 보상 강화!</Text>
-                <Text style={{ fontWeight: '700', fontSize: 14, color: colors.text, lineHeight: 20 }}>11일 연속 참여 부터 보상 2배로 UP!{`\n`}31일 연속 참여 부터 보상 3배로 UP!</Text>
+                <Text style={{ fontWeight: '700', fontSize: 18, color: colors.accent, lineHeight: 24, marginBottom: 8 }}>1연속참여 보상 강화!</Text>
+                <Text style={{ fontWeight: '700', fontSize: 12, color: colors.text, lineHeight: 20 }}> 11일 연속 참여부터 보상 2배로 UP!{`\n`}31일 연속 참여 부터 보상 3배로 UP!</Text>
               </View>
             </View>
           </View>
@@ -793,20 +869,20 @@ export default function HomeScreen() {
                   color="#FF5722"
                   blink={true}
                 />
-                <TouchableOpacity onPress={handleGrantReward} style={{
-                    marginTop: 8,
-                    backgroundColor: (() => { const m = getStreakMultiplier(userData?.streakCount); return m === 3 ? '#8e44ad' : m === 2 ? '#2ecc71' : colors.primary; })(),
-                borderRadius: 12,
-                paddingVertical: 16,
-                paddingHorizontal: 32,
-                    shadowColor: (() => { const m = getStreakMultiplier(userData?.streakCount); return m === 3 ? '#8e44ad' : m === 2 ? '#2ecc71' : colors.primary; })(),
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.25,
-                shadowRadius: 8,
-                elevation: 6,
-              }}>
-                <Text style={{ fontSize: 18, color: 'white', fontWeight: '700', textAlign: 'center' }}>🎁 보상 받기</Text>
-              </TouchableOpacity>
+              <TouchableOpacity onPress={handleGrantReward} style={{
+                  marginTop: 8,
+                  backgroundColor: (() => { const m = getStreakMultiplier(userData?.streakCount); return m === 3 ? '#8e44ad' : m === 2 ? '#2ecc71' : colors.primary; })(),
+              borderRadius: 12,
+              paddingVertical: 16,
+              paddingHorizontal: 32,
+                  shadowColor: (() => { const m = getStreakMultiplier(userData?.streakCount); return m === 3 ? '#8e44ad' : m === 2 ? '#2ecc71' : colors.primary; })(),
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.25,
+              shadowRadius: 8,
+              elevation: 6,
+            }}>
+              <Text style={{ fontSize: 18, color: 'white', fontWeight: '700', textAlign: 'center' }}>🎁 보상 받기</Text>
+          </TouchableOpacity>
               </View>
         )}
 

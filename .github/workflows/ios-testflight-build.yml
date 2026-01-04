@@ -2,17 +2,6 @@ name: iOS TestFlight Build
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main, release]
-    paths:
-      - 'app/**'
-      - 'app.config.js'
-      - 'app.json'
-      - 'package.json'
-      - 'fastlane/**'
-      - 'plugins/**'
-      - 'GoogleService-Info.plist'
-      - '.github/workflows/ios-testflight-build.yml'
 
 jobs:
   ios-testflight:

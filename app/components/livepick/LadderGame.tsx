@@ -54,7 +54,7 @@ export default function LadderGame({ visible, onResult }: LadderGameProps) {
     const allPositions: { r: number; c: number }[] = [];
     for (let r = 0; r < HORIZONTAL_LINES; r++) {
       for (let c = 0; c < LADDERS - 1; c++) allPositions.push({ r, c });
-    }
+      }
     allPositions.sort(() => Math.random() - 0.5);
 
     for (const { r, c } of allPositions) {
@@ -66,7 +66,7 @@ export default function LadderGame({ visible, onResult }: LadderGameProps) {
     }
     return structure;
   };
-
+  
   const ladderStructure = useRef(generateLadderStructure()).current;
 
   useEffect(() => {
@@ -117,22 +117,26 @@ export default function LadderGame({ visible, onResult }: LadderGameProps) {
           duration: 400,
           useNativeDriver: false,
         }).start(() => {
-          setResult(finalReward);
-          setAnimating(false);
+        setResult(finalReward);
+        setAnimating(false);
           setWinningIndex(currentLadder);
           
-          // 하단 포인트 표시 설정: 당첨된 인덱스는 실제 포인트, 나머지는 랜덤
-          const availableRewards = [10, 50, 100, 200, 300];
-          const shuffled = [...availableRewards].sort(() => Math.random() - 0.5);
+          // 하단 포인트 표시 설정: 당첨된 인덱스는 실제 포인트, 나머지는 당첨 포인트를 제외한 다른 포인트들
+          const allRewards = [10, 50, 100, 200, 300];
+          // 당첨된 포인트를 제외한 나머지 포인트들
+          const remainingRewards = allRewards.filter(reward => reward !== finalReward);
+          // 나머지 포인트들을 섞기
+          const shuffled = [...remainingRewards].sort(() => Math.random() - 0.5);
           const newBottomRewards: (number | null)[] = Array(LADDERS).fill(null);
           
           // 당첨된 인덱스에 실제 포인트 설정
           newBottomRewards[currentLadder] = finalReward;
           
-          // 나머지 인덱스에 랜덤 포인트 배치
+          // 나머지 인덱스에 당첨 포인트를 제외한 다른 포인트들을 랜덤 배치
           let rewardIndex = 0;
           for (let i = 0; i < LADDERS; i++) {
             if (newBottomRewards[i] === null) {
+              // 나머지 포인트가 부족하면 반복 사용 (5개 도착점에 4개 포인트만 있으므로)
               newBottomRewards[i] = shuffled[rewardIndex % shuffled.length];
               rewardIndex++;
             }
@@ -147,7 +151,7 @@ export default function LadderGame({ visible, onResult }: LadderGameProps) {
       // 현재 층의 Y좌표 (가로선이 있는 위치)
       const targetY = VERTICAL_LINE_TOP + (levelIndex * LINE_HEIGHT) + (LINE_HEIGHT / 2) - (BALL_SIZE / 2);
       const currentX = currentLadder * columnWidth + (columnWidth / 2 - BALL_SIZE / 2);
-
+      
       // 세로 이동
       Animated.timing(ballPosition, {
         toValue: { x: currentX, y: targetY },
@@ -157,7 +161,7 @@ export default function LadderGame({ visible, onResult }: LadderGameProps) {
         // 가로선 체크
         const hasRight = currentLadder < LADDERS - 1 && ladderStructure[levelIndex][currentLadder];
         const hasLeft = currentLadder > 0 && ladderStructure[levelIndex][currentLadder - 1];
-
+        
         if (hasRight || hasLeft) {
           if (hasRight) currentLadder++;
           else currentLadder--;
@@ -184,7 +188,7 @@ export default function LadderGame({ visible, onResult }: LadderGameProps) {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>🎯 사다리 게임</Text>
-
+      
       {/* 상단 선택 */}
       <View style={styles.topChoicesContainer}>
         {Array.from({ length: LADDERS }).map((_, i) => (
@@ -196,8 +200,8 @@ export default function LadderGame({ visible, onResult }: LadderGameProps) {
             <Text style={[styles.topChoiceText, selectedTopIndex === i && styles.topChoiceTextSelected]}>{i + 1}</Text>
           </TouchableOpacity>
         ))}
-      </View>
-
+            </View>
+            
       {/* 사다리 본체 */}
       <View style={styles.ladderContainer} onLayout={onLayout}>
         {Array.from({ length: LADDERS }).map((_, lIdx) => (
@@ -207,9 +211,9 @@ export default function LadderGame({ visible, onResult }: LadderGameProps) {
             {Array.from({ length: HORIZONTAL_LINES }).map((_, rIdx) => (
               <View key={rIdx} style={styles.lineContainer}>
                 {ladderStructure[rIdx][lIdx - 1] && <View style={[styles.horizontalLine, styles.horizontalLineLeft]} />}
-                <View style={styles.verticalSegment} />
+                  <View style={styles.verticalSegment} />
                 {ladderStructure[rIdx][lIdx] && <View style={[styles.horizontalLine, styles.horizontalLineRight]} />}
-              </View>
+                </View>
             ))}
             <View style={[
               styles.endPoint,
@@ -224,7 +228,7 @@ export default function LadderGame({ visible, onResult }: LadderGameProps) {
             </View>
           </View>
         ))}
-
+        
         {/* 공 애니메이션 */}
         <Animated.View style={[styles.ball, { opacity: ballOpacity, transform: ballPosition.getTranslateTransform() }]}>
           <View style={styles.ballInner} />
@@ -262,11 +266,11 @@ const styles = StyleSheet.create({
   ladderContainer: { flexDirection: 'row', width: '85%', position: 'relative', minHeight: 320 },
   ladderColumn: { flex: 1, alignItems: 'center' },
   startPointEmpty: { height: 40, marginBottom: 8 },
-  verticalLine: { 
+  verticalLine: {
     width: 3, 
     backgroundColor: '#4A90E2', 
     height: HORIZONTAL_LINES * LINE_HEIGHT + 15, 
-    position: 'absolute', 
+    position: 'absolute',
     top: VERTICAL_LINE_TOP, 
     zIndex: 0 
   },

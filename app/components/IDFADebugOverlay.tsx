@@ -26,7 +26,7 @@ export default function IDFADebugOverlay() {
       // ATT 권한 상태 확인
       const trackingStatus = await Tracking.getTrackingPermissionsAsync();
       let statusText = '알 수 없음';
-      switch (trackingStatus.status) {
+      switch (trackingStatus.status as string) {
         case 'granted':
           statusText = '✅ 허용됨';
           break;
@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
   },
   idfaValue: {
     fontSize: 12,
-    wordBreak: 'break-all',
+    flexWrap: 'wrap',
   },
   buttonContainer: {
     flexDirection: 'row',

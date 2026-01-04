@@ -46,6 +46,9 @@ export interface UserData {
   streakCount: number;
   lastAnswerDate: number; // YYYYMMDD 형식의 숫자
   nickname: string;
+  
+  // --- 기기 식별 필드 (앱 재설치 시 복구용) ---
+  deviceUID?: string | null; // 기기 고유 ID (선택적, 이전 버전 사용자는 없을 수 있음)
 
   // --- 튜토리얼 필드 ---
   tutorial?: {

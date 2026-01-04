@@ -15,6 +15,20 @@
       ]
     },
     {
+      "collectionGroup": "livepick_questions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "participantCount",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "livepick_participations",
       "queryScope": "COLLECTION",
       "fields": [

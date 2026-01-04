@@ -15,8 +15,10 @@ import firestore from '@react-native-firebase/firestore';
 import NotificationBootstrap from './components/NotificationBootstrap';
 import LoadingScreen from './components/LoadingScreen';
 import ErrorScreen from './components/ErrorScreen';
+import AppSplashScreen from './splash';
 import { initAds } from '../src/services/ads';
 import { ensureAnonymousAuth } from '../src/services/firebase';
+import { ToastProvider } from './components/Toast';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -185,6 +187,7 @@ export default function RootLayout() {
   const [firebaseStatus, setFirebaseStatus] = useState<'pending' | 'ready' | 'error'>('pending');
   const [firebaseErrorMessage, setFirebaseErrorMessage] = useState<string>('서비스에 연결하는 중입니다...');
   const [initToken, setInitToken] = useState(0);
+  const [showAppSplash, setShowAppSplash] = useState(true);
 
   // Firebase 초기화 상태를 즉시 확인 (이미 초기화되어 있을 수 있음)
   useEffect(() => {
@@ -208,7 +211,8 @@ export default function RootLayout() {
       const initResult = await initializeFirebaseIfNeeded();
       if (__DEV__) {
         try {
-          firestore().setLogLevel('debug');
+          // React Native Firebase의 setLogLevel은 타입 정의에 없을 수 있으므로 타입 캐스팅 사용
+          (firestore() as any).setLogLevel?.('debug');
         } catch (e) {
           console.warn('[Debug] Firestore setLogLevel failed (ignored):', (e as any)?.message || e);
         }
@@ -220,10 +224,9 @@ export default function RootLayout() {
         return;
       }
 
-      // 익명 인증은 백그라운드에서 처리 (블로킹하지 않음)
-      ensureAnonymousAuth().catch((authError: any) => {
-        console.warn('[RootLayout] 익명 인증 실패 - 백그라운드에서 재시도:', authError?.message);
-      });
+      // 익명 인증은 watchAuth에서 처리하므로 여기서는 호출하지 않음
+      // (onAuthStateChanged가 첫 번째 호출을 마칠 때까지 기다려야 토큰 복원이 가능함)
+      // ensureAnonymousAuth()를 직접 호출하면 토큰 복원 전에 새 계정을 생성할 수 있음
       
       setFirebaseStatus('ready');
       
@@ -333,6 +336,11 @@ export default function RootLayout() {
     return null;
   }
 
+  // 커스텀 앱 스플래시 (네이티브 스플래시 이후, 탭/메인 화면 렌더링 전에 표시)
+  if (showAppSplash) {
+    return <AppSplashScreen onFinish={() => setShowAppSplash(false)} />;
+  }
+
   if (firebaseStatus === 'pending') {
     return <LoadingScreen message="잠시만 기다려주세요..." />;
   }
@@ -356,10 +364,12 @@ export default function RootLayout() {
     <SafeAreaProvider style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }} edges={['top','bottom']}>
         <StatusBar style="dark" />
-        <NotificationBootstrap />
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        </Stack>
+        <ToastProvider>
+          <NotificationBootstrap />
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          </Stack>
+        </ToastProvider>
       </SafeAreaView>
     </SafeAreaProvider>
   );

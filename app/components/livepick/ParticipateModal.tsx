@@ -57,8 +57,10 @@ export default function ParticipateModal({
               activeOpacity={0.7}
             >
               <Ionicons name="cash" size={24} color="white" />
-              <Text style={styles.buttonText}>즉시 받기</Text>
-              <Text style={styles.buttonSubtext}>10P 즉시 지급</Text>
+              <View style={styles.buttonTextContainer}>
+                <Text style={styles.buttonText}>즉시 받기</Text>
+                <Text style={styles.buttonSubtext}>10P 즉시 지급</Text>
+              </View>
             </TouchableOpacity>
 
             {/* 광고 시청 후 게임 버튼 */}
@@ -71,8 +73,10 @@ export default function ParticipateModal({
               activeOpacity={0.7}
             >
               <Ionicons name="gift" size={24} color="white" />
-              <Text style={styles.buttonText}>광고 보고 더 받기</Text>
-              <Text style={styles.buttonSubtext}>10P ~ 300P 획득 가능</Text>
+              <View style={styles.buttonTextContainer}>
+                <Text style={styles.buttonText}>광고 보고 더 받기</Text>
+                <Text style={styles.buttonSubtext}>10P ~ 300P 획득 가능</Text>
+              </View>
             </TouchableOpacity>
           </View>
 
@@ -198,6 +202,11 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
+  buttonTextContainer: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 4,
+  },
   receiveButton: {
     backgroundColor: colors.primary,
   },
@@ -212,7 +221,7 @@ const styles = StyleSheet.create({
   buttonSubtext: {
     fontSize: 12,
     color: 'rgba(255, 255, 255, 0.9)',
-    marginLeft: 'auto',
+    textAlign: 'center',
   },
   infoText: {
     fontSize: 12,

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Modal, TextInput, Animated, Alert } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../../src/styles/colors';
 import { LivePickQuestion } from '../../src/types/livepick';
@@ -13,6 +14,7 @@ const CATEGORIES: Array<'일상' | '연애' | '가치관' | '엔터테인먼트'
 
 export default function LivePickScreen() {
   const router = useRouter();
+  const isFirstMountRef = useRef(true);
   const [user, setUser] = useState<{ uid: string } | null>(null);
   const [questions, setQuestions] = useState<LivePickQuestion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,93 +31,340 @@ export default function LivePickScreen() {
     rewardGiven500: boolean;
     allCompleted: boolean;
   } | null>(null);
+  
+  // 튜토리얼 말풍선 표시 여부 (한 번만 표시)
+  const [hasSeenLivepickTooltip, setHasSeenLivepickTooltip] = useState(false);
+  const [hasSeenCreateTooltip, setHasSeenCreateTooltip] = useState(false);
 
-  // 사용자 인증 확인
-  useEffect(() => {
-    const unsubscribe = watchAuth(async (user) => {
-      setUser(user);
-      if (user) {
-        checkTodayParticipationCount(user.uid);
-        // 튜토리얼 상태 로드
-        try {
-          const status = await getTutorialStatus(user.uid);
-          setTutorialStatus(status);
-        } catch (e) {
-          console.warn('[Tutorial] 튜토리얼 상태 로드 실패:', e);
-        }
-      }
-    });
-    return unsubscribe;
-  }, []);
+  // 검색 및 정렬 상태
+  const [showSearchModal, setShowSearchModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'latest' | 'popular'>('latest');
+  const [showSortDropdown, setShowSortDropdown] = useState(false);
+  const searchModalAnim = useRef(new Animated.Value(0)).current;
+  
+  // 전체 질문 목록 (검색 및 정렬용)
+  const [allQuestions, setAllQuestions] = useState<LivePickQuestion[]>([]);
+  const [isLoadingAllQuestions, setIsLoadingAllQuestions] = useState(false);
 
-  // 화면이 포커스될 때마다 튜토리얼 상태 갱신
-  useFocusEffect(
-    React.useCallback(() => {
-      if (user) {
-        getTutorialStatus(user.uid).then(status => {
-          setTutorialStatus(status);
-        }).catch(e => {
-          console.warn('[Tutorial] 튜토리얼 상태 갱신 실패:', e);
-        });
-      }
-    }, [user])
-  );
-
-  // 라이브픽 질문 초기 로드
-  const loadInitialQuestions = async () => {
-    try {
-      setLoading(true);
-      const list = await getLivePickQuestions(PAGE_SIZE);
-      setQuestions(list);
-      setHasMore(list.length === PAGE_SIZE);
-    } catch (error) {
-      console.error('❌ [LivePick] 질문 목록 초기 로드 실패:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  // 첫 마운트 시 질문 목록 로드
-  useEffect(() => {
-    loadInitialQuestions();
-  }, []);
-
-  // 추가 로드 (페이지네이션)
-  const loadMoreQuestions = async () => {
-    if (loadingMore || !hasMore || questions.length === 0) return;
-    try {
-      setLoadingMore(true);
-      const last = questions[questions.length - 1];
-      const lastCreatedAt = last.createdAt as Date;
-      const more = await getLivePickQuestions(PAGE_SIZE, lastCreatedAt);
-      if (more.length === 0) {
-        setHasMore(false);
-        return;
-      }
-      setQuestions(prev => [...prev, ...more]);
-      setHasMore(more.length === PAGE_SIZE);
-    } catch (error) {
-      console.error('❌ [LivePick] 추가 질문 로드 실패:', error);
-    } finally {
-      setLoadingMore(false);
-    }
-  };
-
-  // 오늘 참여 횟수 확인
-  const checkTodayParticipationCount = async (uid: string) => {
+  // 오늘 참여 횟수 확인 (먼저 정의)
+  const checkTodayParticipationCount = React.useCallback(async (uid: string) => {
     try {
       const count = await getTodayParticipationCount(uid);
       setTodayParticipationCount(count);
     } catch (error) {
       console.error('오늘 참여 횟수 확인 실패:', error);
     }
+  }, []);
+
+  // 사용자 인증 확인 및 초기 데이터 로드
+  useEffect(() => {
+    const unsubscribe = watchAuth(async (user) => {
+      setUser(user);
+      if (user) {
+        // 오늘 참여 횟수 확인
+        checkTodayParticipationCount(user.uid);
+        
+        // 튜토리얼 상태 로드
+        try {
+          const status = await getTutorialStatus(user.uid);
+          setTutorialStatus(status);
+          
+          // 튜토리얼 말풍선 표시 여부 확인
+          const [hasSeenLivepick, hasSeenCreate] = await Promise.all([
+            AsyncStorage.getItem('hasSeenLivepickTutorialTooltip'),
+            AsyncStorage.getItem('hasSeenCreateTutorialTooltip'),
+          ]);
+          setHasSeenLivepickTooltip(hasSeenLivepick === 'true');
+          setHasSeenCreateTooltip(hasSeenCreate === 'true');
+        } catch (e) {
+          console.warn('[Tutorial] 튜토리얼 상태 로드 실패:', e);
+        }
+      }
+    });
+    return unsubscribe;
+  }, [checkTodayParticipationCount]);
+
+  // 전체 질문 목록 로드 (검색 및 정렬용)
+  const loadAllQuestionsRef = useRef(false);
+  const loadAllQuestions = React.useCallback(async () => {
+    if (loadAllQuestionsRef.current) return; // 이미 로딩 중이면 중복 실행 방지
+    loadAllQuestionsRef.current = true;
+    setIsLoadingAllQuestions(true);
+    try {
+      // 정렬 기준에 따라 모든 질문 가져오기 (큰 limit 사용)
+      const allList = await getLivePickQuestions(1000, undefined, sortBy);
+      setAllQuestions(allList);
+      console.log(`[LivePick] 전체 질문 로드 완료: ${allList.length}개`);
+    } catch (error: any) {
+      console.error('❌ [LivePick] 전체 질문 목록 로드 실패:', error);
+      // 인기순 정렬 인덱스가 아직 생성되지 않은 경우 최신순으로 폴백
+      if (error?.code === 'failed-precondition' && sortBy === 'popular') {
+        console.warn('[LivePick] 인기순 정렬 인덱스가 아직 생성되지 않았습니다. 최신순으로 전환합니다.');
+        setSortBy('latest'); // sortBy 상태를 최신순으로 변경
+        try {
+          const allList = await getLivePickQuestions(1000, undefined, 'latest');
+          setAllQuestions(allList);
+        } catch (e) {
+          console.error('❌ [LivePick] 최신순 로드 실패:', e);
+        }
+      }
+    } finally {
+      setIsLoadingAllQuestions(false);
+      loadAllQuestionsRef.current = false;
+    }
+  }, [sortBy]);
+
+  // 라이브픽 질문 초기 로드
+  const loadInitialQuestions = React.useCallback(async (isRefresh: boolean = false) => {
+    try {
+      // 새로고침일 때는 상단 스피너(RefreshControl)만 사용하고,
+      // 전체 화면 로딩 인디케이터는 초기 진입 시에만 사용
+      if (!isRefresh) {
+        setLoading(true);
+      }
+      // 검색을 위해 전체 질문을 백그라운드에서 로드
+      loadAllQuestions().catch(e => console.warn('[LivePick] 전체 질문 로드 실패:', e));
+      // 페이지네이션용으로 첫 20개만 표시 (Firestore 쿼리 레벨에서 정렬)
+      const list = await getLivePickQuestions(PAGE_SIZE, undefined, sortBy);
+      setQuestions(list);
+      setHasMore(list.length === PAGE_SIZE);
+    } catch (error: any) {
+      console.error('❌ [LivePick] 질문 목록 초기 로드 실패:', error);
+      // 인기순 정렬 인덱스가 아직 생성되지 않은 경우 최신순으로 폴백
+      if (error?.code === 'failed-precondition' && sortBy === 'popular') {
+        try {
+          const list = await getLivePickQuestions(PAGE_SIZE, undefined, 'latest');
+          setQuestions(list);
+          setHasMore(list.length === PAGE_SIZE);
+        } catch (e) {
+          console.error('❌ [LivePick] 최신순 로드 실패:', e);
+        }
+      }
+    } finally {
+      if (!isRefresh) {
+        setLoading(false);
+      }
+      setRefreshing(false);
+    }
+  }, [sortBy, loadAllQuestions]);
+
+  // 첫 마운트 시 질문 목록 로드
+  useEffect(() => {
+    if (isFirstMountRef.current) {
+      isFirstMountRef.current = false;
+      loadInitialQuestions(false);
+    }
+  }, [loadInitialQuestions]);
+
+  // 화면이 포커스를 받을 때마다 질문 목록 새로고침 (목록으로 가기 버튼 클릭 시)
+  const lastRefreshTimeRef = useRef<number>(0);
+  useFocusEffect(
+    React.useCallback(() => {
+      // 첫 마운트가 아닌 경우에만 새로고침
+      if (!isFirstMountRef.current && user) {
+        const now = Date.now();
+        // 1초 이내 중복 새로고침 방지
+        if (now - lastRefreshTimeRef.current < 1000) {
+          return;
+        }
+        lastRefreshTimeRef.current = now;
+        console.log('[LivePick] 화면 포커스 감지, 질문 목록 새로고침');
+        // loadInitialQuestions를 직접 호출하지 않고, 필요한 데이터만 새로고침
+        (async () => {
+          try {
+            setRefreshing(true);
+            // 참여 횟수 갱신
+            if (user) {
+              checkTodayParticipationCount(user.uid).catch(e => 
+                console.warn('[LivePick] 참여 횟수 갱신 실패:', e)
+              );
+            }
+            const list = await getLivePickQuestions(PAGE_SIZE, undefined, sortBy);
+            setQuestions(list);
+            setHasMore(list.length === PAGE_SIZE);
+            // 전체 질문은 백그라운드에서만 로드 (검색용, 이미 로드된 경우 제외)
+            if (allQuestions.length === 0 && !loadAllQuestionsRef.current) {
+              loadAllQuestions().catch(e => console.warn('[LivePick] 전체 질문 로드 실패:', e));
+            }
+          } catch (e: any) {
+            console.warn('[LivePick] 질문 목록 갱신 실패:', e);
+            // 인기순 정렬 인덱스가 아직 생성되지 않은 경우 최신순으로 폴백
+            if (e?.code === 'failed-precondition' && sortBy === 'popular') {
+              console.warn('[LivePick] 인기순 정렬 인덱스가 아직 생성되지 않았습니다. 최신순으로 전환합니다.');
+              setSortBy('latest'); // sortBy 상태를 최신순으로 변경
+              try {
+                const list = await getLivePickQuestions(PAGE_SIZE, undefined, 'latest');
+                setQuestions(list);
+                setHasMore(list.length === PAGE_SIZE);
+              } catch (err) {
+                console.error('❌ [LivePick] 최신순 로드 실패:', err);
+              }
+            }
+          } finally {
+            setRefreshing(false);
+          }
+        })();
+      }
+    }, [user, sortBy, checkTodayParticipationCount])
+  );
+
+
+  // 추가 로드 (페이지네이션)
+  const loadMoreQuestions = async () => {
+    if (loadingMore || !hasMore || questions.length === 0) return;
+    
+    // 검색 중이면 필터링된 결과의 다음 페이지를 가져옴
+    if (searchQuery.trim()) {
+      const currentLength = questions.length;
+      const nextPage = filteredQuestions.slice(currentLength, currentLength + PAGE_SIZE);
+      
+      if (nextPage.length === 0) {
+        setHasMore(false);
+        return;
+      }
+      
+      setQuestions(prev => [...prev, ...nextPage]);
+      setHasMore(currentLength + nextPage.length < filteredQuestions.length);
+      return;
+    }
+    
+    // 검색이 없으면 Firestore에서 다음 페이지 가져오기 (정렬은 Firestore 쿼리 레벨에서)
+    try {
+      setLoadingMore(true);
+      const last = questions[questions.length - 1];
+      let more: LivePickQuestion[];
+      if (sortBy === 'popular') {
+        more = await getLivePickQuestions(PAGE_SIZE, undefined, sortBy, last.participantCount);
+      } else {
+        more = await getLivePickQuestions(PAGE_SIZE, last.createdAt as Date, sortBy);
+      }
+      if (more.length === 0) {
+        setHasMore(false);
+        return;
+      }
+      setQuestions(prev => [...prev, ...more]);
+      setHasMore(more.length === PAGE_SIZE);
+    } catch (error: any) {
+      console.error('❌ [LivePick] 추가 질문 로드 실패:', error);
+      // 인기순 정렬 인덱스가 아직 생성되지 않은 경우 최신순으로 폴백
+      if (error?.code === 'failed-precondition' && sortBy === 'popular') {
+        try {
+          const last = questions[questions.length - 1];
+          const more = await getLivePickQuestions(PAGE_SIZE, last.createdAt as Date, 'latest');
+          if (more.length === 0) {
+            setHasMore(false);
+            return;
+          }
+          setQuestions(prev => [...prev, ...more]);
+          setHasMore(more.length === PAGE_SIZE);
+        } catch (e) {
+          console.error('❌ [LivePick] 최신순 로드 실패:', e);
+        }
+      }
+    } finally {
+      setLoadingMore(false);
+    }
   };
+
+  // 정렬 변경 핸들러
+  const handleSortChange = async (newSort: 'latest' | 'popular') => {
+    setSortBy(newSort);
+    setShowSortDropdown(false);
+    // 정렬 변경 시 Firestore 쿼리 레벨에서 정렬된 첫 20개만 로드 (성능 최적화)
+    setLoading(true);
+    try {
+      // Firestore 쿼리 레벨에서 정렬된 결과의 첫 20개만 가져오기 (전체 질문을 로드하지 않음)
+      const list = await getLivePickQuestions(PAGE_SIZE, undefined, newSort);
+      setQuestions(list);
+      setHasMore(list.length === PAGE_SIZE);
+      // 전체 질문도 백그라운드에서 업데이트 (검색용, 정렬은 Firestore에서 처리)
+      loadAllQuestions().catch(e => console.warn('[LivePick] 전체 질문 로드 실패:', e));
+    } catch (error: any) {
+      console.error('❌ [LivePick] 정렬 변경 후 질문 목록 로드 실패:', error);
+      // 인덱스가 아직 생성되지 않은 경우 최신순으로 폴백
+      if (error?.code === 'failed-precondition' && newSort === 'popular') {
+        Alert.alert(
+          '인기순 정렬 준비 중',
+          '인기순 정렬 기능이 준비 중입니다. 잠시 후 다시 시도해주세요.',
+          [{ text: '확인', onPress: () => {
+            setSortBy('latest');
+            // 최신순으로 다시 로드
+            getLivePickQuestions(PAGE_SIZE, undefined, 'latest').then(list => {
+              setQuestions(list);
+              setHasMore(list.length === PAGE_SIZE);
+              setLoading(false);
+            }).catch(e => {
+              console.error('❌ [LivePick] 최신순 로드 실패:', e);
+              setLoading(false);
+            });
+          }}]
+        );
+        return;
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 검색 모달 애니메이션 및 전체 질문 로드
+  useEffect(() => {
+    if (showSearchModal) {
+      Animated.spring(searchModalAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        tension: 50,
+        friction: 8,
+      }).start();
+      
+      // 검색 모달이 열릴 때 전체 질문이 없으면 로드
+      if (allQuestions.length === 0 && !isLoadingAllQuestions) {
+        loadAllQuestions();
+      }
+    } else {
+      Animated.timing(searchModalAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [showSearchModal, searchModalAnim, allQuestions.length, isLoadingAllQuestions, loadAllQuestions]);
+  
+
+  // 검색 필터링된 질문 목록 (전체 질문 기준)
+  const filteredQuestions = React.useMemo(() => {
+    // 검색어가 있으면 전체 질문에서 검색, 없으면 현재 페이지네이션된 질문 사용
+    const sourceQuestions = searchQuery.trim() ? allQuestions : questions;
+    let filtered = sourceQuestions;
+    
+    // 카테고리 필터
+    if (selectedCategory !== '전체') {
+      filtered = filtered.filter((q) => q.category === selectedCategory);
+    }
+    
+    // 검색어 필터 (전체 질문에서 검색)
+    if (searchQuery.trim()) {
+      const query = searchQuery.trim().toLowerCase();
+      filtered = filtered.filter((q) => 
+        q.title.toLowerCase().includes(query) ||
+        q.option1.toLowerCase().includes(query) ||
+        q.option2.toLowerCase().includes(query)
+      );
+    }
+    
+    return filtered;
+  }, [questions, allQuestions, selectedCategory, searchQuery]);
 
   // Pull to refresh
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadInitialQuestions();
+    // 참여 횟수 갱신
+    if (user) {
+      checkTodayParticipationCount(user.uid).catch(e => 
+        console.warn('[LivePick] 참여 횟수 갱신 실패:', e)
+      );
+    }
+    await loadInitialQuestions(true);
   };
 
   // 시간 포맷팅 함수
@@ -145,22 +394,30 @@ export default function LivePickScreen() {
     }
   };
 
-  // 질문 카드 컴포넌트
-  const QuestionCard = ({ question }: { question: LivePickQuestion }) => {
-    const timeAgo = formatTimeAgo(question.createdAt as Date);
-    const option1Percent = question.participantCount > 0 
-      ? Math.round((question.option1Count / question.participantCount) * 100)
-      : 0;
-    const option2Percent = question.participantCount > 0
-      ? 100 - option1Percent
-      : 0;
+  // 질문 카드 컴포넌트 (React.memo로 최적화)
+  const QuestionCard = React.memo(({ question }: { question: LivePickQuestion }) => {
+    const timeAgo = React.useMemo(() => formatTimeAgo(question.createdAt as Date), [question.createdAt]);
+    const option1Percent = React.useMemo(() => 
+      question.participantCount > 0 
+        ? Math.round((question.option1Count / question.participantCount) * 100)
+        : 0,
+      [question.participantCount, question.option1Count]
+    );
+    const option2Percent = React.useMemo(() => 
+      question.participantCount > 0 ? 100 - option1Percent : 0,
+      [question.participantCount, option1Percent]
+    );
     const hasVotes = question.participantCount > 0;
+
+    const handlePress = React.useCallback(() => {
+      router.push(`/(tabs)/livepick/${question.id}`);
+    }, [question.id]);
 
     return (
       <TouchableOpacity
         style={styles.questionCard}
         activeOpacity={0.7}
-        onPress={() => router.push(`/(tabs)/livepick/${question.id}`)}
+        onPress={handlePress}
       >
         <Text style={styles.questionTitle}>{question.title}</Text>
         
@@ -194,7 +451,7 @@ export default function LivePickScreen() {
         </View>
       </TouchableOpacity>
     );
-  };
+  });
 
   return (
     <View style={styles.container}>
@@ -215,17 +472,72 @@ export default function LivePickScreen() {
             </View>
           )}
         </View>
-        <View style={{ position: 'relative' }}>
-        <TouchableOpacity
-          style={styles.createButton}
-          activeOpacity={0.7}
-          onPress={() => router.push('/(tabs)/livepick/create')}
-        >
-          <Ionicons name="add-circle" size={24} color={colors.primary} />
-          <Text style={styles.createButtonText}>질문 만들기</Text>
-        </TouchableOpacity>
-          {/* 튜토리얼 말풍선 (질문 만들기 안내) - 라이브픽 참여 후 표시 */}
-          {tutorialStatus && tutorialStatus.livepickParticipated && !tutorialStatus.livepickCreated && (
+        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          {/* 검색 버튼 */}
+          <TouchableOpacity
+            style={styles.searchButton}
+            activeOpacity={0.7}
+            onPress={() => setShowSearchModal(true)}
+          >
+            <Ionicons name="search" size={20} color={colors.primary} />
+          </TouchableOpacity>
+          
+          {/* 정렬 버튼 */}
+          <View style={{ position: 'relative' }}>
+            <TouchableOpacity
+              style={styles.sortButton}
+              activeOpacity={0.7}
+              onPress={() => setShowSortDropdown(!showSortDropdown)}
+            >
+              <Ionicons name="menu" size={20} color={colors.primary} />
+            </TouchableOpacity>
+            
+            {/* 정렬 드롭다운 */}
+            {showSortDropdown && (
+              <>
+                <TouchableOpacity
+                  style={StyleSheet.absoluteFill}
+                  activeOpacity={1}
+                  onPress={() => setShowSortDropdown(false)}
+                />
+                <View style={styles.sortDropdown}>
+                  <TouchableOpacity
+                    style={[styles.sortOption, sortBy === 'latest' && styles.sortOptionActive]}
+                    onPress={() => handleSortChange('latest')}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.sortOptionText, sortBy === 'latest' && styles.sortOptionTextActive]}>
+                      최신순
+                    </Text>
+                    {sortBy === 'latest' && <Ionicons name="checkmark" size={16} color="white" />}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.sortOption, sortBy === 'popular' && styles.sortOptionActive]}
+                    onPress={() => handleSortChange('popular')}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.sortOptionText, sortBy === 'popular' && styles.sortOptionTextActive]}>
+                      인기순
+                    </Text>
+                    {sortBy === 'popular' && <Ionicons name="checkmark" size={16} color="white" />}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+          
+          {/* 질문 만들기 버튼 */}
+          <TouchableOpacity
+            style={styles.createButton}
+            activeOpacity={0.7}
+            onPress={() => router.push('/(tabs)/livepick/create')}
+          >
+            <Ionicons name="add-circle" size={24} color={colors.primary} />
+            <Text style={styles.createButtonText}>질문 만들기</Text>
+          </TouchableOpacity>
+          
+          {/* 튜토리얼 말풍선 (질문 만들기 안내) - 라이브픽 참여 후 한 번만 표시 */}
+          {tutorialStatus && tutorialStatus.livepickParticipated && !tutorialStatus.livepickCreated && !hasSeenCreateTooltip && (
             <TutorialTooltip
               message="나만의 라이브픽 질문을 만들어보세요"
               position="right"
@@ -233,6 +545,10 @@ export default function LivePickScreen() {
               width={200}
               color="#FF5722"
               blink={true}
+              onDismiss={async () => {
+                await AsyncStorage.setItem('hasSeenCreateTutorialTooltip', 'true');
+                setHasSeenCreateTooltip(true);
+              }}
             />
           )}
         </View>
@@ -298,18 +614,16 @@ export default function LivePickScreen() {
           />
         }
       >
-        {loading ? (
+        {loading && !refreshing ? (
           <View style={styles.emptyState}>
             <ActivityIndicator size="large" color={colors.primary} />
             <Text style={styles.emptyText}>질문 목록을 불러오는 중...</Text>
           </View>
         ) : (() => {
-          // 카테고리로 필터링
-          const filteredQuestions = selectedCategory === '전체'
-            ? questions
-            : questions.filter((q) => q.category === selectedCategory);
+          // 검색 중이면 필터링된 결과를 표시, 아니면 페이지네이션된 결과 표시
+          const displayQuestions = searchQuery.trim() ? filteredQuestions : questions;
 
-          if (filteredQuestions.length === 0) {
+          if (displayQuestions.length === 0) {
             return (
               <View style={styles.emptyState}>
                 <Ionicons name="flame-outline" size={64} color={colors.textLight} />
@@ -325,8 +639,8 @@ export default function LivePickScreen() {
 
           return (
             <>
-              {filteredQuestions.map((question) => (
-            <QuestionCard key={question.id} question={question} />
+              {displayQuestions.map((question) => (
+                <QuestionCard key={question.id} question={question} />
               ))}
               {hasMore && !loadingMore && (
                 <TouchableOpacity
@@ -350,8 +664,8 @@ export default function LivePickScreen() {
         })()}
       </ScrollView>
 
-      {/* 라이브픽 튜토리얼 말풍선 - 화면 최상단 오버레이로 표시 */}
-      {tutorialStatus && !tutorialStatus.livepickParticipated && (
+      {/* 라이브픽 튜토리얼 말풍선 - 화면 최상단 오버레이로 표시 (한 번만 표시) */}
+      {tutorialStatus && !tutorialStatus.livepickParticipated && !hasSeenLivepickTooltip && (
         <View
           pointerEvents="box-none"
           style={{
@@ -369,9 +683,79 @@ export default function LivePickScreen() {
             style={{}}
             color="#FF5722"
             blink={true}
+            onDismiss={async () => {
+              await AsyncStorage.setItem('hasSeenLivepickTutorialTooltip', 'true');
+              setHasSeenLivepickTooltip(true);
+            }}
           />
         </View>
       )}
+
+      {/* 검색 모달 */}
+      <Modal
+        visible={showSearchModal}
+        transparent
+        animationType="none"
+        onRequestClose={() => setShowSearchModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.searchModalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowSearchModal(false)}
+        >
+          <Animated.View
+            style={[
+              styles.searchModalContent,
+              {
+                transform: [
+                  {
+                    translateY: searchModalAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-300, 0],
+                    }),
+                  },
+                ],
+                opacity: searchModalAnim,
+              },
+            ]}
+          >
+            <View style={styles.searchModalHeader}>
+              <Text style={styles.searchModalTitle}>질문 검색</Text>
+              <TouchableOpacity
+                onPress={() => setShowSearchModal(false)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.searchInputContainer}>
+              <Ionicons name="search" size={20} color={colors.textSecondary} style={styles.searchInputIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="질문 제목이나 선택지를 검색하세요"
+                placeholderTextColor={colors.textLight}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoFocus
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => setSearchQuery('')}
+                  activeOpacity={0.7}
+                  style={styles.searchClearButton}
+                >
+                  <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
+              )}
+            </View>
+            {searchQuery.trim() && (
+              <Text style={styles.searchResultText}>
+                {filteredQuestions.length}개의 질문을 찾았습니다
+              </Text>
+            )}
+          </Animated.View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -567,5 +951,118 @@ const styles = StyleSheet.create({
   },
   categoryButtonTextActive: {
     color: 'white',
+  },
+  searchButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  sortButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  sortDropdown: {
+    position: 'absolute',
+    top: 48,
+    right: 0,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 8,
+    minWidth: 120,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 1000,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  sortOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 4,
+  },
+  sortOptionActive: {
+    backgroundColor: colors.primary,
+  },
+  sortOptionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  sortOptionTextActive: {
+    color: 'white',
+  },
+  searchModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  searchModalContent: {
+    backgroundColor: colors.background,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    paddingTop: 50,
+    paddingHorizontal: 20,
+    paddingBottom: 30,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  searchModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  searchModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  searchInputIcon: {
+    marginRight: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: colors.text,
+    paddingVertical: 14,
+  },
+  searchClearButton: {
+    marginLeft: 8,
+    padding: 4,
+  },
+  searchResultText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 16,
+    textAlign: 'center',
   },
 });

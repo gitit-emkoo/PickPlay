@@ -6,12 +6,12 @@ import { recordPointHistory } from './pointHistory';
  * 튜토리얼 상태를 업데이트하고, 3개 미션이 모두 완료되면 500P를 지급합니다.
  * @param uid 사용자 UID
  * @param updateType 업데이트할 튜토리얼 타입
- * @returns 업데이트된 사용자 데이터
+ * @returns 업데이트된 사용자 데이터와 실제로 업데이트가 수행되었는지 여부
  */
 export async function updateTutorialProgress(
   uid: string,
   updateType: 'mainAnswered' | 'livepickParticipated' | 'livepickCreated'
-): Promise<UserData | null> {
+): Promise<{ userData: UserData; wasUpdated: boolean } | null> {
   try {
     const userRef = firestore().collection('users').doc(uid);
     const userDoc = await userRef.get();
@@ -32,7 +32,7 @@ export async function updateTutorialProgress(
     // 이미 완료된 미션이면 업데이트하지 않음
     if (currentTutorial[updateType]) {
       console.log(`[Tutorial] 이미 완료된 미션: ${updateType}`);
-      return userData as UserData;
+      return { userData: userData as UserData, wasUpdated: false };
     }
 
     // 튜토리얼 상태 업데이트
@@ -97,7 +97,7 @@ export async function updateTutorialProgress(
 
     // 업데이트된 사용자 데이터 반환
     const updatedDoc = await userRef.get();
-    return updatedDoc.data() as UserData;
+    return { userData: updatedDoc.data() as UserData, wasUpdated: true };
   } catch (error: any) {
     console.error('[Tutorial] 튜토리얼 상태 업데이트 실패:', error);
     return null;
@@ -117,7 +117,8 @@ export async function getTutorialStatus(uid: string): Promise<{
   allCompleted: boolean;
 } | null> {
   try {
-    const userDoc = await firestore().collection('users').doc(uid).get();
+    const userRef = firestore().collection('users').doc(uid);
+    const userDoc = await userRef.get();
     if (!userDoc.exists) {
       return null;
     }

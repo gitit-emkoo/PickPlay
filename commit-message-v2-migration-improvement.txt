@@ -1,0 +1,12 @@
+fix: V2 사용자 마이그레이션 로직 개선 및 기기 연동 검증
+
+- V2 사용자의 이전 Firebase UID 찾기 로직 개선 (points/totalSelections/streakCount 조합)
+- AsyncStorage의 최신 데이터를 우선 사용하도록 수정 (V2 사용자가 앱 사용 중 계속 업데이트됨)
+- V2 → V3 마이그레이션 시 찾은 UID를 AsyncStorage에 저장 (다음 업데이트를 위해)
+- Firestore에서 찾은 사용자의 최신 데이터와 AsyncStorage 데이터 병합
+- 기기 연동 시 AsyncStorage 정리로 인한 새 유저 생성 검증 완료
+
+
+
+
+

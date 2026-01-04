@@ -1,13 +1,15 @@
 {
   "name": "pickplay",
-  "slug": "pickplay",
-  "version": "2.0.2",
+  "slug": "today-balance",
+  "version": "2.1.1",
+  "runtimeVersion": "2.1.1",
   "extra": {
     "eas": {
-      "projectId": "f0389889-654e-4120-8839-8b795ff4b641"
+      "projectId": "14d1ecb2-a3c0-4425-ac97-0ec33b289905"
     },
     "react-native-google-mobile-ads": {
-      "ios_app_id": "ca-app-pub-2555567440328829~5483134579"
+      "ios_app_id": "ca-app-pub-2555567440328829~5483134579",
+      "android_app_id": "ca-app-pub-2555567440328829~4208779024"
     }
   },
   "orientation": "portrait",
@@ -24,6 +26,7 @@
   "ios": {
     "supportsTablet": true,
     "bundleIdentifier": "com.pickplay.kwcc",
+    "buildNumber": "20",
     "googleServicesFile": "./GoogleService-Info.plist",
     "infoPlist": {
       "GADApplicationIdentifier": "ca-app-pub-2555567440328829~5483134579",
@@ -32,6 +35,7 @@
   },
   "android": {
     "package": "com.pickplay.kwcc",
+    "versionCode": 30,
     "googleServicesFile": "./google-services.json",
     "adaptiveIcon": {
       "foregroundImage": "./assets/images/adaptive-icon.png",
@@ -58,6 +62,11 @@
             "GCC_PREPROCESSOR_DEFINITIONS": "$(inherited) FOLLY_NO_CONFIG=1 FOLLY_HAS_COROUTINES=0",
             "CLANG_CXX_LANGUAGE_STANDARD": "gnu++20"
           }
+        },
+        "android": {
+          "targetSdkVersion": 35,
+          "kotlinVersion": "1.9.22",
+          "newArchEnabled": false
         }
       }
     ],
@@ -71,6 +80,7 @@
     "./plugins/with-admob-test-device"
   ],
   "react-native-google-mobile-ads": {
-    "ios_app_id": "ca-app-pub-2555567440328829~5483134579"
+    "ios_app_id": "ca-app-pub-2555567440328829~5483134579",
+    "android_app_id": "ca-app-pub-2555567440328829~4208779024"
   }
 }

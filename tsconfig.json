@@ -13,5 +13,11 @@
   "include": [
     "**/*.ts",
     "**/*.tsx"
+  ],
+  "exclude": [
+    "node_modules",
+    "temp_original*.tsx",
+    "**/temp_original*.tsx",
+    "**/*.original.ts"
   ]
 }

@@ -27,13 +27,13 @@ export async function checkTrackingPermission(): Promise<boolean> {
   }
 }
 
-// 플랫폼별 광고 단위 ID (실서비스용) - 테스트 기간 동안 주석 처리
-// const AD_UNITS = {
-//   android: 'ca-app-pub-2555567440328829/7893158578',
-//   ios: 'ca-app-pub-2555567440328829/9198215970'
-// };
+// 플랫폼별 광고 단위 ID (실서비스용)
+const AD_UNITS = {
+  android: 'ca-app-pub-2555567440328829/7893158578',
+  ios: 'ca-app-pub-2555567440328829/9198215970'
+};
 
-// 테스트 광고 ID (AdMob 공식 테스트 ID)
+// 테스트 광고 ID (AdMob 공식 테스트 ID) - 개발/디버깅용
 // Rewarded Interstitial 테스트 ID (2024 최신)
 const TEST_AD_UNITS = {
   android: 'ca-app-pub-3940256099942544/5354046379', // Rewarded Interstitial Android
@@ -45,9 +45,6 @@ const TEST_AD_UNITS_ALT = {
   android: 'ca-app-pub-3940256099942544/1033173712', // Rewarded Interstitial Android (대체)
   ios: 'ca-app-pub-3940256099942544/1712485313' // Rewarded Interstitial iOS (대체)
 };
-
-// 테스트 기간 동안 테스트 ID 사용
-const AD_UNITS = TEST_AD_UNITS;
 
 // 더미 광고 객체 (Expo Go용)
 function createExpoGoDummyAd() {
@@ -213,28 +210,19 @@ export async function createRewardedInterstitial() {
   try {
     const { RewardedInterstitialAd, TestIds } = require('react-native-google-mobile-ads');
     
-    // TestIds를 사용하는 방법도 시도 (더 안정적일 수 있음)
-    let adUnitId: string;
-    
-    if (TestIds && TestIds.REWARDED_INTERSTITIAL) {
-      // TestIds가 제공되면 우선 사용
-      adUnitId = TestIds.REWARDED_INTERSTITIAL;
-      console.log('🆔 TestIds.REWARDED_INTERSTITIAL 사용:', adUnitId);
-    } else {
-      // TestIds가 없으면 수동 테스트 ID 사용
-      const platformAdUnitId = Platform.OS === 'ios' ? AD_UNITS.ios : AD_UNITS.android;
-      adUnitId = platformAdUnitId;
-      console.log('🆔 수동 테스트 ID 사용:', adUnitId);
-    }
+    // 실제 광고 ID 사용 (프로덕션)
+    const platformAdUnitId = Platform.OS === 'ios' ? AD_UNITS.ios : AD_UNITS.android;
+    const adUnitId = platformAdUnitId;
+    console.log('🆔 실제 광고 ID 사용:', adUnitId);
     
     // 광고 추적 권한 상태 확인
     const hasTrackingPermission = await checkTrackingPermission();
     const requestNonPersonalizedAdsOnly = !hasTrackingPermission;
       
     console.log(`🎯 보상형 전면 광고 생성: ${adUnitId}`);
-    console.log(`🔧 모드: 테스트 (테스트 기간)`);
+    console.log(`🔧 모드: 프로덕션`);
     console.log(`📱 플랫폼: ${Platform.OS}`);
-    console.log(`🆔 테스트 광고 ID 사용 중`);
+    console.log(`🆔 실제 광고 ID 사용 중`);
     console.log(`🔐 광고 추적 권한: ${hasTrackingPermission ? '허용' : '거부'}`);
     console.log(`📊 비개인화 광고만 요청: ${requestNonPersonalizedAdsOnly}`);
     
@@ -270,17 +258,10 @@ export async function createRewardedInterstitialForLivePick() {
   try {
     const { RewardedInterstitialAd, TestIds } = require('react-native-google-mobile-ads');
     
-    // 메인 화면과 완전히 동일한 로직 사용
-    let adUnitId: string;
-    
-    if (TestIds && TestIds.REWARDED_INTERSTITIAL) {
-      // TestIds가 제공되면 우선 사용 (메인 화면과 동일)
-      adUnitId = TestIds.REWARDED_INTERSTITIAL;
-    } else {
-      // TestIds가 없으면 메인 화면과 동일한 AD_UNITS 사용
-      const platformAdUnitId = Platform.OS === 'ios' ? AD_UNITS.ios : AD_UNITS.android;
-      adUnitId = platformAdUnitId;
-    }
+    // 메인 화면과 완전히 동일한 로직 사용 (실제 광고 ID)
+    const platformAdUnitId = Platform.OS === 'ios' ? AD_UNITS.ios : AD_UNITS.android;
+    const adUnitId = platformAdUnitId;
+    console.log('🆔 [LivePick] 실제 광고 ID 사용:', adUnitId);
     
     // 광고 추적 권한 상태 확인
     const hasTrackingPermission = await checkTrackingPermission();
@@ -416,21 +397,41 @@ export function attachRewardedInterstitial(ad: any, {
     try {
       // 광고 로드/표시 실패 이벤트 리스너 추가
       // ERROR 이벤트는 로드 실패와 표시 실패 모두를 처리함
-      unsubscribeFailed = ad.addAdEventListener(AdEventType.ERROR, (error: any) => {
-        // 에러 코드로 로드 실패인지 표시 실패인지 판단
-        const errorCode = String(error?.code || error?.message || '');
-        const isLoadError = errorCode.includes('load') || errorCode.includes('LOAD');
-        const isShowError = errorCode.includes('show') || errorCode.includes('SHOW') || errorCode.includes('present');
-        
-        if (isShowError && onFailedToShow) {
-          onFailedToShow(error);
-          // 표시 실패 시에는 onClosed를 호출하지 않음 (CLOSED 이벤트가 별도로 발생할 수 있음)
-        } else if (onFailedToLoad) {
-          onFailedToLoad(error);
-        } else {
-          onClosed();
-        }
-      });
+      // internal-error가 발생할 수 있으므로 더 안전하게 처리
+      try {
+        unsubscribeFailed = ad.addAdEventListener(AdEventType.ERROR, (error: any) => {
+          try {
+            // 에러 코드로 로드 실패인지 표시 실패인지 판단
+            const errorCode = String(error?.code || error?.message || '');
+            const isLoadError = errorCode.includes('load') || errorCode.includes('LOAD');
+            const isShowError = errorCode.includes('show') || errorCode.includes('SHOW') || errorCode.includes('present');
+            
+            // internal-error는 무시하거나 특별 처리
+            const isInternalError = errorCode.includes('internal-error') || errorCode.includes('Internal error');
+            if (isInternalError) {
+              console.warn('⚠️ [광고] internal-error 발생 (무시):', errorCode);
+              // internal-error는 재시도 로직에서 처리되므로 여기서는 무시
+              return;
+            }
+            
+            if (isShowError && onFailedToShow) {
+              onFailedToShow(error);
+              // 표시 실패 시에는 onClosed를 호출하지 않음 (CLOSED 이벤트가 별도로 발생할 수 있음)
+            } else if (onFailedToLoad) {
+              onFailedToLoad(error);
+            } else {
+              onClosed();
+            }
+          } catch (handlerError: any) {
+            console.error('❌ [광고] ERROR 이벤트 핸들러 실행 중 오류:', handlerError?.message);
+          }
+        });
+      } catch (addListenerError: any) {
+        // ERROR 이벤트 리스너 등록 실패 시 경고만 출력하고 계속 진행
+        // internal-error가 발생할 수 있으므로 실패해도 다른 이벤트 리스너는 계속 등록
+        console.warn('⚠️ [광고] ERROR 이벤트 리스너 등록 실패 (계속 진행):', addListenerError?.message);
+        unsubscribeFailed = null;
+      }
     } catch (e: any) {
       console.error('❌ [광고] ERROR 이벤트 리스너 등록 실패:', e?.message);
     }

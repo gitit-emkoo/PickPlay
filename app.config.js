@@ -1,15 +1,17 @@
 module.exports = {
   expo: {
     name: 'pickplay',
-    slug: 'pickplay',
+    slug: 'today-balance',
     scheme: 'pickplay',
-    version: '2.0.2',
+    version: '2.1.1',
+    runtimeVersion: '2.1.1',
     extra: {
       eas: {
-        projectId: 'f0389889-654e-4120-8839-8b795ff4b641'
+        projectId: '14d1ecb2-a3c0-4425-ac97-0ec33b289905'
       },
       'react-native-google-mobile-ads': {
-        ios_app_id: 'ca-app-pub-3940256099942544~1458002511'
+        ios_app_id: 'ca-app-pub-2555567440328829~5483134579',
+        android_app_id: 'ca-app-pub-2555567440328829~4208779024'
       }
     },
     orientation: 'portrait',
@@ -18,7 +20,7 @@ module.exports = {
     splash: {
       image: './assets/images/splash-icon.png',
       resizeMode: 'contain',
-      backgroundColor: '#ffffff'
+      backgroundColor: '#0060CD'
     },
     assetBundlePatterns: [
       '**/*'
@@ -28,13 +30,13 @@ module.exports = {
       bundleIdentifier: 'com.pickplay.kwcc',
       googleServicesFile: './GoogleService-Info.plist',
       infoPlist: {
-        // TODO: 실배포 시 실제 AdMob 앱 ID(아래 주석)로 교체하세요.
-        // 'ca-app-pub-2555567440328829~5483134579'
-        GADApplicationIdentifier: 'ca-app-pub-3940256099942544~1458002511',
+        GADApplicationIdentifier: 'ca-app-pub-2555567440328829~5483134579',
         NSUserTrackingUsageDescription: '이 정보를 사용하여 더 관련성 높은 맞춤형 광고를 제공합니다.'
       }
     },
     android: {
+      package: 'com.pickplay.kwcc',
+      googleServicesFile: './google-services.json',
       adaptiveIcon: {
         foregroundImage: './assets/images/adaptive-icon.png',
         backgroundColor: '#ffffff'
@@ -61,6 +63,9 @@ module.exports = {
               'GCC_PREPROCESSOR_DEFINITIONS': '$(inherited) FOLLY_NO_CONFIG=1 FOLLY_HAS_COROUTINES=0',
               'CLANG_CXX_LANGUAGE_STANDARD': 'gnu++20'
             }
+          },
+          android: {
+            targetSdkVersion: 35
           }
         }
       ],
@@ -70,6 +75,7 @@ module.exports = {
     ]
   },
   'react-native-google-mobile-ads': {
-    ios_app_id: 'ca-app-pub-3940256099942544~1458002511'
+    ios_app_id: 'ca-app-pub-2555567440328829~5483134579',
+    android_app_id: 'ca-app-pub-2555567440328829~4208779024'
   }
 };

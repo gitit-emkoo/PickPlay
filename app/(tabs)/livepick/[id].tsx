@@ -206,6 +206,16 @@ export default function QuestionDetailScreen() {
     
     const setupAd = async (isRetry = false) => {
       try {
+        // 이전 광고 객체가 있으면 정리
+        if (rewardedAdRef.current && unsubscribe) {
+          try {
+            unsubscribe();
+          } catch (e) {
+            console.warn('⚠️ [LivePick] 이전 광고 리스너 정리 실패:', e);
+          }
+          rewardedAdRef.current = null;
+        }
+        
         // 메인 화면과 동일한 함수 사용
         const ad = await createRewardedInterstitial();
         rewardedAdRef.current = ad;
@@ -248,19 +258,33 @@ export default function QuestionDetailScreen() {
             }
           },
           onFailedToShow: (error: any) => {
-            console.error('❌ [LivePick] 광고 표시 실패:', error?.message);
+            // 개발 모드에서만 에러 로그 표시
+            if (__DEV__) {
+              console.error('❌ [LivePick] 광고 표시 실패:', error?.message);
+            }
             setAdLoaded(false);
             setIsLoadingAd(false);
-            Alert.alert('광고 오류', `광고를 표시할 수 없습니다: ${error?.message || '알 수 없는 오류'}`);
+            // 광고가 준비되지 않았을 때 사용자 친화적인 메시지 표시
+            Alert.alert('광고 준비 중', '광고를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
           },
           onFailedToLoad: (error: any) => {
-            console.error(`❌ [LivePick] 광고 로드 실패 (${retryCount + 1}/${MAX_RETRIES}):`, error?.message);
+            const errorMessage = error?.message || String(error || '알 수 없는 오류');
+            const isInternalError = errorMessage.includes('internal-error') || errorMessage.includes('Internal error');
+            
+            console.error(`❌ [LivePick] 광고 로드 실패 (${retryCount + 1}/${MAX_RETRIES}):`, errorMessage);
+            console.error(`❌ [LivePick] 에러 상세:`, JSON.stringify(error, null, 2));
+            
             setAdLoaded(false);
             setIsLoadingAd(false);
             
             if (retryCount < MAX_RETRIES) {
               retryCount++;
-              setTimeout(() => setupAd(true), retryCount * 1000);
+              // internal-error의 경우 더 긴 대기 시간 (SDK 초기화 대기)
+              const waitTime = isInternalError ? retryCount * 2000 : retryCount * 1000;
+              console.log(`⏳ [LivePick] ${waitTime}ms 후 재시도... (internal-error: ${isInternalError})`);
+              setTimeout(() => setupAd(true), waitTime);
+            } else {
+              console.error(`❌ [LivePick] 광고 로드 최종 실패 (${MAX_RETRIES}회 재시도 완료)`);
             }
           }
         });
@@ -406,11 +430,13 @@ export default function QuestionDetailScreen() {
 
       // 튜토리얼 상태 업데이트 (라이브픽 참여)
       try {
-        const updatedData = await updateTutorialProgress(user.uid, 'livepickParticipated');
+        const result = await updateTutorialProgress(user.uid, 'livepickParticipated');
         // 참여 완료 시 축하 팝업 표시 (단, livepickCreated는 아직 안 됨)
-        if (updatedData?.tutorial?.mainAnswered && 
-            updatedData?.tutorial?.livepickParticipated &&
-            !updatedData?.tutorial?.livepickCreated) {
+        // 실제로 업데이트가 수행되었을 때만 축하 팝업 표시 (첫 번째 참여만)
+        if (result?.wasUpdated && 
+            result.userData?.tutorial?.mainAnswered && 
+            result.userData?.tutorial?.livepickParticipated &&
+            !result.userData?.tutorial?.livepickCreated) {
           // 보상 모달이 닫힌 후 축하 팝업 표시
           setTimeout(() => {
             setShowCongratulationModal(true);
@@ -456,7 +482,7 @@ export default function QuestionDetailScreen() {
     
     if (!rewardedAdRef.current) {
       console.log('⏳ [LivePick] 광고 객체가 없음');
-      Alert.alert('광고 준비 중', '광고를 불러오는 중입니다. 잠시만 기다려주세요.');
+      Alert.alert('알림', '아직 광고가 로드중입니다. 잠시후 다시 시도하세요.');
       setIsLoadingAd(true);
         return;
       }
@@ -488,11 +514,14 @@ export default function QuestionDetailScreen() {
               rewardedAdRef.current.show();
               console.log('✅ [LivePick] 광고 표시 시작 (로드 완료 후)');
             } catch (error: any) {
-              console.error('❌ [LivePick] 광고 표시 실패:', error?.message);
-              Alert.alert('광고 오류', error?.message || '광고를 표시할 수 없습니다.');
+              // 개발 모드에서만 에러 로그 표시
+              if (__DEV__) {
+                console.error('❌ [LivePick] 광고 표시 실패:', error?.message);
+              }
+              Alert.alert('광고 준비 중', '광고를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
             }
           } else {
-            Alert.alert('광고 로드 실패', '광고를 불러오는 데 시간이 걸리고 있습니다.');
+            Alert.alert('알림', '아직 광고가 로드중입니다. 잠시후 다시 시도하세요.');
           }
         }
       }, 500);
@@ -502,7 +531,7 @@ export default function QuestionDetailScreen() {
     
     // 광고가 이미 로드된 경우 표시
     if (!rewardedAdRef.current) {
-      Alert.alert('광고 오류', '광고 객체가 준비되지 않았습니다.');
+      Alert.alert('알림', '아직 광고가 로드중입니다. 잠시후 다시 시도하세요.');
       return;
     }
     
@@ -521,14 +550,21 @@ export default function QuestionDetailScreen() {
           try {
             rewardedAdRef.current?.show();
           } catch (retryError: any) {
-            console.error('❌ [LivePick] 광고 표시 재시도 실패:', retryError?.message);
-            Alert.alert('광고 오류', '광고를 표시할 수 없습니다. 잠시 후 다시 시도해주세요.');
+            // 개발 모드에서만 에러 로그 표시
+            if (__DEV__) {
+              console.error('❌ [LivePick] 광고 표시 재시도 실패:', retryError?.message);
+            }
+            Alert.alert('광고 준비 중', '광고를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
             setAdLoaded(false);
           }
         }, 500);
       } else {
-        console.error('❌ [LivePick] 광고 표시 실패:', errorMessage);
-        Alert.alert('광고 오류', errorMessage || '광고를 표시할 수 없습니다.');
+        // 개발 모드에서만 에러 로그 표시
+        if (__DEV__) {
+          console.error('❌ [LivePick] 광고 표시 실패:', errorMessage);
+        }
+        // 광고가 준비되지 않았을 때 사용자 친화적인 메시지 표시
+        Alert.alert('광고 준비 중', '광고를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
         setAdLoaded(false);
       }
     }
@@ -659,7 +695,10 @@ export default function QuestionDetailScreen() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => router.push('/(tabs)/livepick')}
+          onPress={() => {
+            // 목록 화면으로 이동 (목록 화면이 다시 마운트되면 자동으로 갱신됨)
+            router.push('/(tabs)/livepick');
+          }}
           activeOpacity={0.7}
         >
           <Ionicons name="arrow-back" size={24} color={colors.text} />
@@ -668,7 +707,10 @@ export default function QuestionDetailScreen() {
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+      <ScrollView 
+        style={styles.content} 
+        contentContainerStyle={styles.contentContainer}
+      >
         {/* 질문 제목 */}
         <Text style={styles.questionTitle}>{question.title}</Text>
 
@@ -799,6 +841,22 @@ export default function QuestionDetailScreen() {
             </Text>
           </TouchableOpacity>
         )}
+
+        {/* 다른 질문 보기 버튼 (스크롤 하단) */}
+        <TouchableOpacity
+          style={styles.goToListButton}
+          onPress={async () => {
+            // 목록 화면으로 이동하면서 강제로 새로고침
+            // 약간의 딜레이를 주어 Firestore 인덱싱 시간 확보
+            await new Promise(resolve => setTimeout(resolve, 500));
+            // router.push를 사용하여 화면 스택에 추가 (replace는 완전히 교체하므로 포커스 이벤트가 발생하지 않을 수 있음)
+            router.push('/(tabs)/livepick');
+          }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="list" size={20} color="white" />
+          <Text style={styles.goToListButtonText}>다른 질문 보기</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       {/* 참여 모달 */}
@@ -839,7 +897,11 @@ export default function QuestionDetailScreen() {
         visible={showRewardModal}
         points={rewardPoints}
         isLadderReward={isLadderReward}
-        onClose={handleRewardModalClose}
+        onClose={() => {
+          setShowRewardModal(false);
+          // 목록 화면으로 돌아가서 투표 결과가 반영되도록
+          router.push('/(tabs)/livepick');
+        }}
       />
 
       {/* 축하 팝업 (라이브픽 참여 완료) */}
@@ -1328,6 +1390,23 @@ const styles = StyleSheet.create({
     color: colors.textLight,
     textAlign: 'right',
     marginTop: 4,
+  },
+  goToListButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    marginTop: 24,
+    marginBottom: 20,
+  },
+  goToListButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: 'white',
   },
   reportSubmitButton: {
     backgroundColor: colors.error,

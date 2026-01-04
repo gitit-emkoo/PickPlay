@@ -1,12 +1,55 @@
 import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 let signingIn = false;
 let inflight: Promise<FirebaseAuthTypes.User | null> | null = null;
 let unsub: (() => void) | null = null;
+let ensureAuthRetryCount = 0;
+const MAX_ENSURE_AUTH_RETRIES = 3;
+
+/**
+ * 이전 Firebase UID를 AsyncStorage에 저장합니다.
+ * 앱 업데이트 시 새로운 UID가 생성되면, 이전 UID를 사용하여 기존 사용자 데이터를 복구할 수 있습니다.
+ * 중요: 기존 previousUID가 있으면 덮어쓰지 않습니다 (복구 로직에서 사용되므로).
+ */
+async function savePreviousUID(uid: string, force: boolean = false): Promise<void> {
+  try {
+    // force가 false이고 기존 previousUID가 있으면 덮어쓰지 않음
+    if (!force) {
+      const existingPreviousUID = await AsyncStorage.getItem('previousFirebaseUID');
+      if (existingPreviousUID && existingPreviousUID !== uid) {
+        console.log(`[savePreviousUID] ⚠️ 기존 previousUID 발견 (${existingPreviousUID}). 덮어쓰지 않음 (복구 로직 보호)`);
+        return;
+      }
+    }
+    
+    await AsyncStorage.setItem('previousFirebaseUID', uid);
+    console.log(`[savePreviousUID] 이전 Firebase UID 저장 완료: ${uid}`);
+  } catch (error) {
+    console.error('[savePreviousUID] 저장 실패:', error);
+  }
+}
+
+/**
+ * AsyncStorage에 저장된 이전 Firebase UID를 가져옵니다.
+ */
+export async function getPreviousUID(): Promise<string | null> {
+  try {
+    const previousUID = await AsyncStorage.getItem('previousFirebaseUID');
+    if (previousUID) {
+      console.log(`[getPreviousUID] 이전 Firebase UID 발견: ${previousUID}`);
+    }
+    return previousUID;
+  } catch (error) {
+    console.error('[getPreviousUID] 읽기 실패:', error);
+    return null;
+  }
+}
 
 /**
  * Firebase가 초기화될 때까지 대기합니다.
  * React Native Firebase는 네이티브 모듈이므로, auth() 호출을 시도하여 초기화 여부를 확인합니다.
+ * 실패 시 false를 반환하여 앱 크래시를 방지합니다.
  */
 async function waitForFirebase(maxRetries = 20, initialDelay = 200, maxDelay = 1000): Promise<boolean> {
   console.log(`[waitForFirebase] 시작 - 최대 ${maxRetries}회 재시도`);
@@ -45,39 +88,71 @@ async function waitForFirebase(maxRetries = 20, initialDelay = 200, maxDelay = 1
           console.error(`[waitForFirebase] ❌ 최대 재시도 횟수(${maxRetries}) 초과`);
         }
       } else {
-        // 다른 에러는 즉시 throw
-        console.error(`[waitForFirebase] ❌ 예상치 못한 에러 발생, 즉시 종료`);
-        throw error;
+        // 다른 에러도 크래시 방지를 위해 false 반환
+        console.error(`[waitForFirebase] ❌ 예상치 못한 에러 발생, false 반환 (크래시 방지)`);
+        console.error(`[waitForFirebase] 에러 상세:`, error);
+        return false;
       }
     }
   }
-  // 최대 재시도 횟수 초과
+  // 최대 재시도 횟수 초과 - 크래시 방지를 위해 false 반환
   console.error(`[waitForFirebase] ❌ Firebase 초기화 시간 초과 (${maxRetries}회 시도 실패)`);
-  throw new Error('Firebase 초기화 시간 초과');
+  console.error(`[waitForFirebase] ⚠️ false 반환하여 앱 크래시 방지`);
+  return false;
 }
 
 /**
  * 중복 호출을 막고, 모든 호출자가 같은 Promise를 공유합니다.
+ * 재시도 횟수를 제한하여 무한 루프를 방지합니다.
+ */
+/**
+ * 익명 로그인을 수행합니다.
+ * 주의: 이 함수는 watchAuth의 onAuthStateChanged가 첫 번째 호출을 마친 후에만 호출되어야 합니다.
+ * 그렇지 않으면 토큰 복원 전에 새 계정을 생성할 수 있습니다.
  */
 export async function ensureAnonymousAuth(): Promise<FirebaseAuthTypes.User | null> {
-  console.log('[ensureAnonymousAuth] 시작');
+  console.log(`[ensureAnonymousAuth] 시작 (재시도 횟수: ${ensureAuthRetryCount}/${MAX_ENSURE_AUTH_RETRIES})`);
+  
+  // 재시도 횟수 제한 확인
+  if (ensureAuthRetryCount >= MAX_ENSURE_AUTH_RETRIES) {
+    console.error(`[ensureAnonymousAuth] ❌ 최대 재시도 횟수(${MAX_ENSURE_AUTH_RETRIES}) 초과, null 반환하여 크래시 방지`);
+    ensureAuthRetryCount = 0; // 리셋
+    return null;
+  }
   
   // Firebase 초기화 대기
   try {
     console.log('[ensureAnonymousAuth] Firebase 초기화 대기 중...');
-    await waitForFirebase();
+    const firebaseReady = await waitForFirebase();
+    if (!firebaseReady) {
+      console.warn('[ensureAnonymousAuth] ❌ Firebase 초기화 실패, 재시도 중...');
+      ensureAuthRetryCount++;
+      await new Promise(resolve => setTimeout(resolve, 500));
+      return ensureAnonymousAuth(); // 재시도
+    }
     console.log('[ensureAnonymousAuth] ✅ Firebase 초기화 완료');
+    ensureAuthRetryCount = 0; // 성공 시 리셋
   } catch (error) {
-    console.warn('[ensureAnonymousAuth] ❌ Firebase 초기화 대기 실패, 재시도 중...', error);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    return ensureAnonymousAuth(); // 재시도
+    console.warn('[ensureAnonymousAuth] ❌ Firebase 초기화 대기 중 예외 발생:', error);
+    ensureAuthRetryCount++;
+    if (ensureAuthRetryCount < MAX_ENSURE_AUTH_RETRIES) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      return ensureAnonymousAuth(); // 재시도
+    } else {
+      console.error(`[ensureAnonymousAuth] ❌ 최대 재시도 횟수(${MAX_ENSURE_AUTH_RETRIES}) 초과, null 반환`);
+      ensureAuthRetryCount = 0; // 리셋
+      return null;
+    }
   }
   
   try {
+    // 현재 사용자 확인 (이미 토큰이 복원되어 있을 수 있음)
     console.log('[ensureAnonymousAuth] currentUser 확인 중...');
     const current = auth().currentUser;
     if (current) {
       console.log(`[ensureAnonymousAuth] ✅ 기존 사용자 발견: ${current.uid}`);
+      // previousUID 덮어쓰기 방지: 기존 previousUID가 있으면 덮어쓰지 않음
+      await savePreviousUID(current.uid, false);
       return Promise.resolve(current);
     }
     
@@ -86,12 +161,31 @@ export async function ensureAnonymousAuth(): Promise<FirebaseAuthTypes.User | nu
       return inflight;
     }
 
+    // 이전 UID 확인 (앱 업데이트 시 새로운 UID가 생성되었을 수 있음)
+    const previousUID = await getPreviousUID();
+    if (previousUID) {
+      console.log(`[ensureAnonymousAuth] 이전 Firebase UID 발견: ${previousUID}`);
+    }
+
     console.log('[ensureAnonymousAuth] 익명 로그인 시작...');
     signingIn = true;
     inflight = auth()
       .signInAnonymously()
-      .then(res => {
-        console.log(`[ensureAnonymousAuth] ✅ 익명 로그인 성공: ${res.user.uid}`);
+      .then(async res => {
+        const newUID = res.user.uid;
+        console.log(`[ensureAnonymousAuth] ✅ 익명 로그인 성공: ${newUID}`);
+        
+        // 이전 UID와 다르면 이전 UID 유지 (앱 업데이트로 인한 새로운 UID 생성)
+        // 이전 UID는 복구 로직에서 사용되므로 덮어쓰지 않음
+        if (previousUID && previousUID !== newUID) {
+          console.log(`[ensureAnonymousAuth] ⚠️ 새로운 UID 생성됨 (이전: ${previousUID}, 새: ${newUID})`);
+          console.log(`[ensureAnonymousAuth] 이전 UID는 유지하여 복구 로직에서 사용`);
+          // 이전 UID를 유지하므로 새 UID를 저장하지 않음
+        } else {
+          // 이전 UID가 없거나 같으면 현재 UID 저장
+          await savePreviousUID(newUID);
+        }
+        
         return res.user;
       })
       .catch(err => {
@@ -110,19 +204,41 @@ export async function ensureAnonymousAuth(): Promise<FirebaseAuthTypes.User | nu
     console.error('[ensureAnonymousAuth] ❌ 에러 발생:', errorMessage);
     
     if (errorMessage.includes("No Firebase App '[DEFAULT]'")) {
-      console.warn('[ensureAnonymousAuth] Firebase 초기화 대기 중, 재시도...');
-      await new Promise(resolve => setTimeout(resolve, 500));
-      return ensureAnonymousAuth(); // 재시도
+      ensureAuthRetryCount++;
+      if (ensureAuthRetryCount < MAX_ENSURE_AUTH_RETRIES) {
+        console.warn(`[ensureAnonymousAuth] Firebase 초기화 대기 중, 재시도... (${ensureAuthRetryCount}/${MAX_ENSURE_AUTH_RETRIES})`);
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return ensureAnonymousAuth(); // 재시도
+      } else {
+        console.error(`[ensureAnonymousAuth] ❌ 최대 재시도 횟수(${MAX_ENSURE_AUTH_RETRIES}) 초과, null 반환`);
+        ensureAuthRetryCount = 0; // 리셋
+        return null;
+      }
     }
-    throw error;
+    // 다른 에러도 크래시 방지를 위해 null 반환
+    console.error('[ensureAnonymousAuth] ❌ 예상치 못한 에러, null 반환하여 크래시 방지');
+    ensureAuthRetryCount = 0; // 리셋
+    return null;
   }
 }
 
+let watchAuthRetryCount = 0;
+const MAX_WATCH_AUTH_RETRIES = 3;
+
 /**
  * 단 하나의 상태 리스너만 유지 + 비로그인 시 1회만 로그인 시도합니다.
+ * 재시도 횟수를 제한하여 무한 루프를 방지합니다.
  */
 export function watchAuth(cb: (user: { uid: string } | null) => void): () => void {
-  console.log('[watchAuth] 시작');
+  console.log(`[watchAuth] 시작 (재시도 횟수: ${watchAuthRetryCount}/${MAX_WATCH_AUTH_RETRIES})`);
+  
+  // 재시도 횟수 제한 확인
+  if (watchAuthRetryCount >= MAX_WATCH_AUTH_RETRIES) {
+    console.error(`[watchAuth] ❌ 최대 재시도 횟수(${MAX_WATCH_AUTH_RETRIES}) 초과, null 콜백 호출하여 크래시 방지`);
+    watchAuthRetryCount = 0; // 리셋
+    cb(null);
+    return () => {}; // 빈 cleanup 함수 반환
+  }
   
   if (unsub) {
     console.log('[watchAuth] 기존 리스너 제거');
@@ -132,29 +248,72 @@ export function watchAuth(cb: (user: { uid: string } | null) => void): () => voi
   // Firebase 초기화를 기다린 후 리스너 등록
   console.log('[watchAuth] Firebase 초기화 대기 시작...');
   waitForFirebase()
-    .then(() => {
+    .then((firebaseReady) => {
+      if (!firebaseReady) {
+        console.warn('[watchAuth] ❌ Firebase 초기화 실패, 재시도 중...');
+        watchAuthRetryCount++;
+        setTimeout(() => {
+          watchAuth(cb);
+        }, 2000);
+        return;
+      }
+      watchAuthRetryCount = 0; // 성공 시 리셋
       console.log('[watchAuth] ✅ Firebase 초기화 완료, 리스너 등록 시도...');
       try {
+        // onAuthStateChanged가 첫 번째 호출(기존 유저 여부 확인)을 마칠 때까지 기다림
+        // 이렇게 해야 토큰 복원이 완료된 후에 새 계정을 생성할 수 있음
+        // 제안된 패턴: onAuthStateChanged 내부에서 직접 signInAnonymously() 호출
+        let firstCallCompleted = false;
+        let hasAttemptedSignIn = false; // 익명 로그인 시도 여부 추적 (중복 방지)
+        
         unsub = auth().onAuthStateChanged(async (u) => {
           console.log(`[watchAuth] 🔔 onAuthStateChanged 호출됨: ${u ? `사용자 있음 (${u.uid})` : '사용자 없음'}`);
           
+          // 첫 번째 호출 완료 표시
+          if (!firstCallCompleted) {
+            firstCallCompleted = true;
+            console.log(`[watchAuth] ✅ onAuthStateChanged 첫 번째 호출 완료 (기존 유저 여부 확인 완료, null: ${u === null})`);
+          }
+          
+          // ✅ 기존 유저가 존재함! 유저의 UID를 사용하면 됩니다.
           if (u) {
-            console.log(`[watchAuth] ✅ 사용자 인증됨: ${u.uid}`);
+            console.log(`[watchAuth] ✅ 기존 유저가 존재함! 유저의 UID를 사용: ${u.uid}`);
+            // previousUID 덮어쓰기 방지: 기존 previousUID가 있으면 덮어쓰지 않음
+            await savePreviousUID(u.uid, false);
             cb({ uid: u.uid });
             return;
           }
           
-          if (!signingIn) {
-            console.log('[watchAuth] 로그인되지 않음, 익명 로그인 시도...');
+          // ❌ 유저가 없을 때만 익명 로그인 진행
+          // 첫 번째 호출이 완료되었고, 이미 시도하지 않았고, 로그인 진행 중이 아닐 때만
+          if (firstCallCompleted && !hasAttemptedSignIn && !signingIn) {
+            hasAttemptedSignIn = true; // 중복 시도 방지
+            console.log('[watchAuth] ❌ 유저가 없음 - 익명 로그인 진행');
+            
             try {
-              const user = await ensureAnonymousAuth();
-              console.log(`[watchAuth] 익명 로그인 결과: ${user ? `성공 (${user.uid})` : '실패'}`);
-              cb(user ? { uid: user.uid } : null);
-            } catch (error) {
-              console.warn('[watchAuth] ❌ ensureAnonymousAuth 실패:', error);
+              // onAuthStateChanged 내부에서 직접 signInAnonymously() 호출
+              // (토큰 복원이 완료된 후이므로 안전함)
+              signingIn = true;
+              const credential = await auth().signInAnonymously();
+              const newUser = credential.user;
+              console.log(`[watchAuth] ✅ 신규 익명 계정 생성: ${newUser.uid}`);
+              
+              // previousUID 저장 (새 계정이므로 저장)
+              await savePreviousUID(newUser.uid, true);
+              
+              cb({ uid: newUser.uid });
+            } catch (error: any) {
+              console.error('[watchAuth] ❌ 익명 로그인 실패:', error?.code || error?.message || error);
+              hasAttemptedSignIn = false; // 실패 시 재시도 가능하도록
               cb(null);
+            } finally {
+              signingIn = false;
             }
-          } else {
+          } else if (!firstCallCompleted) {
+            console.log('[watchAuth] ⏳ 첫 번째 호출 대기 중... (토큰 복원 대기)');
+          } else if (hasAttemptedSignIn) {
+            console.log('[watchAuth] 이미 익명 로그인 시도 완료, 대기...');
+          } else if (signingIn) {
             console.log('[watchAuth] 이미 로그인 진행 중, 대기...');
           }
         });
@@ -164,24 +323,37 @@ export function watchAuth(cb: (user: { uid: string } | null) => void): () => voi
         console.error('[watchAuth] ❌ 리스너 등록 실패:', errorMessage);
         
         if (errorMessage.includes("No Firebase App '[DEFAULT]'")) {
-          console.warn('[watchAuth] Firebase 초기화 대기 중, 1초 후 재시도...');
-          // 재시도 (더 긴 대기 시간)
-          setTimeout(() => {
-            watchAuth(cb);
-          }, 1000);
+          watchAuthRetryCount++;
+          if (watchAuthRetryCount < MAX_WATCH_AUTH_RETRIES) {
+            console.warn(`[watchAuth] Firebase 초기화 대기 중, 1초 후 재시도... (${watchAuthRetryCount}/${MAX_WATCH_AUTH_RETRIES})`);
+            setTimeout(() => {
+              watchAuth(cb);
+            }, 1000);
+          } else {
+            console.error(`[watchAuth] ❌ 최대 재시도 횟수(${MAX_WATCH_AUTH_RETRIES}) 초과, null 콜백 호출`);
+            watchAuthRetryCount = 0; // 리셋
+            cb(null);
+          }
         } else {
           console.error('[watchAuth] 예상치 못한 에러:', error);
+          watchAuthRetryCount = 0; // 리셋
           cb(null);
         }
       }
     })
     .catch((error) => {
-      console.warn('[watchAuth] ❌ Firebase 초기화 실패, 2초 후 재시도...', error?.message || error);
-      // 에러가 발생해도 앱이 계속 실행되도록 재시도
-      setTimeout(() => {
-        console.log('[watchAuth] 재시도 시작...');
-        watchAuth(cb);
-      }, 2000);
+      watchAuthRetryCount++;
+      if (watchAuthRetryCount < MAX_WATCH_AUTH_RETRIES) {
+        console.warn(`[watchAuth] ❌ Firebase 초기화 실패, 2초 후 재시도... (${watchAuthRetryCount}/${MAX_WATCH_AUTH_RETRIES})`, error?.message || error);
+        setTimeout(() => {
+          console.log('[watchAuth] 재시도 시작...');
+          watchAuth(cb);
+        }, 2000);
+      } else {
+        console.error(`[watchAuth] ❌ 최대 재시도 횟수(${MAX_WATCH_AUTH_RETRIES}) 초과, null 콜백 호출하여 크래시 방지`);
+        watchAuthRetryCount = 0; // 리셋
+        cb(null);
+      }
     });
 
   return () => {

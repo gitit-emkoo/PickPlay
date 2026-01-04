@@ -53,6 +53,13 @@ export function subscribeUnreadCount(
   uid: string,
   callback: (count: number) => void
 ): () => void {
+  // uid가 없거나 유효하지 않은 경우 즉시 0 반환
+  if (!uid || typeof uid !== 'string' || uid.trim().length === 0) {
+    console.warn('⚠️ [Notifications] 유효하지 않은 UID로 구독 시도:', uid);
+    callback(0);
+    return () => {}; // 빈 해제 함수 반환
+  }
+
   const unsubscribe = firestore()
     .collection(COLLECTION)
     .where('uid', '==', uid)
@@ -61,9 +68,23 @@ export function subscribeUnreadCount(
       (snapshot) => {
         callback(snapshot.size);
       },
-      (error) => {
-        console.error('❌ [Notifications] 읽지 않은 알림 개수 구독 실패:', error);
-        callback(0);
+      (error: any) => {
+        // 새 유저의 경우 컬렉션이 없거나 인덱스가 없을 수 있으므로 에러를 경고로만 처리
+        // permission-denied나 not-found 에러는 새 유저에게 정상적인 상황일 수 있음
+        const errorCode = error?.code || '';
+        const isExpectedError = 
+          errorCode === 'permission-denied' || 
+          errorCode === 'not-found' ||
+          errorCode === 'failed-precondition' || // 인덱스가 없는 경우
+          error?.message?.includes('index') || // 인덱스 관련 에러
+          error?.message?.includes('permission'); // 권한 관련 에러
+        
+        if (isExpectedError) {
+          console.warn('⚠️ [Notifications] 읽지 않은 알림 개수 구독 실패 (새 유저 또는 인덱스 없음):', errorCode);
+        } else {
+          console.error('❌ [Notifications] 읽지 않은 알림 개수 구독 실패:', error);
+        }
+        callback(0); // 에러 발생 시 0으로 설정
       }
     );
   

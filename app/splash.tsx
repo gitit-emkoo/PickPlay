@@ -39,7 +39,7 @@ export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
     let dots = 0;
     const loadingInterval = setInterval(() => {
       dots = (dots + 1) % 4;
-      setLoadingText('조금만 기다려주세요' + '🎄'.repeat(dots));
+      setLoadingText('조금만 기다려주세요' + '🧧'.repeat(dots));
     }, 500);
 
     // 3초 후 메인 화면으로 이동
@@ -95,6 +95,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 60,
     paddingHorizontal: 20,
+    // 네비게이션 바를 포함한 하단 컴포넌트를 모두 가리도록 전체 화면 오버레이
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
   },
   logoContainer: {
     alignItems: 'center',
