@@ -1,4 +1,4 @@
-import * as functions from 'firebase-functions';
+﻿import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import OpenAI from 'openai';
 import { Expo } from 'expo-server-sdk';
@@ -49,7 +49,7 @@ async function sendUserPushNotification(
 
 // OpenAI 클라이언트 초기화
 const openai = new OpenAI({
-  apiKey: functions.config().openai?.api_key || process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY || '',
 });
 
 /**
@@ -104,7 +104,7 @@ export const generateTags = functions
       });
 
       // OpenAI API 키 확인
-      const apiKey = functions.config().openai?.api_key || process.env.OPENAI_API_KEY;
+      const apiKey = process.env.OPENAI_API_KEY;
       if (!apiKey) {
         console.warn(`[generateTags] OpenAI API 키가 설정되지 않았습니다. 폴백 태그를 사용합니다.`);
         throw new Error('OpenAI API 키가 설정되지 않았습니다.');
@@ -1660,16 +1660,6 @@ export const migrateUserData = functions
       );
     }
 
-<<<<<<< HEAD
-    // 관리자 이메일 목록 (Firestore 규칙과 일치)
-    const adminEmails: string[] = [
-      'admin@pickplay.kr', // 실제 관리자 이메일로 변경 필요
-    ];
-
-    // 권한 확인: 관리자이거나 targetUID가 본인인 경우만 허용
-    const userEmail = context.auth.token?.email || '';
-    const isAdmin = adminEmails.includes(userEmail);
-=======
     // 관리자 이메일 목록 (Firestore 규칙과 동일)
     const adminEmails: string[] = [
       'cream83779@gmail.com',
@@ -1679,7 +1669,6 @@ export const migrateUserData = functions
     // 권한 확인: 관리자이거나 targetUID가 본인인 경우만 허용
     const userEmail = context.auth.token.email as string | undefined;
     const isAdmin = userEmail ? adminEmails.includes(userEmail) : false;
->>>>>>> cb79e61 (愿由ъ옄 泥댄겕瑜??대찓??湲곕컲?쇰줈 ?섏젙 (Firestore 洹쒖튃怨??쇱튂))
     const isSelf = context.auth.uid === targetUID;
 
     if (!isAdmin && !isSelf) {
