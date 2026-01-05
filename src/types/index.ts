@@ -47,6 +47,18 @@ export interface UserData {
   lastAnswerDate: number; // YYYYMMDD 형식의 숫자
   nickname: string;
 
+  // --- 기기 식별 필드 (앱 재설치 시 복구용) ---
+  deviceUID?: string | null; // 기기 고유 ID (선택적, 이전 버전 사용자는 없을 수 있음)
+
+  // --- 튜토리얼 필드 ---
+  tutorial?: {
+    mainAnswered: boolean; // 메인 질문에 답변했는지
+    livepickParticipated: boolean; // 라이브픽 질문에 참여했는지
+    livepickCreated: boolean; // 라이브픽 질문을 생성했는지
+    rewardGiven500: boolean; // 500P 보상을 받았는지
+  };
+}
+
 // 공지사항 타입
 export interface Notice {
   title: string;
@@ -59,18 +71,6 @@ export interface Notice {
   endDate?: FirebaseFirestoreTypes.Timestamp | Date; // 게시 종료일 (선택적)
   createdAt?: FirebaseFirestoreTypes.Timestamp | Date;
   updatedAt?: FirebaseFirestoreTypes.Timestamp | Date;
-}
-  
-  // --- 기기 식별 필드 (앱 재설치 시 복구용) ---
-  deviceUID?: string | null; // 기기 고유 ID (선택적, 이전 버전 사용자는 없을 수 있음)
-
-  // --- 튜토리얼 필드 ---
-  tutorial?: {
-    mainAnswered: boolean; // 메인 질문에 답변했는지
-    livepickParticipated: boolean; // 라이브픽 질문에 참여했는지
-    livepickCreated: boolean; // 라이브픽 질문을 생성했는지
-    rewardGiven500: boolean; // 500P 보상을 받았는지
-  };
 }
 
 // 포인트 적립/소멸 내역
