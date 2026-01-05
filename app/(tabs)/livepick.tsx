@@ -68,7 +68,19 @@ export default function LivePickScreen() {
         // 튜토리얼 상태 로드
         try {
           const status = await getTutorialStatus(user.uid);
-          setTutorialStatus(status);
+          if (status) {
+            setTutorialStatus(status);
+          } else {
+            // 신규 유저의 경우 null이 반환될 수 있음
+            console.log('[Tutorial] 튜토리얼 상태 없음 (신규 유저일 수 있음)');
+            setTutorialStatus({
+              mainAnswered: false,
+              livepickParticipated: false,
+              livepickCreated: false,
+              rewardGiven500: false,
+              allCompleted: false,
+            });
+          }
           
           // 튜토리얼 말풍선 표시 여부 확인
           const [hasSeenLivepick, hasSeenCreate] = await Promise.all([
@@ -79,6 +91,14 @@ export default function LivePickScreen() {
           setHasSeenCreateTooltip(hasSeenCreate === 'true');
         } catch (e) {
           console.warn('[Tutorial] 튜토리얼 상태 로드 실패:', e);
+          // 에러 발생 시 기본값 설정
+          setTutorialStatus({
+            mainAnswered: false,
+            livepickParticipated: false,
+            livepickCreated: false,
+            rewardGiven500: false,
+            allCompleted: false,
+          });
         }
       }
     });
@@ -131,6 +151,11 @@ export default function LivePickScreen() {
       setHasMore(list.length === PAGE_SIZE);
     } catch (error: any) {
       console.error('❌ [LivePick] 질문 목록 초기 로드 실패:', error);
+      console.error('❌ 에러 타입:', typeof error);
+      console.error('❌ 에러 메시지:', error?.message);
+      console.error('❌ 에러 코드:', error?.code);
+      console.error('❌ 에러 스택:', error?.stack);
+      console.error('❌ 에러 전체:', JSON.stringify(error, null, 2));
       // 인기순 정렬 인덱스가 아직 생성되지 않은 경우 최신순으로 폴백
       if (error?.code === 'failed-precondition' && sortBy === 'popular') {
         try {
@@ -620,8 +645,8 @@ export default function LivePickScreen() {
             <Text style={styles.emptyText}>질문 목록을 불러오는 중...</Text>
           </View>
         ) : (() => {
-          // 검색 중이면 필터링된 결과를 표시, 아니면 페이지네이션된 결과 표시
-          const displayQuestions = searchQuery.trim() ? filteredQuestions : questions;
+          // 필터링된 결과를 항상 사용 (카테고리 필터 적용)
+          const displayQuestions = filteredQuestions;
 
           if (displayQuestions.length === 0) {
             return (

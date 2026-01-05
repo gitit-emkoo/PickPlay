@@ -22,7 +22,9 @@ import { createRewardedInterstitial, attachRewardedInterstitial, initAds } from 
 import PermissionIntroScreen from '../components/PermissionIntroScreen';
 import MaintenanceScreen from '../components/MaintenanceScreen';
 import UpdateModal from '../components/UpdateModal';
-import { getServiceStatusConfig, getAppVersionConfig, ServiceStatusConfig, AppVersionConfig } from '../../src/services/config';
+import NoticeModal from '../components/NoticeModal';
+import { getServiceStatusConfig, getAppVersionConfig, getNoticeConfig, ServiceStatusConfig, AppVersionConfig } from '../../src/services/config';
+import type { Notice } from '../../src/types';
 import { isVersionBelowMinimum, isVersionBelowCurrent } from '../../src/utils/version';
 import Constants from 'expo-constants';
 
@@ -42,6 +44,10 @@ export default function HomeScreen() {
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [isForceUpdate, setIsForceUpdate] = useState(false);
   const [updateMessage, setUpdateMessage] = useState('');
+
+  // 공지사항 상태
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [showNoticeModal, setShowNoticeModal] = useState(false);
 
   const [user, setUser] = useState<{ uid: string } | null>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
@@ -215,6 +221,50 @@ export default function HomeScreen() {
     checkUpdate();
   }, [checkingServiceStatus, serviceStatus]);
 
+  // 공지사항 체크 (업데이트 체크 후 실행)
+  useEffect(() => {
+    const checkNotice = async () => {
+      if (checkingServiceStatus) return; // 서비스 상태 체크 완료 후 실행
+      if (serviceStatus?.status === 'maintenance') return; // 점검 중이면 공지사항 체크 스킵
+      if (showUpdateModal) return; // 업데이트 모달이 열려있으면 공지사항 체크 스킵
+
+      try {
+        const noticeData = await getNoticeConfig();
+        if (!noticeData) {
+          console.log('[Notice] 공지사항 데이터 없음');
+          return;
+        }
+
+        console.log('[Notice] 공지사항 데이터 로드:', {
+          title: noticeData.title,
+          hasImageUrl: !!noticeData.imageUrl,
+          imageUrl: noticeData.imageUrl,
+        });
+        setNotice(noticeData);
+
+        // 오늘 그만보기 체크
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        const todayKey = `${year}${month}${day}`;
+        const dontShowTodayKey = `notice_dontShowToday_${noticeData.title}_${todayKey}`;
+        
+        const dontShowToday = await AsyncStorage.getItem(dontShowTodayKey);
+        if (!dontShowToday) {
+          console.log('[Notice] 공지사항 표시');
+          setShowNoticeModal(true);
+        } else {
+          console.log('[Notice] 오늘 그만보기 설정됨, 공지사항 표시 안 함');
+        }
+      } catch (error) {
+        console.error('[App] 공지사항 체크 실패:', error);
+      }
+    };
+
+    checkNotice();
+  }, [checkingServiceStatus, serviceStatus, showUpdateModal]);
+
   // 권한 안내 화면 완료
   const handlePermissionIntroComplete = async () => {
     setShowPermissionIntro(false);
@@ -247,6 +297,32 @@ export default function HomeScreen() {
       await AsyncStorage.setItem(dismissedKey, 'true');
     }
     setShowUpdateModal(false);
+  };
+
+  // 공지사항 모달 닫기
+  const handleNoticeClose = () => {
+    setShowNoticeModal(false);
+  };
+
+  // 공지사항 오늘 그만보기
+  const handleNoticeDontShowToday = async () => {
+    if (!notice) return;
+    
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const todayKey = `${year}${month}${day}`;
+    const dontShowTodayKey = `notice_dontShowToday_${notice.title}_${todayKey}`;
+    
+    try {
+      await AsyncStorage.setItem(dontShowTodayKey, 'true');
+      console.log(`[Notice] '${notice.title}' 오늘 그만보기 설정됨`);
+    } catch (error) {
+      console.error('[Notice] 오늘 그만보기 설정 실패:', error);
+    }
+    
+    setShowNoticeModal(false);
   };
 
   useEffect(() => {
@@ -520,6 +596,10 @@ export default function HomeScreen() {
           }
         } catch (e: any) {
           console.error('❌ 백그라운드 전체 로직 처리 실패:', e);
+          console.error('❌ 에러 타입:', typeof e);
+          console.error('❌ 에러 메시지:', e?.message);
+          console.error('❌ 에러 스택:', e?.stack);
+          console.error('❌ 에러 전체:', JSON.stringify(e, null, 2));
           // 에러 발생 시에도 UI는 이미 업데이트됨 (사용자 경험 유지)
         }
       } catch (e: any) {
@@ -1064,6 +1144,14 @@ export default function HomeScreen() {
       <NotificationModal
         visible={showNotificationModal}
         onClose={() => setShowNotificationModal(false)}
+      />
+
+      {/* 공지사항 모달 */}
+      <NoticeModal
+        visible={showNoticeModal}
+        notice={notice}
+        onClose={handleNoticeClose}
+        onDontShowToday={notice?.showDontShowToday ? handleNoticeDontShowToday : undefined}
       />
 
         </View>

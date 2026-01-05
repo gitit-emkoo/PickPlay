@@ -604,6 +604,18 @@ export default function MyPageScreen() {
 
           <TouchableOpacity 
             style={styles.menuItem}
+            onPress={() => openLink('https://pickplay.waveon.me/pages/1767583113427')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.menuLeft}>
+              <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
+              <Text style={styles.menuText}>신뢰운영원칙</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.textLight} />
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.menuItem}
             onPress={() => openLink('https://pickplay.waveon.me/pages/1757994427672')}
             activeOpacity={0.7}
           >

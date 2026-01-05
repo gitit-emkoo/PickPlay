@@ -127,13 +127,25 @@ service cloud.firestore {
                 && resource.data.tutorial.rewardGiven500 == false)
             )) ||
           
-          // 6. 게임 로직에서 자동 업데이트되는 필드들 (포인트 포함)
-          //    - 답변 제출, 연속 참여, 애니마코드 업데이트 등
+          // 6. 게임 로직에서 자동 업데이트되는 필드들
+          //    - 답변 제출 시: totalSelections, streakCount, lastAnswerDate만 업데이트
+          (request.resource.data.diff(resource.data).changedKeys().hasOnly(['totalSelections', 'streakCount', 'lastAnswerDate'])
+            && request.resource.data.streakCount >= resource.data.streakCount // 연속 참여는 증가 또는 유지
+            && request.resource.data.totalSelections >= resource.data.totalSelections // 총 선택 수는 증가만
+            && request.resource.data.totalSelections == resource.data.totalSelections + 1) || // 정확히 1 증가해야 함
+          
+          // 7. 포인트 변경 (포인트와 함께 다른 필드 업데이트 가능)
           (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['points', 'streakCount', 'totalSelections', 'lastAnswerDate', 'characterId', 'adjective1', 'adjective2'])
             && request.resource.data.points >= resource.data.points // 포인트는 증가만
             && request.resource.data.points - resource.data.points <= 1000 // 한 번에 최대 1000P
             && request.resource.data.streakCount >= resource.data.streakCount // 연속 참여는 증가 또는 유지
-            && request.resource.data.totalSelections >= resource.data.totalSelections) // 총 선택 수는 증가만
+            && request.resource.data.totalSelections >= resource.data.totalSelections) || // 총 선택 수는 증가만
+          
+          // 8. 애니마코드 업데이트 (characterId, adjective1, adjective2만)
+          (request.resource.data.diff(resource.data).changedKeys().hasOnly(['characterId', 'adjective1', 'adjective2'])
+            && (request.resource.data.characterId == null || request.resource.data.characterId is string)
+            && (request.resource.data.adjective1 == null || request.resource.data.adjective1 is string)
+            && (request.resource.data.adjective2 == null || request.resource.data.adjective2 is string))
         );
       
       // 삭제는 관리자만
@@ -252,12 +264,11 @@ service cloud.firestore {
         (isAdmin() 
           && request.resource.data.diff(resource.data).unchangedKeys().hasAll(['createdBy', 'title', 'option1', 'option2', 'pointDeducted', 'createdAt', 'participantCount', 'option1Count', 'option2Count', 'rewardGiven'])
           && request.resource.data.status in ['active', 'closed']) ||
-        // 일반 사용자는 참여 시 통계만 업데이트 가능
-        (resource.data.createdBy == request.auth.uid || true) // 질문 생성자 또는 누구나 (참여 시)
-          && request.resource.data.diff(resource.data).unchangedKeys().hasAll(['createdBy', 'title', 'option1', 'option2', 'pointDeducted', 'createdAt', 'status'])
+        // 일반 사용자는 참여 시 통계만 업데이트 가능 (인증된 사용자 누구나)
+        (request.resource.data.diff(resource.data).unchangedKeys().hasAll(['createdBy', 'title', 'option1', 'option2', 'pointDeducted', 'createdAt', 'status'])
           && request.resource.data.participantCount >= resource.data.participantCount
           && request.resource.data.option1Count >= resource.data.option1Count
-          && request.resource.data.option2Count >= resource.data.option2Count
+          && request.resource.data.option2Count >= resource.data.option2Count)
       );
       
       // 삭제는 관리자만

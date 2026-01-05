@@ -46,6 +46,20 @@ export interface UserData {
   streakCount: number;
   lastAnswerDate: number; // YYYYMMDD 형식의 숫자
   nickname: string;
+
+// 공지사항 타입
+export interface Notice {
+  title: string;
+  content: string;
+  imageUrl?: string;
+  deepLink?: string;
+  showDontShowToday: boolean;
+  isActive: boolean; // 게시/비게시
+  startDate?: FirebaseFirestoreTypes.Timestamp | Date; // 게시 시작일 (선택적)
+  endDate?: FirebaseFirestoreTypes.Timestamp | Date; // 게시 종료일 (선택적)
+  createdAt?: FirebaseFirestoreTypes.Timestamp | Date;
+  updatedAt?: FirebaseFirestoreTypes.Timestamp | Date;
+}
   
   // --- 기기 식별 필드 (앱 재설치 시 복구용) ---
   deviceUID?: string | null; // 기기 고유 ID (선택적, 이전 버전 사용자는 없을 수 있음)

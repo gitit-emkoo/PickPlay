@@ -217,13 +217,18 @@ export async function getLivePickQuestions(
       questions.push({
         id: doc.id,
         ...data,
-        createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt as any),
       } as LivePickQuestion);
     });
 
     return questions;
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ [LivePick] 질문 목록 조회 실패:', error);
+    console.error('❌ 에러 타입:', typeof error);
+    console.error('❌ 에러 메시지:', error?.message);
+    console.error('❌ 에러 코드:', error?.code);
+    console.error('❌ 에러 스택:', error?.stack);
+    console.error('❌ 에러 전체:', JSON.stringify(error, null, 2));
     throw error;
   }
 }
