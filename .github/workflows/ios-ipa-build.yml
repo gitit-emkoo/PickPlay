@@ -151,6 +151,16 @@ jobs:
           rm -rf ~/Library/Caches/CocoaPods 2>/dev/null || true
           echo "✅ CocoaPods cache cleaned"
 
+      # Remove Podfile.lock to resolve dependency conflicts
+      - name: Remove Podfile.lock to resolve dependency conflicts
+        run: |
+          cd "$PROJ_DIR"
+          if [ -f "ios/Podfile.lock" ]; then
+            echo "🧹 Removing Podfile.lock to resolve dependency conflicts..."
+            rm -f ios/Podfile.lock
+            echo "✅ Podfile.lock removed"
+          fi
+
       # Ensure CocoaPods Specs repo (fallback)
       - name: Ensure CocoaPods Specs repo (fallback)
         run: |
