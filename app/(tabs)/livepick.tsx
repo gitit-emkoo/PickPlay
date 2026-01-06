@@ -32,7 +32,9 @@ export default function LivePickScreen() {
     allCompleted: boolean;
   } | null>(null);
   
-  // 튜토리얼 말풍선 표시 여부 (한 번만 표시)
+  // 튜토리얼 말풍선 표시 여부 (한 번만 표시) - useRef로 관리하여 리렌더링 시에도 유지
+  const hasSeenLivepickTooltipRef = useRef(false);
+  const hasSeenCreateTooltipRef = useRef(false);
   const [hasSeenLivepickTooltip, setHasSeenLivepickTooltip] = useState(false);
   const [hasSeenCreateTooltip, setHasSeenCreateTooltip] = useState(false);
 
@@ -82,13 +84,17 @@ export default function LivePickScreen() {
             });
           }
           
-          // 튜토리얼 말풍선 표시 여부 확인
+          // 튜토리얼 말풍선 표시 여부 확인 (한 번만 로드하여 리렌더링 시에도 유지)
           const [hasSeenLivepick, hasSeenCreate] = await Promise.all([
             AsyncStorage.getItem('hasSeenLivepickTutorialTooltip'),
             AsyncStorage.getItem('hasSeenCreateTutorialTooltip'),
           ]);
-          setHasSeenLivepickTooltip(hasSeenLivepick === 'true');
-          setHasSeenCreateTooltip(hasSeenCreate === 'true');
+          const seenLivepick = hasSeenLivepick === 'true';
+          const seenCreate = hasSeenCreate === 'true';
+          hasSeenLivepickTooltipRef.current = seenLivepick;
+          hasSeenCreateTooltipRef.current = seenCreate;
+          setHasSeenLivepickTooltip(seenLivepick);
+          setHasSeenCreateTooltip(seenCreate);
         } catch (e) {
           console.warn('[Tutorial] 튜토리얼 상태 로드 실패:', e);
           // 에러 발생 시 기본값 설정
@@ -563,7 +569,7 @@ export default function LivePickScreen() {
             </TouchableOpacity>
             
             {/* 튜토리얼 말풍선 (질문 만들기 안내) - 라이브픽 참여 후 한 번만 표시 */}
-            {tutorialStatus && tutorialStatus.livepickParticipated && !tutorialStatus.livepickCreated && !hasSeenCreateTooltip && (
+            {tutorialStatus && tutorialStatus.livepickParticipated && !tutorialStatus.livepickCreated && !hasSeenCreateTooltipRef.current && !hasSeenCreateTooltip && (
               <TutorialTooltip
                 message="나만의 라이브픽 질문을 만들어보세요"
                 position="right"
@@ -573,6 +579,7 @@ export default function LivePickScreen() {
                 blink={true}
                 onDismiss={async () => {
                   await AsyncStorage.setItem('hasSeenCreateTutorialTooltip', 'true');
+                  hasSeenCreateTooltipRef.current = true;
                   setHasSeenCreateTooltip(true);
                 }}
               />
@@ -692,7 +699,7 @@ export default function LivePickScreen() {
       </ScrollView>
 
       {/* 라이브픽 튜토리얼 말풍선 - 화면 최상단 오버레이로 표시 (한 번만 표시) */}
-      {tutorialStatus && !tutorialStatus.livepickParticipated && !hasSeenLivepickTooltip && (
+      {tutorialStatus && !tutorialStatus.livepickParticipated && !hasSeenLivepickTooltipRef.current && !hasSeenLivepickTooltip && (
         <View
           pointerEvents="box-none"
           style={{
@@ -712,6 +719,7 @@ export default function LivePickScreen() {
             blink={true}
             onDismiss={async () => {
               await AsyncStorage.setItem('hasSeenLivepickTutorialTooltip', 'true');
+              hasSeenLivepickTooltipRef.current = true;
               setHasSeenLivepickTooltip(true);
             }}
           />

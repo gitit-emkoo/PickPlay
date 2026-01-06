@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
 import LottieView from 'lottie-react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import * as Updates from 'expo-updates';
 import colors from '../../src/styles/colors';
 import { watchAuth, ensureAnonymousAuth } from '../../src/services/firebase';
@@ -15,6 +15,7 @@ import { PointHistory, UserData } from '../../src/types';
 import { getPointHistory } from '../../src/services/pointHistory';
 import { prepareDeviceTransfer, executeDeviceTransfer, watchDeviceTransferCompletion, cleanupAfterDeviceTransfer } from '../../src/services/deviceTransfer';
 import { useToast } from '../../app/components/Toast';
+import firestore from '@react-native-firebase/firestore';
 
 export default function MyPageScreen() {
   const router = useRouter();
@@ -66,24 +67,60 @@ export default function MyPageScreen() {
     };
   }, []); // 빈 배열: 컴포넌트 언마운트 시에만 실행
 
-  // 화면이 포커스될 때마다 사용자 데이터 갱신 (메인페이지에서 투표 후 업데이트된 데이터 반영)
-  // useFocusEffect 대신 useEffect로 처리 (expo-router 호환성 문제로 인해)
+  // 사용자 데이터 실시간 구독 (포인트 변경 즉시 반영)
   useEffect(() => {
-    if (user) {
-      ensureUser(user.uid)
-        .then((data) => {
-          setUserData(data);
-          console.log('✅ [MyPage] 사용자 데이터 갱신 완료:', {
-            streakCount: data.streakCount,
-            points: data.points,
-            totalSelections: data.totalSelections,
-          });
-        })
-        .catch((error) => {
-          console.error('❌ [MyPage] 사용자 데이터 갱신 실패:', error);
-        });
-    }
+    if (!user) return;
+
+    console.log('[MyPage] 사용자 데이터 실시간 구독 시작:', user.uid);
+    
+    const unsubscribe = firestore()
+      .collection('users')
+      .doc(user.uid)
+      .onSnapshot(
+        (doc) => {
+          if (doc.exists) {
+            const data = doc.data() as UserData;
+            setUserData(data);
+            console.log('✅ [MyPage] 사용자 데이터 실시간 업데이트:', {
+              points: data.points,
+              streakCount: data.streakCount,
+              totalSelections: data.totalSelections,
+            });
+          }
+        },
+        (error) => {
+          console.error('❌ [MyPage] 사용자 데이터 구독 실패:', error);
+          // 구독 실패 시 폴백으로 ensureUser 호출
+          ensureUser(user.uid)
+            .then((data) => setUserData(data))
+            .catch((e) => console.error('❌ [MyPage] 폴백 데이터 로드 실패:', e));
+        }
+      );
+
+    return () => {
+      console.log('[MyPage] 사용자 데이터 구독 해제');
+      unsubscribe();
+    };
   }, [user]);
+
+  // 화면이 포커스될 때마다 사용자 데이터 갱신 (초기 로드 및 폴백)
+  useFocusEffect(
+    React.useCallback(() => {
+      if (user) {
+        ensureUser(user.uid)
+          .then((data) => {
+            setUserData(data);
+            console.log('✅ [MyPage] 화면 포커스 시 사용자 데이터 갱신:', {
+              points: data.points,
+              streakCount: data.streakCount,
+            });
+          })
+          .catch((error) => {
+            console.error('❌ [MyPage] 화면 포커스 시 데이터 갱신 실패:', error);
+          });
+      }
+    }, [user])
+  );
 
   const openLink = async (url: string) => {
     try {
