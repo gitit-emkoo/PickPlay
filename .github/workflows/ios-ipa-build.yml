@@ -2,6 +2,10 @@ name: iOS IPA Build
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+      - release
 
 jobs:
   ios-ipa:

@@ -2,6 +2,10 @@ name: iOS Dev Client Build
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+      - release
 
 jobs:
   build-dev-client:
