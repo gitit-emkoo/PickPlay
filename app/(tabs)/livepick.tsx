@@ -552,30 +552,32 @@ export default function LivePickScreen() {
           </View>
           
           {/* 질문 만들기 버튼 */}
-          <TouchableOpacity
-            style={styles.createButton}
-            activeOpacity={0.7}
-            onPress={() => router.push('/(tabs)/livepick/create')}
-          >
-            <Ionicons name="add-circle" size={24} color={colors.primary} />
-            <Text style={styles.createButtonText}>질문 만들기</Text>
-          </TouchableOpacity>
-          
-          {/* 튜토리얼 말풍선 (질문 만들기 안내) - 라이브픽 참여 후 한 번만 표시 */}
-          {tutorialStatus && tutorialStatus.livepickParticipated && !tutorialStatus.livepickCreated && !hasSeenCreateTooltip && (
-            <TutorialTooltip
-              message="나만의 라이브픽 질문을 만들어보세요"
-              position="right"
-              style={{ position: 'absolute', top: -10, right: '100%', marginRight: 8 }}
-              width={200}
-              color="#FF5722"
-              blink={true}
-              onDismiss={async () => {
-                await AsyncStorage.setItem('hasSeenCreateTutorialTooltip', 'true');
-                setHasSeenCreateTooltip(true);
-              }}
-            />
-          )}
+          <View style={{ position: 'relative' }}>
+            <TouchableOpacity
+              style={styles.createButton}
+              activeOpacity={0.7}
+              onPress={() => router.push('/(tabs)/livepick/create')}
+            >
+              <Ionicons name="add-circle" size={24} color={colors.primary} />
+              <Text style={styles.createButtonText}>질문 만들기</Text>
+            </TouchableOpacity>
+            
+            {/* 튜토리얼 말풍선 (질문 만들기 안내) - 라이브픽 참여 후 한 번만 표시 */}
+            {tutorialStatus && tutorialStatus.livepickParticipated && !tutorialStatus.livepickCreated && !hasSeenCreateTooltip && (
+              <TutorialTooltip
+                message="나만의 라이브픽 질문을 만들어보세요"
+                position="right"
+                style={{ position: 'absolute', top: -10, right: '100%', marginRight: 8 }}
+                width={200}
+                color="#FF5722"
+                blink={true}
+                onDismiss={async () => {
+                  await AsyncStorage.setItem('hasSeenCreateTutorialTooltip', 'true');
+                  setHasSeenCreateTooltip(true);
+                }}
+              />
+            )}
+          </View>
         </View>
       </View>
 

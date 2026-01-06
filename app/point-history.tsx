@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, BackHandler, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import colors from '../src/styles/colors';
@@ -30,6 +30,19 @@ export default function PointHistoryScreen() {
 
     return unsubscribe;
   }, []);
+
+  // 안드로이드 하드웨어 뒤로가기 버튼 처리
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+        // 마이페이지로 이동
+        router.push('/(tabs)/mypage');
+        return true; // 기본 동작 방지
+      });
+
+      return () => backHandler.remove();
+    }
+  }, [router]);
 
   const loadHistory = async (uid: string) => {
     try {
@@ -82,7 +95,7 @@ export default function PointHistoryScreen() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={() => router.push('/(tabs)/mypage')}
           activeOpacity={0.7}
         >
           <Ionicons name="arrow-back" size={24} color={colors.text} />

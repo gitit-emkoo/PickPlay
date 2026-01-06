@@ -915,9 +915,9 @@ export default function HomeScreen() {
             <View style={{ backgroundColor: colors.surface, borderRadius: 16, padding: 20, marginBottom: 24, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 }}>
               <Text style={{ fontSize: 18, fontWeight: '700', color: colors.primary, textAlign: 'center', marginBottom: 16 }}>PickPlay 유니버스 선택결과</Text>
               <View style={{ marginBottom: 16 }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <Text style={{ fontSize: 14, color: colors.textSecondary }}>{question.option_1_text}</Text>
-                  <Text style={{ fontSize: 14, color: colors.textSecondary }}>{question.option_2_text}</Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12, gap: 8 }}>
+                  <Text style={{ fontSize: 14, color: colors.textSecondary, flex: 1 }} numberOfLines={2} ellipsizeMode="tail">{question.option_1_text}</Text>
+                  <Text style={{ fontSize: 14, color: colors.textSecondary, flex: 1 }} numberOfLines={2} ellipsizeMode="tail">{question.option_2_text}</Text>
             </View>
                 <View style={{ height: 16, backgroundColor: colors.border, borderRadius: 8, overflow: 'hidden', flexDirection: 'row' }}>
                     <View style={{ flex: Math.max(agg.p0, 0), backgroundColor: userChoice === 0 ? colors.secondary : colors.border }} />

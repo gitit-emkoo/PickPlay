@@ -125,7 +125,7 @@ export async function getTutorialStatus(uid: string): Promise<{
 
     const userData = userDoc.data() as UserData;
     
-    // tutorial 필드가 없으면 자동으로 생성 (초기값: 모두 false)
+    // tutorial 필드가 없으면 자동으로 생성 (모든 유저를 신규로 취급하여 튜토리얼 진행 가능하도록)
     if (!userData.tutorial) {
       const initialTutorial = {
         mainAnswered: false,
@@ -139,7 +139,7 @@ export async function getTutorialStatus(uid: string): Promise<{
         tutorial: initialTutorial,
       });
       
-      console.log('[Tutorial] tutorial 필드 자동 생성:', initialTutorial);
+      console.log('[Tutorial] tutorial 필드 자동 생성 (모든 유저 신규 취급):', initialTutorial);
       
       return {
         ...initialTutorial,

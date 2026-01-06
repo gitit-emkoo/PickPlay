@@ -143,7 +143,7 @@ export default function LadderGame({ visible, onResult }: LadderGameProps) {
           }
           
           setBottomRewards(newBottomRewards);
-          setTimeout(() => onResult(finalReward), 1500);
+          setTimeout(() => onResult(finalReward), 800);
         });
         return;
       }

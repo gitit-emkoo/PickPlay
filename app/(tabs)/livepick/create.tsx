@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, Modal, BackHandler, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../../../src/styles/colors';
@@ -48,6 +48,19 @@ export default function CreateQuestionScreen() {
     });
     return unsubscribe;
   }, []);
+
+  // 안드로이드 하드웨어 뒤로가기 버튼 처리
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+        // 라이브픽 목록 화면으로 이동
+        router.push('/(tabs)/livepick');
+        return true; // 기본 동작 방지
+      });
+
+      return () => backHandler.remove();
+    }
+  }, [router]);
 
   // 화면이 포커스될 때마다 튜토리얼 상태 갱신
   // useFocusEffect 대신 useEffect로 처리 (expo-router 호환성 문제로 인해)

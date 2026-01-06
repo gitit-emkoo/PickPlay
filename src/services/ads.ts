@@ -406,18 +406,17 @@ export function attachRewardedInterstitial(ad: any, {
             const isLoadError = errorCode.includes('load') || errorCode.includes('LOAD');
             const isShowError = errorCode.includes('show') || errorCode.includes('SHOW') || errorCode.includes('present');
             
-            // internal-error는 무시하거나 특별 처리
+            // internal-error는 로드 실패로 처리하여 재시도 가능하도록 함
             const isInternalError = errorCode.includes('internal-error') || errorCode.includes('Internal error');
-            if (isInternalError) {
-              console.warn('⚠️ [광고] internal-error 발생 (무시):', errorCode);
-              // internal-error는 재시도 로직에서 처리되므로 여기서는 무시
-              return;
-            }
             
             if (isShowError && onFailedToShow) {
               onFailedToShow(error);
               // 표시 실패 시에는 onClosed를 호출하지 않음 (CLOSED 이벤트가 별도로 발생할 수 있음)
             } else if (onFailedToLoad) {
+              // internal-error도 로드 실패로 처리하여 재시도 가능하도록 함
+              if (isInternalError) {
+                console.warn('⚠️ [광고] internal-error 발생 (로드 실패로 처리하여 재시도):', errorCode);
+              }
               onFailedToLoad(error);
             } else {
               onClosed();

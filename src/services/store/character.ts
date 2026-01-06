@@ -7,10 +7,24 @@ import { getQuestions, getCharacters } from './dataLoader';
 export const isLegacyUser = (userData: UserData): boolean => {
   // TODO: 정확한 레거시 사용자 판별 기준 필요 (예: 특정 날짜 이전 가입자)
   // 현재는 임시로 createdAt이 하루 이상 지난 사용자들을 레거시로 간주
+  if (!userData.createdAt) {
+    // createdAt이 없으면 레거시 사용자가 아님
+    return false;
+  }
+  
   const oneDay = 1000 * 60 * 60 * 24;
-  const createdAt = (userData.createdAt as FirebaseFirestoreTypes.Timestamp).toDate ? 
-                    (userData.createdAt as FirebaseFirestoreTypes.Timestamp).toDate() : 
-                    userData.createdAt as Date;
+  let createdAt: Date;
+  
+  // Timestamp 객체인지 확인
+  if (userData.createdAt && typeof (userData.createdAt as any).toDate === 'function') {
+    createdAt = (userData.createdAt as FirebaseFirestoreTypes.Timestamp).toDate();
+  } else if (userData.createdAt instanceof Date) {
+    createdAt = userData.createdAt;
+  } else {
+    // createdAt이 유효하지 않으면 레거시 사용자가 아님
+    return false;
+  }
+  
   return (new Date().getTime() - createdAt.getTime()) > oneDay;
 };
 
