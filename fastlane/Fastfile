@@ -1126,13 +1126,25 @@ platform :ios do
       standard_path = File.join(profiles_dir, "#{pp_uuid}.mobileprovision")
       if File.exist?(standard_path)
         pp_path = standard_path
+        UI.message("✅ 표준 위치에서 프로파일 발견: #{pp_path}")
       end
     end
     
+    UI.message("🔍 match 결과 확인:")
+    UI.message("  - UUID (lane_context): #{lane_context[SharedValues::SIGH_UDID] || '(비어있음)'}")
+    UI.message("  - UUID (env #{env_key}): #{ENV[env_key] || '(비어있음)'}")
+    UI.message("  - 최종 UUID: #{pp_uuid.empty? ? '(비어있음)' : pp_uuid}")
+    UI.message("  - Path (lane_context): #{lane_context[SharedValues::SIGH_PROFILE_PATH] || '(비어있음)'}")
+    UI.message("  - Path (env #{env_path_key}): #{ENV[env_path_key] || '(비어있음)'}")
+    UI.message("  - 최종 Path: #{pp_path.empty? ? '(비어있음)' : pp_path}")
+    
     if pp_uuid.empty? || pp_uuid.length != 36
       profiles_dir = File.join(ENV["HOME"] || Dir.home, "Library", "MobileDevice", "Provisioning Profiles")
+      UI.message("🔍 프로파일 디렉토리 검색: #{profiles_dir}")
+      
       if Dir.exist?(profiles_dir)
         all_profiles = Dir.glob(File.join(profiles_dir, "*.mobileprovision"))
+        UI.message("  - 발견된 프로파일 수: #{all_profiles.length}")
         found_profile = nil
         found_uuid = nil
         
@@ -1149,9 +1161,11 @@ platform :ios do
             if bundle_ids.any? { |bid| bid.end_with?(".#{BUNDLE_ID}") || bid == BUNDLE_ID }
               found_profile = profile_path
               found_uuid = test_uuid
+              UI.success("✅ 프로파일 발견: UUID=#{found_uuid}, Path=#{found_profile}")
               break
             end
           rescue => e
+            UI.important("⚠️ 프로파일 검사 중 오류 (#{File.basename(profile_path)}): #{e.message}")
             next
           end
         end
@@ -1159,14 +1173,21 @@ platform :ios do
         if found_profile && found_uuid
           pp_path = found_profile
           pp_uuid = found_uuid
+        elsif pp_path.empty?
+          UI.user_error!("❌ #{BUNDLE_ID}에 해당하는 프로파일을 찾을 수 없습니다.")
         end
+      elsif pp_path.empty?
+        UI.user_error!("❌ 프로파일 디렉토리가 존재하지 않습니다: #{profiles_dir}")
       end
       
       if !pp_path.empty? && (pp_uuid.empty? || pp_uuid.length != 36)
+        UI.message("🔄 프로파일 파일에서 UUID 추출 시도...")
         extracted_uuid = extract_profile_uuid(pp_path)
-        if !extracted_uuid.empty? && extracted_uuid.length == 36
-          pp_uuid = extracted_uuid
+        if extracted_uuid.empty? || extracted_uuid.length != 36
+          UI.user_error!("❌ 프로파일에서 UUID 추출 실패. 파일 경로: #{pp_path}")
         end
+        pp_uuid = extracted_uuid
+        UI.message("✅ 프로파일에서 UUID 추출 성공: #{pp_uuid}")
       end
     end
     
