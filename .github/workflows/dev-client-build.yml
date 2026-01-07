@@ -120,10 +120,6 @@ jobs:
           rm -rf ios/Pods 2>/dev/null || true
           rm -f ios/Podfile.lock 2>/dev/null || true
           echo "✅ Pods directory and Podfile.lock removed"
-          echo "🔄 Running pod install --repo-update to resolve dependencies..."
-          cd ios
-          pod install --repo-update
-          echo "✅ Pod install completed"
 
       # Verify GoogleService-Info.plist location
       - name: Verify GoogleService-Info.plist location
@@ -141,28 +137,6 @@ jobs:
             echo "Listing ios/ directory:"
             find ios -name "GoogleService-Info.plist" 2>/dev/null || echo "File not found"
           fi
-
-      # Cache Pods (Podfile.lock이 없을 수 있으므로 Podfile과 package.json 사용)
-      - name: Cache Pods
-        uses: actions/cache@v4
-        continue-on-error: true
-        id: cache-pods
-        with:
-          path: |
-            ${{ env.PROJ_DIR }}/ios/Pods
-            ${{ env.PROJ_DIR }}/ios/Podfile.lock
-          key: ${{ runner.os }}-pods-${{ hashFiles('**/package.json') }}-${{ hashFiles('**/Podfile') }}
-          restore-keys: |
-            ${{ runner.os }}-pods-
-
-      # Clean CocoaPods Cache
-      - name: Clean CocoaPods Cache
-        run: |
-          cd "$PROJ_DIR/ios"
-          echo "🧹 Cleaning CocoaPods cache..."
-          pod cache clean --all 2>/dev/null || true
-          rm -rf ~/Library/Caches/CocoaPods 2>/dev/null || true
-          echo "✅ CocoaPods cache cleaned"
 
       # Ensure CocoaPods Specs repo (fallback)
       - name: Ensure CocoaPods Specs repo (fallback)
@@ -185,15 +159,28 @@ jobs:
           
           echo "✅ CocoaPods Specs repo ready"
 
-      # Install CocoaPods
-      - name: Install CocoaPods
+      # Install CocoaPods with dependency updates
+      - name: Install CocoaPods with dependency updates
         run: |
           cd "$PROJ_DIR/ios"
           echo "📦 Installing CocoaPods dependencies..."
           
+          # 캐시에서 복원된 오래된 Podfile.lock이 있으면 삭제
+          if [ -f "Podfile.lock" ]; then
+            echo "🧹 Removing potentially outdated Podfile.lock from cache..."
+            rm -f Podfile.lock
+          fi
+          
           # trunk repo 확인
           if pod repo list | grep -q "trunk"; then
             echo "✅ trunk repo found, using CDN"
+            
+            # 먼저 문제가 있는 pod들을 명시적으로 업데이트
+            echo "🔄 Updating SDWebImage and RCT-Folly/Fabric to resolve version conflicts..."
+            pod update SDWebImage RCT-Folly/Fabric --no-repo-update || echo "⚠️ pod update failed, will try pod install..."
+            
+            # pod install 실행
+            echo "🔄 Running pod install --repo-update..."
             pod install --repo-update || {
               echo "⚠️ pod install with repo-update failed, trying without repo-update..."
               pod install || {
@@ -203,10 +190,24 @@ jobs:
             }
           else
             echo "⚠️ trunk repo not found, using GitHub Specs"
+            pod update SDWebImage RCT-Folly/Fabric --no-repo-update || echo "⚠️ pod update failed, will try pod install..."
             pod install --repo-update || pod install
           fi
           
           echo "✅ CocoaPods dependencies installed"
+
+      # Cache Pods (Podfile.lock이 생성된 후 캐시)
+      - name: Cache Pods
+        uses: actions/cache@v4
+        continue-on-error: true
+        id: cache-pods
+        with:
+          path: |
+            ${{ env.PROJ_DIR }}/ios/Pods
+            ${{ env.PROJ_DIR }}/ios/Podfile.lock
+          key: ${{ runner.os }}-pods-${{ hashFiles('**/package.json') }}-${{ hashFiles('**/Podfile') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
 
       - name: Fastlane dev_client (Dev Client)
         env:
