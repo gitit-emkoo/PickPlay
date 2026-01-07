@@ -120,6 +120,10 @@ jobs:
           rm -rf ios/Pods 2>/dev/null || true
           rm -f ios/Podfile.lock 2>/dev/null || true
           echo "✅ Pods directory and Podfile.lock removed"
+          echo "🔄 Running pod install --repo-update to resolve dependencies..."
+          cd ios
+          pod install --repo-update
+          echo "✅ Pod install completed"
 
       # Verify GoogleService-Info.plist location
       - name: Verify GoogleService-Info.plist location
