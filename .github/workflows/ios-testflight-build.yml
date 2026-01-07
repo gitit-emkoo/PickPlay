@@ -112,6 +112,15 @@ jobs:
           npx expo prebuild --clean --platform ios
           echo "✅ Expo prebuild completed"
 
+      # Remove Pods and Podfile.lock after prebuild to resolve dependency conflicts
+      - name: Remove Pods and Podfile.lock after prebuild
+        run: |
+          cd "$PROJ_DIR"
+          echo "🧹 Removing Pods directory and Podfile.lock to resolve dependency conflicts..."
+          rm -rf ios/Pods 2>/dev/null || true
+          rm -f ios/Podfile.lock 2>/dev/null || true
+          echo "✅ Pods directory and Podfile.lock removed"
+
       # Verify GoogleService-Info.plist location
       - name: Verify GoogleService-Info.plist location
         run: |
@@ -161,16 +170,6 @@ jobs:
           pod cache clean --all 2>/dev/null || true
           rm -rf ~/Library/Caches/CocoaPods 2>/dev/null || true
           echo "✅ CocoaPods cache cleaned"
-
-      # Remove Podfile.lock to resolve dependency conflicts
-      - name: Remove Podfile.lock to resolve dependency conflicts
-        run: |
-          cd "$PROJ_DIR"
-          if [ -f "ios/Podfile.lock" ]; then
-            echo "🧹 Removing Podfile.lock to resolve dependency conflicts..."
-            rm -f ios/Podfile.lock
-            echo "✅ Podfile.lock removed"
-          fi
 
       # Ensure CocoaPods Specs repo (fallback)
       - name: Ensure CocoaPods Specs repo (fallback)

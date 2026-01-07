@@ -112,6 +112,15 @@ jobs:
           npx expo prebuild --clean --platform ios
           echo "✅ Expo prebuild completed"
 
+      # Remove Pods and Podfile.lock after prebuild to resolve dependency conflicts
+      - name: Remove Pods and Podfile.lock after prebuild
+        run: |
+          cd "$PROJ_DIR"
+          echo "🧹 Removing Pods directory and Podfile.lock to resolve dependency conflicts..."
+          rm -rf ios/Pods 2>/dev/null || true
+          rm -f ios/Podfile.lock 2>/dev/null || true
+          echo "✅ Pods directory and Podfile.lock removed"
+
       # Verify GoogleService-Info.plist location
       - name: Verify GoogleService-Info.plist location
         run: |
