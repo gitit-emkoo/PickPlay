@@ -102,6 +102,14 @@ end
 # 공통 Helper Functions
 # ============================================
 
+def provisioning_profile_dirs
+  home = ENV["HOME"] || Dir.home
+  [
+    File.join(home, "Library", "MobileDevice", "Provisioning Profiles"),                     # 기존 경로
+    File.join(home, "Library", "Developer", "Xcode", "UserData", "Provisioning Profiles")   # Xcode 15+ 경로
+  ]
+end
+
 def expo_prebuild!(options = {})
   # expo prebuild 실행 및 기본 설정
   # options:
@@ -740,10 +748,18 @@ platform :ios do
     
     # 경로가 없으면 UUID로 구성
     if pp_path.empty? && !pp_uuid.empty? && pp_uuid.length == 36
-      pp_path = File.join(ENV["HOME"] || Dir.home, "Library", "MobileDevice", "Provisioning Profiles", "#{pp_uuid}.mobileprovision")
-      unless File.exist?(pp_path)
-        UI.user_error!("❌ 예상 위치에 프로파일이 없습니다: #{pp_path}")
+      candidate = nil
+      provisioning_profile_dirs.each do |dir|
+        test = File.join(dir, "#{pp_uuid}.mobileprovision")
+        if File.exist?(test)
+          candidate = test
+          break
+        end
       end
+      if candidate.nil?
+        UI.user_error!("❌ 예상 위치에 프로파일이 없습니다: #{provisioning_profile_dirs.map { |d| File.join(d, \"#{pp_uuid}.mobileprovision\") }.join(' , ')}")
+      end
+      pp_path = candidate
     end
     
     # 1) 매핑 키 타입 보정: Symbol과 String 둘 다 체크
@@ -1122,11 +1138,13 @@ platform :ios do
     end
     
     if pp_path.empty? && !pp_uuid.empty? && pp_uuid.length == 36
-      profiles_dir = File.join(ENV["HOME"] || Dir.home, "Library", "MobileDevice", "Provisioning Profiles")
-      standard_path = File.join(profiles_dir, "#{pp_uuid}.mobileprovision")
-      if File.exist?(standard_path)
-        pp_path = standard_path
-        UI.message("✅ 표준 위치에서 프로파일 발견: #{pp_path}")
+      provisioning_profile_dirs.each do |dir|
+        standard_path = File.join(dir, "#{pp_uuid}.mobileprovision")
+        if File.exist?(standard_path)
+          pp_path = standard_path
+          UI.message("✅ 표준 위치에서 프로파일 발견: #{pp_path}")
+          break
+        end
       end
     end
     
@@ -1139,11 +1157,12 @@ platform :ios do
     UI.message("  - 최종 Path: #{pp_path.empty? ? '(비어있음)' : pp_path}")
     
     if pp_uuid.empty? || pp_uuid.length != 36
-      profiles_dir = File.join(ENV["HOME"] || Dir.home, "Library", "MobileDevice", "Provisioning Profiles")
-      UI.message("🔍 프로파일 디렉토리 검색: #{profiles_dir}")
+      dirs = provisioning_profile_dirs
+      UI.message("🔍 프로파일 디렉토리 검색: #{dirs.join(' , ')}")
       
-      if Dir.exist?(profiles_dir)
-        all_profiles = Dir.glob(File.join(profiles_dir, "*.mobileprovision"))
+      existing_dirs = dirs.select { |d| Dir.exist?(d) }
+      if !existing_dirs.empty?
+        all_profiles = existing_dirs.flat_map { |d| Dir.glob(File.join(d, "*.mobileprovision")) }
         UI.message("  - 발견된 프로파일 수: #{all_profiles.length}")
         found_profile = nil
         found_uuid = nil
@@ -1177,7 +1196,7 @@ platform :ios do
           UI.user_error!("❌ #{BUNDLE_ID}에 해당하는 프로파일을 찾을 수 없습니다.")
         end
       elsif pp_path.empty?
-        UI.user_error!("❌ 프로파일 디렉토리가 존재하지 않습니다: #{profiles_dir}")
+        UI.user_error!("❌ 프로파일 디렉토리가 존재하지 않습니다: #{dirs.join(' , ')}")
       end
       
       if !pp_path.empty? && (pp_uuid.empty? || pp_uuid.length != 36)
