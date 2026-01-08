@@ -757,7 +757,8 @@ platform :ios do
         end
       end
       if candidate.nil?
-        UI.user_error!("❌ 예상 위치에 프로파일이 없습니다: #{provisioning_profile_dirs.map { |d| File.join(d, \"#{pp_uuid}.mobileprovision\") }.join(' , ')}")
+        paths = provisioning_profile_dirs.map { |d| File.join(d, "#{pp_uuid}.mobileprovision") }.join(' , ')
+        UI.user_error!("❌ 예상 위치에 프로파일이 없습니다: #{paths}")
       end
       pp_path = candidate
     end
