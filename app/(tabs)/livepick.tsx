@@ -514,7 +514,7 @@ export default function LivePickScreen() {
           </TouchableOpacity>
           
           {/* 정렬 버튼 */}
-          <View style={{ position: 'relative' }}>
+          <View style={{ position: 'relative', zIndex: 1000 }}>
             <TouchableOpacity
               style={styles.sortButton}
               activeOpacity={0.7}
@@ -810,6 +810,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    zIndex: 1000,
   },
   headerLeft: {
     flex: 1,
