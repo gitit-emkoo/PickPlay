@@ -239,8 +239,7 @@ export default function QuestionDetailScreen() {
           loadTimeoutRef = null;
           setAdLoaded(false);
           setIsLoadingAd(false);
-          // 타임아웃 시 사용자에게 안내만 표시 (자동 재시도 안 함)
-          Alert.alert('광고 준비 중', '광고를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
+          // 타임아웃 시 상태만 업데이트 (팝업 표시 안 함 - 사용자가 버튼을 눌렀을 때만 표시)
         }, 10000);
         loadTimeoutRef = loadTimeout;
 
@@ -290,8 +289,7 @@ export default function QuestionDetailScreen() {
             }
             setAdLoaded(false);
             setIsLoadingAd(false);
-            // 광고가 준비되지 않았을 때 사용자 친화적인 메시지 표시
-            Alert.alert('광고 준비 중', '광고를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
+            // 표시 실패 시 상태만 업데이트 (팝업 표시 안 함 - handleWatchAd에서 이미 처리)
           },
           onFailedToLoad: (error: any) => {
             if (loadTimeoutRef) {
@@ -312,8 +310,7 @@ export default function QuestionDetailScreen() {
             setAdLoaded(false);
             setIsLoadingAd(false);
             
-            // 사용자에게 안내만 표시 (자동 재시도 안 함)
-            Alert.alert('광고 준비 중', '광고를 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
+            // 로드 실패 시 상태만 업데이트 (팝업 표시 안 함 - 사용자가 버튼을 눌렀을 때만 표시)
           }
         });
       } catch (error) {
