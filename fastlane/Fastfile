@@ -98,6 +98,15 @@ def assert_push_in_profile!(profile_path)
   )
 end
 
+def provisioning_profile_dirs
+  # match가 프로파일을 설치할 수 있는 두 경로 모두 반환
+  home = ENV["HOME"] || Dir.home
+  [
+    File.join(home, "Library", "MobileDevice", "Provisioning Profiles"),
+    File.join(home, "Library", "Developer", "Xcode", "UserData", "Provisioning Profiles")
+  ]
+end
+
 # ============================================
 # 공통 Helper Functions
 # ============================================
@@ -657,24 +666,32 @@ platform :ios do
     
     # 3차: 표준 프로파일 디렉토리에서 UUID로 파일 찾기
     if pp_path.empty? && !pp_uuid.empty? && pp_uuid.length == 36
-      profiles_dir = File.join(ENV["HOME"] || Dir.home, "Library", "MobileDevice", "Provisioning Profiles")
-      standard_path = File.join(profiles_dir, "#{pp_uuid}.mobileprovision")
-      if File.exist?(standard_path)
-        pp_path = standard_path
-        UI.message("✅ 표준 위치에서 프로파일 발견: #{pp_path}")
-      elsif Dir.exist?(profiles_dir)
-        # 디렉토리 전체 검색
-        found = Dir.glob(File.join(profiles_dir, "*.mobileprovision")).find { |p|
-          begin
-            uuid_from_file = extract_profile_uuid(p)
-            uuid_from_file == pp_uuid
-          rescue
-            false
+      provisioning_profile_dirs.each do |dir|
+        standard_path = File.join(dir, "#{pp_uuid}.mobileprovision")
+        if File.exist?(standard_path)
+          pp_path = standard_path
+          UI.message("✅ 표준 위치에서 프로파일 발견: #{pp_path}")
+          break
+        end
+      end
+      
+      # 표준 경로에서 못 찾으면 전체 검색
+      if pp_path.empty?
+        provisioning_profile_dirs.each do |dir|
+          next unless Dir.exist?(dir)
+          found = Dir.glob(File.join(dir, "*.mobileprovision")).find { |p|
+            begin
+              uuid_from_file = extract_profile_uuid(p)
+              uuid_from_file == pp_uuid
+            rescue
+              false
+            end
+          }
+          if found
+            pp_path = found
+            UI.message("✅ 프로파일 검색 발견: #{pp_path}")
+            break
           end
-        }
-        if found
-          pp_path = found
-          UI.message("✅ 프로파일 검색 발견: #{pp_path}")
         end
       end
     end
@@ -689,12 +706,12 @@ platform :ios do
     
     # UUID가 없으면 프로파일 디렉토리에서 검색 (match가 설치한 프로파일 찾기)
     if pp_uuid.empty? || pp_uuid.length != 36
-      profiles_dir = File.join(ENV["HOME"] || Dir.home, "Library", "MobileDevice", "Provisioning Profiles")
-      UI.message("🔍 프로파일 디렉토리 검색: #{profiles_dir}")
+      dirs = provisioning_profile_dirs
+      UI.message("🔍 프로파일 디렉토리 검색: #{dirs.join(' , ')}")
       
-      if Dir.exist?(profiles_dir)
-        # bundle_id로 매칭되는 프로파일 찾기
-        all_profiles = Dir.glob(File.join(profiles_dir, "*.mobileprovision"))
+      existing_dirs = dirs.select { |d| Dir.exist?(d) }
+      if !existing_dirs.empty?
+        all_profiles = existing_dirs.flat_map { |d| Dir.glob(File.join(d, "*.mobileprovision")) }
         UI.message("  - 발견된 프로파일 수: #{all_profiles.length}")
         
         found_profile = nil
@@ -731,7 +748,7 @@ platform :ios do
           UI.user_error!("❌ #{BUNDLE_ID}에 해당하는 프로파일을 찾을 수 없습니다.")
         end
       elsif pp_path.empty?
-        UI.user_error!("❌ 프로파일 디렉토리가 존재하지 않습니다: #{profiles_dir}")
+        UI.user_error!("❌ 프로파일 디렉토리가 존재하지 않습니다: #{dirs.join(' , ')}")
       end
       
       # 경로는 있지만 UUID가 없으면 추출

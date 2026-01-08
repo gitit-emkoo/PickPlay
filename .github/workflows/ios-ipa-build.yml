@@ -235,26 +235,25 @@ jobs:
           cd "$PROJ_DIR"
           echo "🔍 IPA 파일 검색 중..."
           
+          IPA_PATH=""
+          
           # 프로젝트 루트에서 검색
-          if ls "$PROJ_DIR"/*.ipa 2>/dev/null | head -1 | read IPA_PATH; then
+          IPA_PATH=$(ls "$PROJ_DIR"/*.ipa 2>/dev/null | head -1)
+          if [ -n "$IPA_PATH" ] && [ -f "$IPA_PATH" ]; then
             echo "✅ IPA 파일 발견 (프로젝트 루트): $IPA_PATH"
-            echo "ipa_path=$IPA_PATH" >> $GITHUB_OUTPUT
           # 상위 디렉토리에서 검색
-          elif ls ../*.ipa 2>/dev/null | head -1 | read IPA_PATH; then
+          elif IPA_PATH=$(ls ../*.ipa 2>/dev/null | head -1) && [ -n "$IPA_PATH" ] && [ -f "$IPA_PATH" ]; then
             echo "✅ IPA 파일 발견 (상위 디렉토리): $IPA_PATH"
-            echo "ipa_path=$IPA_PATH" >> $GITHUB_OUTPUT
           # 전체 검색
           else
             IPA_PATH=$(find "$PROJ_DIR" -name "*.ipa" -type f 2>/dev/null | head -1)
-            if [ -n "$IPA_PATH" ]; then
+            if [ -n "$IPA_PATH" ] && [ -f "$IPA_PATH" ]; then
               echo "✅ IPA 파일 발견 (전체 검색): $IPA_PATH"
-              echo "ipa_path=$IPA_PATH" >> $GITHUB_OUTPUT
             else
               # 상위 디렉토리 전체 검색
               IPA_PATH=$(find .. -name "*.ipa" -type f 2>/dev/null | head -1)
-              if [ -n "$IPA_PATH" ]; then
+              if [ -n "$IPA_PATH" ] && [ -f "$IPA_PATH" ]; then
                 echo "✅ IPA 파일 발견 (상위 전체 검색): $IPA_PATH"
-                echo "ipa_path=$IPA_PATH" >> $GITHUB_OUTPUT
               else
                 echo "❌ IPA 파일을 찾을 수 없습니다"
                 echo "현재 디렉토리 내용:"
@@ -266,12 +265,16 @@ jobs:
             fi
           fi
           
-          # IPA 파일 정보 출력
-          if [ -n "$IPA_PATH" ]; then
+          # IPA 파일 정보 출력 및 output 설정
+          if [ -n "$IPA_PATH" ] && [ -f "$IPA_PATH" ]; then
             echo "📦 IPA 파일 정보:"
             ls -lh "$IPA_PATH"
+            echo "ipa_path=$IPA_PATH" >> $GITHUB_OUTPUT
             echo "ipa_dir=$(dirname "$IPA_PATH")" >> $GITHUB_OUTPUT
             echo "ipa_filename=$(basename "$IPA_PATH")" >> $GITHUB_OUTPUT
+          else
+            echo "❌ IPA 파일 경로가 유효하지 않습니다: $IPA_PATH"
+            exit 1
           fi
 
       # Upload IPA artifact
