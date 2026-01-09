@@ -49,6 +49,7 @@
         "cocoapods": "1.15.2"
       },
       "android": {
+        "buildType": "app-bundle",
         "credentialsSource": "remote"
       }
     }
