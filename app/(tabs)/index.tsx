@@ -435,13 +435,33 @@ export default function HomeScreen() {
       // 튜토리얼 상태 로드
       try {
         const status = await getTutorialStatus(user.uid);
-        setTutorialStatus(status);
+        // null이면 신규 유저로 간주하여 기본값 설정
+        if (status) {
+          setTutorialStatus(status);
+        } else {
+          // 신규 유저의 경우 기본 튜토리얼 상태 설정
+          setTutorialStatus({
+            mainAnswered: false,
+            livepickParticipated: false,
+            livepickCreated: false,
+            rewardGiven500: false,
+            allCompleted: false,
+          });
+        }
         
         // 메인 튜토리얼 말풍선 표시 여부 확인
         const hasSeenMain = await AsyncStorage.getItem('hasSeenMainTutorialTooltip');
         setHasSeenMainTooltip(hasSeenMain === 'true');
       } catch (e) {
         console.warn('[Tutorial] 튜토리얼 상태 로드 실패:', e);
+        // 에러 발생 시에도 신규 유저로 간주하여 기본값 설정
+        setTutorialStatus({
+          mainAnswered: false,
+          livepickParticipated: false,
+          livepickCreated: false,
+          rewardGiven500: false,
+          allCompleted: false,
+        });
       }
       
       const q = getTodayQuestionForUser(data);
