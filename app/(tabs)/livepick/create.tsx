@@ -159,7 +159,7 @@ export default function CreateQuestionScreen() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={() => router.replace('/(tabs)/livepick')}
           activeOpacity={0.7}
         >
           <Ionicons name="arrow-back" size={24} color={colors.text} />
@@ -257,12 +257,17 @@ export default function CreateQuestionScreen() {
           </Text>
         </View>
 
-        {/* 포인트 소멸 안내 */}
+        {/* 포인트 소멸 및 생성 제한 안내 */}
         <View style={styles.warningBox}>
           <Ionicons name="warning" size={20} color={colors.warning} />
-          <Text style={styles.warningText}>
-            질문을 등록하면 <Text style={styles.warningHighlight}>10P가 소멸</Text>됩니다.
-          </Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.warningText}>
+              • 질문을 등록하면 <Text style={styles.warningHighlight}>10P가 소멸</Text>됩니다.
+            </Text>
+            <Text style={styles.warningText}>
+            • 하루에 생성할 수 있는 라이브픽 질문은 <Text style={styles.warningHighlight}>최대 2개</Text>입니다.
+            </Text>
+          </View>
         </View>
 
         {/* 업로드 버튼 */}

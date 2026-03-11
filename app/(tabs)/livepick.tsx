@@ -37,6 +37,7 @@ export default function LivePickScreen() {
   const hasSeenCreateTooltipRef = useRef(false);
   const [hasSeenLivepickTooltip, setHasSeenLivepickTooltip] = useState(false);
   const [hasSeenCreateTooltip, setHasSeenCreateTooltip] = useState(false);
+  const [showCreateWarningModal, setShowCreateWarningModal] = useState(false);
 
   // 검색 및 정렬 상태
   const [showSearchModal, setShowSearchModal] = useState(false);
@@ -562,7 +563,7 @@ export default function LivePickScreen() {
             <TouchableOpacity
               style={styles.createButton}
               activeOpacity={0.7}
-              onPress={() => router.push('/(tabs)/livepick/create')}
+              onPress={() => setShowCreateWarningModal(true)}
             >
               <Ionicons name="add-circle" size={24} color={colors.primary} />
               <Text style={styles.createButtonText}>질문 만들기</Text>
@@ -634,6 +635,48 @@ export default function LivePickScreen() {
           ))}
         </ScrollView>
       </View>
+
+      {/* 질문 생성 가이드 모달 */}
+      <Modal
+        visible={showCreateWarningModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCreateWarningModal(false)}
+      >
+        <View style={styles.createWarningOverlay}>
+          <View style={styles.createWarningModal}>
+            <Text style={styles.createWarningTitle}>질문 등록 전 꼭 확인해주세요!</Text>
+            <Text style={styles.createWarningBody}>
+              다른 이용자에게 불쾌감이나 피해를 줄 수 있는 질문,{'\n'}
+              명예훼손·모욕·허위사실·혐오표현·성적 표현·개인정보 노출이 포함된 질문은 등록할 수 없습니다.
+            </Text>
+            <Text style={styles.createWarningBody}>
+              이 기준을 위반하는 질문은 사전 차단 또는 삭제될 수 있으며,{'\n'}
+              반복 위반 시 질문 작성 제한, 서비스 이용 제한이 적용될 수 있습니다.{'\n'}
+              관련 법령 위반 시 민형사상 책임이 발생할 수 있습니다.
+            </Text>
+            <View style={styles.createWarningButtons}>
+              <TouchableOpacity
+                style={[styles.createWarningButton, styles.createWarningCancelButton]}
+                onPress={() => setShowCreateWarningModal(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.createWarningCancelText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.createWarningButton, styles.createWarningConfirmButton]}
+                onPress={() => {
+                  setShowCreateWarningModal(false);
+                  router.push('/(tabs)/livepick/create');
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.createWarningConfirmText}>동의하고 계속</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* 질문 리스트 */}
       <ScrollView 
@@ -855,6 +898,68 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: colors.primary,
+  },
+  createWarningOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  createWarningModal: {
+    width: '100%',
+    borderRadius: 20,
+    backgroundColor: colors.background,
+    paddingHorizontal: 20,
+    paddingTop: 22,
+    paddingBottom: 16,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  createWarningTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.primary,
+    marginBottom: 12,
+  },
+  createWarningBody: {
+    fontSize: 14,
+    color: colors.text,
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  createWarningButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 12,
+  },
+  createWarningButton: {
+    minWidth: 90,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  createWarningCancelButton: {
+    backgroundColor: '#f0f0f5',
+  },
+  createWarningConfirmButton: {
+    backgroundColor: colors.primary,
+  },
+  createWarningCancelText: {
+    fontSize: 14,
+    color: colors.text,
+    fontWeight: '500',
+  },
+  createWarningConfirmText: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: '600',
   },
   content: {
     flex: 1,

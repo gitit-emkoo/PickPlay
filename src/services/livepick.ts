@@ -56,14 +56,36 @@ export async function createLivePickQuestion(
     const authedUid = await ensureAuthenticatedUser(uid);
     console.log('[LivePick][Create] 인증 확인 완료', { uid, authedUid });
 
-    // 1. 사용자 포인트 확인 (10P 차감 필요)
+    // 1. 오늘 생성한 질문 개수 제한 (하루 최대 2개)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTimestamp = firestore.Timestamp.fromDate(today);
+
+    const todayQuestionsSnapshot = await firestore()
+      .collection(COLLECTIONS.QUESTIONS)
+      .where('createdBy', '==', uid)
+      .where('createdAt', '>=', todayTimestamp)
+      .get();
+
+    const todayQuestionCount = todayQuestionsSnapshot.size;
+    console.log('[LivePick][Create] 오늘 생성한 질문 수', {
+      uid,
+      today: today.toISOString(),
+      todayQuestionCount,
+    });
+
+    if (todayQuestionCount >= 2) {
+      throw new Error('하루에 생성할 수 있는 라이브픽 질문은 2개까지입니다.');
+    }
+
+    // 2. 사용자 포인트 확인 (10P 차감 필요)
     const userData = await ensureUser(uid);
     console.log('[LivePick][Create] 사용자 포인트 확인', { uid, points: userData.points });
     if (userData.points < 10) {
       throw new Error('포인트가 부족합니다. 10P 이상 필요합니다.');
     }
 
-    // 2. 질문 생성 (명령문: 카테고리는 tags 필드로 저장)
+    // 3. 질문 생성 (명령문: 카테고리는 tags 필드로 저장)
     const questionRef = firestore().collection(COLLECTIONS.QUESTIONS).doc();
     const questionData: Omit<LivePickQuestion, 'id'> = {
       createdBy: uid,
