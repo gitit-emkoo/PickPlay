@@ -75,7 +75,7 @@ export default function ParticipateModal({
               <Ionicons name="gift" size={24} color="white" />
               <View style={styles.buttonTextContainer}>
                 <Text style={styles.buttonText}>광고 보고 더 받기</Text>
-                <Text style={styles.buttonSubtext}>10P ~ 300P 획득 가능</Text>
+                <Text style={styles.buttonSubtext}>10P / 20P / 100P / 200P / 300P 획득 가능</Text>
               </View>
             </TouchableOpacity>
           </View>

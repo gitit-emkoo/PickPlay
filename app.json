@@ -30,7 +30,8 @@
     "googleServicesFile": "./GoogleService-Info.plist",
     "infoPlist": {
       "GADApplicationIdentifier": "ca-app-pub-2555567440328829~5483134579",
-      "NSUserTrackingUsageDescription": "이 정보를 사용하여 더 관련성 높은 맞춤형 광고를 제공합니다."
+      "NSUserTrackingUsageDescription": "이 정보를 사용하여 더 관련성 높은 맞춤형 광고를 제공합니다.",
+      "ITSAppUsesNonExemptEncryption": false
     }
   },
   "android": {
