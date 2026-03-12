@@ -770,10 +770,10 @@ export default function QuestionDetailScreen() {
             style={[
               styles.optionCard,
               selectedOption === 2 && styles.optionCardSelected,
-              (hasParticipated || (user && question && question.createdBy === user.uid)) && styles.optionCardDisabled,
+              hasParticipated && styles.optionCardDisabled,
             ]}
             onPress={() => handleOptionSelect(2)}
-            disabled={!!(hasParticipated || (user && question && question.createdBy === user.uid))}
+            disabled={hasParticipated}
             activeOpacity={0.7}
           >
             <Text style={[

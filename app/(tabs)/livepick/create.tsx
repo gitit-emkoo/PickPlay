@@ -128,15 +128,15 @@ export default function CreateQuestionScreen() {
         setShowTutorialCompleteModal(true);
       } else {
         // 일반 성공 메시지
-      Alert.alert('성공', '질문이 등록되었습니다!', [
-        {
-          text: '확인',
-          onPress: () => {
-            // 질문 상세 화면으로 이동
+        Alert.alert('알림', '질문이 등록되었습니다!', [
+          {
+            text: '확인',
+            onPress: () => {
+              // 질문 상세 화면으로 이동
               router.replace(`/(tabs)/livepick/${result.questionId}`);
+            },
           },
-        },
-      ]);
+        ]);
       }
     } catch (error: any) {
       console.error('❌ 질문 등록 실패:', error);
