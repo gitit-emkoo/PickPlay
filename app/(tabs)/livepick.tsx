@@ -5,7 +5,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../../src/styles/colors';
 import { LivePickQuestion } from '../../src/types/livepick';
-import { getLivePickQuestions, getTodayParticipationCount } from '../../src/services/livepick';
+import { getLivePickQuestions, getTodayParticipationCount, getTodayLivePickQuestionCount } from '../../src/services/livepick';
+import { currentWeekKeyKST } from '../../src/utils/date';
 import { watchAuth } from '../../src/services/firebase';
 import { getTutorialStatus } from '../../src/services/tutorial';
 import TutorialTooltip from '../components/TutorialTooltip';
@@ -38,6 +39,7 @@ export default function LivePickScreen() {
   const [hasSeenLivepickTooltip, setHasSeenLivepickTooltip] = useState(false);
   const [hasSeenCreateTooltip, setHasSeenCreateTooltip] = useState(false);
   const [showCreateWarningModal, setShowCreateWarningModal] = useState(false);
+  const [isCheckingCreateLimit, setIsCheckingCreateLimit] = useState(false);
 
   // 검색 및 정렬 상태
   const [showSearchModal, setShowSearchModal] = useState(false);
@@ -49,6 +51,7 @@ export default function LivePickScreen() {
   // 전체 질문 목록 (검색 및 정렬용)
   const [allQuestions, setAllQuestions] = useState<LivePickQuestion[]>([]);
   const [isLoadingAllQuestions, setIsLoadingAllQuestions] = useState(false);
+  const [currentWeekKey] = useState<string>(currentWeekKeyKST());
 
   // 오늘 참여 횟수 확인 (먼저 정의)
   const checkTodayParticipationCount = React.useCallback(async (uid: string) => {
@@ -121,6 +124,7 @@ export default function LivePickScreen() {
     try {
       // 정렬 기준에 따라 모든 질문 가져오기 (큰 limit 사용)
       const allList = await getLivePickQuestions(1000, undefined, sortBy);
+      // 검색/필터용 전체 목록은 그대로 유지 (weekKey 필터는 화면 단에서 적용)
       setAllQuestions(allList);
       console.log(`[LivePick] 전체 질문 로드 완료: ${allList.length}개`);
     } catch (error: any) {
@@ -154,7 +158,9 @@ export default function LivePickScreen() {
       loadAllQuestions().catch(e => console.warn('[LivePick] 전체 질문 로드 실패:', e));
       // 페이지네이션용으로 첫 20개만 표시 (Firestore 쿼리 레벨에서 정렬)
       const list = await getLivePickQuestions(PAGE_SIZE, undefined, sortBy);
-      setQuestions(list);
+      // 이번 주 질문만 진행중으로 사용
+      const activeThisWeek = list.filter(q => q.weekKey === currentWeekKey);
+      setQuestions(activeThisWeek);
       setHasMore(list.length === PAGE_SIZE);
     } catch (error: any) {
       console.error('❌ [LivePick] 질문 목록 초기 로드 실패:', error);
@@ -167,7 +173,8 @@ export default function LivePickScreen() {
       if (error?.code === 'failed-precondition' && sortBy === 'popular') {
         try {
           const list = await getLivePickQuestions(PAGE_SIZE, undefined, 'latest');
-          setQuestions(list);
+          const activeThisWeek = list.filter(q => q.weekKey === currentWeekKey);
+          setQuestions(activeThisWeek);
           setHasMore(list.length === PAGE_SIZE);
         } catch (e) {
           console.error('❌ [LivePick] 최신순 로드 실패:', e);
@@ -213,8 +220,9 @@ export default function LivePickScreen() {
               );
             }
             const list = await getLivePickQuestions(PAGE_SIZE, undefined, sortBy);
-            setQuestions(list);
-            setHasMore(list.length === PAGE_SIZE);
+            const activeThisWeek = list.filter(q => q.weekKey === currentWeekKey);
+            setQuestions(activeThisWeek);
+            setHasMore(activeThisWeek.length === PAGE_SIZE);
             // 전체 질문은 백그라운드에서만 로드 (검색용, 이미 로드된 경우 제외)
             if (allQuestions.length === 0 && !loadAllQuestionsRef.current) {
               loadAllQuestions().catch(e => console.warn('[LivePick] 전체 질문 로드 실패:', e));
@@ -227,7 +235,8 @@ export default function LivePickScreen() {
               setSortBy('latest'); // sortBy 상태를 최신순으로 변경
               try {
                 const list = await getLivePickQuestions(PAGE_SIZE, undefined, 'latest');
-                setQuestions(list);
+                const activeThisWeek = list.filter(q => q.weekKey === currentWeekKey);
+                setQuestions(activeThisWeek);
                 setHasMore(list.length === PAGE_SIZE);
               } catch (err) {
                 console.error('❌ [LivePick] 최신순 로드 실패:', err);
@@ -271,11 +280,12 @@ export default function LivePickScreen() {
       } else {
         more = await getLivePickQuestions(PAGE_SIZE, last.createdAt as Date, sortBy);
       }
-      if (more.length === 0) {
+      const moreThisWeek = more.filter(q => q.weekKey === currentWeekKey);
+      if (moreThisWeek.length === 0) {
         setHasMore(false);
         return;
       }
-      setQuestions(prev => [...prev, ...more]);
+      setQuestions(prev => [...prev, ...moreThisWeek]);
       setHasMore(more.length === PAGE_SIZE);
     } catch (error: any) {
       console.error('❌ [LivePick] 추가 질문 로드 실패:', error);
@@ -284,11 +294,12 @@ export default function LivePickScreen() {
         try {
           const last = questions[questions.length - 1];
           const more = await getLivePickQuestions(PAGE_SIZE, last.createdAt as Date, 'latest');
-          if (more.length === 0) {
+          const moreThisWeek = more.filter(q => q.weekKey === currentWeekKey);
+          if (moreThisWeek.length === 0) {
             setHasMore(false);
             return;
           }
-          setQuestions(prev => [...prev, ...more]);
+          setQuestions(prev => [...prev, ...moreThisWeek]);
           setHasMore(more.length === PAGE_SIZE);
         } catch (e) {
           console.error('❌ [LivePick] 최신순 로드 실패:', e);
@@ -308,7 +319,8 @@ export default function LivePickScreen() {
     try {
       // Firestore 쿼리 레벨에서 정렬된 결과의 첫 20개만 가져오기 (전체 질문을 로드하지 않음)
       const list = await getLivePickQuestions(PAGE_SIZE, undefined, newSort);
-      setQuestions(list);
+      const activeThisWeek = list.filter(q => q.weekKey === currentWeekKey);
+      setQuestions(activeThisWeek);
       setHasMore(list.length === PAGE_SIZE);
       // 전체 질문도 백그라운드에서 업데이트 (검색용, 정렬은 Firestore에서 처리)
       loadAllQuestions().catch(e => console.warn('[LivePick] 전체 질문 로드 실패:', e));
@@ -323,7 +335,8 @@ export default function LivePickScreen() {
             setSortBy('latest');
             // 최신순으로 다시 로드
             getLivePickQuestions(PAGE_SIZE, undefined, 'latest').then(list => {
-              setQuestions(list);
+              const activeThisWeek = list.filter(q => q.weekKey === currentWeekKey);
+              setQuestions(activeThisWeek);
               setHasMore(list.length === PAGE_SIZE);
               setLoading(false);
             }).catch(e => {
@@ -563,7 +576,29 @@ export default function LivePickScreen() {
             <TouchableOpacity
               style={styles.createButton}
               activeOpacity={0.7}
-              onPress={() => setShowCreateWarningModal(true)}
+              onPress={async () => {
+                if (!user || isCheckingCreateLimit) {
+                  return;
+                }
+                try {
+                  setIsCheckingCreateLimit(true);
+                  const count = await getTodayLivePickQuestionCount(user.uid);
+                  if (count >= 2) {
+                    Alert.alert(
+                      '알림',
+                      '하루에 생성할 수 있는 라이브픽 질문은 2개까지입니다.\n내일 다시 시도해주세요.',
+                    );
+                    return;
+                  }
+                  setShowCreateWarningModal(true);
+                } catch (error: any) {
+                  console.warn('[LivePick] 질문 생성 가능 여부 확인 실패:', error?.message || error);
+                  // 실패 시에도 기존 UX대로 진행 (서버 쪽에서 최종 검증)
+                  setShowCreateWarningModal(true);
+                } finally {
+                  setIsCheckingCreateLimit(false);
+                }
+              }}
             >
               <Ionicons name="add-circle" size={24} color={colors.primary} />
               <Text style={styles.createButtonText}>질문 만들기</Text>
@@ -634,6 +669,16 @@ export default function LivePickScreen() {
             </TouchableOpacity>
           ))}
         </ScrollView>
+      </View>
+
+      {/* 지난 질문 보기 */}
+      <View style={styles.archiveLinkContainer}>
+        <TouchableOpacity
+          onPress={() => router.push('/(tabs)/livepick/archive')}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.archiveLinkText}>지난질문보기 &gt;</Text>
+        </TouchableOpacity>
       </View>
 
       {/* 질문 생성 가이드 모달 */}
@@ -1067,6 +1112,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     paddingVertical: 12,
+  },
+  archiveLinkContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    alignItems: 'flex-end',
+  },
+  archiveLinkText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    textDecorationLine: 'underline',
   },
   categoryFilterContent: {
     paddingHorizontal: 20,

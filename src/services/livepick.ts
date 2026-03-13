@@ -1,6 +1,7 @@
 import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import { LivePickQuestion, LivePickParticipation, LivePickReward, LivePickReport } from '../types/livepick';
+import { currentWeekKeyKST } from '../utils/date';
 import { ensureUser } from './store';
 import { ensureAnonymousAuth } from './firebase';
 import { recordPointHistory } from './pointHistory';
@@ -85,6 +86,9 @@ export async function createLivePickQuestion(
       throw new Error('포인트가 부족합니다. 10P 이상 필요합니다.');
     }
 
+    // 한국시간 기준 현재 주의 weekKey 계산
+    const weekKey = currentWeekKeyKST();
+
     // 3. 질문 생성 (명령문: 카테고리는 tags 필드로 저장)
     const questionRef = firestore().collection(COLLECTIONS.QUESTIONS).doc();
     const questionData: Omit<LivePickQuestion, 'id'> = {
@@ -100,6 +104,7 @@ export async function createLivePickQuestion(
       pointDeducted: 10,
       rewardGiven: false,
       createdAt: firestore.FieldValue.serverTimestamp() as any,
+      weekKey,
       status: 'active',
     };
 
@@ -180,6 +185,98 @@ export async function createLivePickQuestion(
 }
 
 /**
+ * 오늘 해당 사용자가 생성한 라이브픽 질문 개수를 조회합니다. (KST 기준, 클라이언트 UX용)
+ * - 서버의 createLivePickQuestion 제한 로직과 동일한 조건으로 계산
+ * - 단, 실제 제한은 항상 서버에서 최종 검증하므로 이 함수는 "사전 안내"용입니다.
+ */
+export async function getTodayLivePickQuestionCount(uid: string): Promise<number> {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayTimestamp = firestore.Timestamp.fromDate(today);
+
+  const snapshot = await firestore()
+    .collection(COLLECTIONS.QUESTIONS)
+    .where('createdBy', '==', uid)
+    .where('createdAt', '>=', todayTimestamp)
+    .get();
+
+  return snapshot.size;
+}
+
+/**
+ * 특정 주(weekKey)의 Weekly TOP 질문을 계산합니다.
+ * - participantCount 기준 내림차순
+ * - 동점이면 createdAt 빠른 순
+ * - 그래도 같으면 id 기준으로 정렬
+ * @param weekKey 'YYYY-MM-DD' 형식의 주 키 (그 주 월요일, KST 기준)
+ * @returns 해당 주의 TOP 질문 1개 (없으면 null)
+ */
+export async function getWeeklyWinner(weekKey: string): Promise<LivePickQuestion | null> {
+  try {
+    // 1. 해당 주의 질문 전체 조회 (status는 우선 active/closed 모두 허용)
+    const snapshot = await firestore()
+      .collection(COLLECTIONS.QUESTIONS)
+      .where('weekKey', '==', weekKey)
+      .get();
+
+    if (snapshot.empty) {
+      return null;
+    }
+
+    const questions: LivePickQuestion[] = [];
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      questions.push({
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt as any),
+      } as LivePickQuestion);
+    });
+
+    // 2. 메모리 상에서 정렬 규칙 적용
+    questions.sort((a, b) => {
+      const aCount = a.participantCount || 0;
+      const bCount = b.participantCount || 0;
+      if (bCount !== aCount) {
+        // 참여자 수 많은 순
+        return bCount - aCount;
+      }
+
+      // createdAt 빠른 순
+      const aCreated =
+        a.createdAt instanceof Date
+          ? a.createdAt
+          : (a.createdAt as FirebaseFirestoreTypes.Timestamp).toDate();
+      const bCreated =
+        b.createdAt instanceof Date
+          ? b.createdAt
+          : (b.createdAt as FirebaseFirestoreTypes.Timestamp).toDate();
+
+      const diff = aCreated.getTime() - bCreated.getTime();
+      if (diff !== 0) {
+        return diff;
+      }
+
+      // 그래도 같으면 id 기준으로 정렬 (안정성 확보)
+      if (a.id < b.id) return -1;
+      if (a.id > b.id) return 1;
+      return 0;
+    });
+
+    // 3. 정렬 결과의 첫 번째 질문이 해당 주의 Weekly TOP 질문
+    return questions[0] || null;
+  } catch (error: any) {
+    console.error('[LivePick] getWeeklyWinner 실패:', {
+      weekKey,
+      code: error?.code,
+      message: error?.message,
+      stack: error?.stack,
+    });
+    throw error;
+  }
+}
+
+/**
  * 활성 상태의 LivePick 질문 목록을 조회합니다.
  * @param limit 최대 조회 개수 (기본값: 20)
  * @param startAfterDate 이 날짜(createdAt) 이후의 문서부터 조회 (페이지네이션용, 선택사항)
@@ -194,9 +291,9 @@ export async function getLivePickQuestions(
   startAfterValue?: any
 ): Promise<LivePickQuestion[]> {
   try {
-    let query = firestore()
-      .collection(COLLECTIONS.QUESTIONS)
-      .where('status', '==', 'active');
+    // CollectionReference는 Query를 상속하므로, 공통된 Query 타입으로 취급한다.
+    let query: FirebaseFirestoreTypes.Query = firestore()
+      .collection(COLLECTIONS.QUESTIONS);
 
     // 정렬 기준에 따라 다른 orderBy 사용
     let snapshot;

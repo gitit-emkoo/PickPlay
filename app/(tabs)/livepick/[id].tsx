@@ -21,6 +21,7 @@ import {
   hasReportedLivePickQuestion,
 } from '../../../src/services/livepick';
 import { updateTutorialProgress } from '../../../src/services/tutorial';
+import { currentWeekKeyKST } from '../../../src/utils/date';
 
 // 임시 더미 데이터 (나중에 백엔드 연동)
 const getDummyQuestion = (id: string): LivePickQuestion | null => {
@@ -91,6 +92,7 @@ export default function QuestionDetailScreen() {
   const [reportDescription, setReportDescription] = useState('');
   const [isReporting, setIsReporting] = useState(false);
   const [hasReported, setHasReported] = useState(false);
+  const [isArchivedQuestion, setIsArchivedQuestion] = useState(false);
 
   // 참여 기록 확인 함수
   const checkParticipation = async (uid: string, questionId?: string) => {
@@ -159,12 +161,28 @@ export default function QuestionDetailScreen() {
     
     // 초기 데이터 로드
     getLivePickQuestion(id).then((data) => {
+      if (data) {
+        try {
+          const currentWeekKey = currentWeekKeyKST();
+          setIsArchivedQuestion(data.weekKey !== currentWeekKey);
+        } catch {
+          setIsArchivedQuestion(false);
+        }
+      }
       setQuestion(data);
       setLoading(false);
     });
 
     // 실시간 구독
     const unsubscribe = subscribeLivePickQuestion(id, (updatedQuestion) => {
+      if (updatedQuestion) {
+        try {
+          const currentWeekKey = currentWeekKeyKST();
+          setIsArchivedQuestion(updatedQuestion.weekKey !== currentWeekKey);
+        } catch {
+          setIsArchivedQuestion(false);
+        }
+      }
       setQuestion(updatedQuestion);
       setLoading(false);
     });
@@ -748,10 +766,10 @@ export default function QuestionDetailScreen() {
             style={[
               styles.optionCard,
               selectedOption === 1 && styles.optionCardSelected,
-              hasParticipated && styles.optionCardDisabled,
+              (hasParticipated || isArchivedQuestion) && styles.optionCardDisabled,
             ]}
             onPress={() => handleOptionSelect(1)}
-            disabled={hasParticipated}
+            disabled={hasParticipated || isArchivedQuestion}
             activeOpacity={0.7}
           >
             <Text style={[
@@ -770,10 +788,10 @@ export default function QuestionDetailScreen() {
             style={[
               styles.optionCard,
               selectedOption === 2 && styles.optionCardSelected,
-              hasParticipated && styles.optionCardDisabled,
+              (hasParticipated || isArchivedQuestion) && styles.optionCardDisabled,
             ]}
             onPress={() => handleOptionSelect(2)}
-            disabled={hasParticipated}
+            disabled={hasParticipated || isArchivedQuestion}
             activeOpacity={0.7}
           >
             <Text style={[
@@ -798,7 +816,7 @@ export default function QuestionDetailScreen() {
         )}
 
         {/* 참여 안내 */}
-        {!hasParticipated && !selectedOption && (
+        {!hasParticipated && !selectedOption && !isArchivedQuestion && (
           <View style={styles.infoBox}>
             <Ionicons name="information-circle" size={20} color={colors.primary} />
             <Text style={styles.infoText}>
@@ -815,6 +833,16 @@ export default function QuestionDetailScreen() {
             <Ionicons name="checkmark-circle" size={20} color={colors.success} />
             <Text style={styles.infoText}>
               참여가 완료되었습니다!
+            </Text>
+          </View>
+        )}
+
+        {/* 종료된 질문 안내 */}
+        {isArchivedQuestion && (
+          <View style={styles.infoBox}>
+            <Ionicons name="information-circle" size={20} color={colors.primary} />
+            <Text style={styles.infoText}>
+              지난 질문은 결과만 확인할 수 있고, 새로 참여하거나 보상을 받을 수 없습니다.
             </Text>
           </View>
         )}

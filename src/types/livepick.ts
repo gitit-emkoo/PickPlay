@@ -15,6 +15,8 @@ export interface LivePickQuestion {
   pointDeducted: number;
   rewardGiven: boolean;
   createdAt: FirebaseFirestoreTypes.Timestamp | Date;
+  // 한국시간(KST) 기준 해당 질문이 속한 주의 월요일 날짜 (예: '2026-03-09')
+  weekKey: string;
   status: 'active' | 'closed';
 }
 

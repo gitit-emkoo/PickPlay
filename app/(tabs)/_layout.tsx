@@ -73,6 +73,12 @@ export default function TabsLayout() {
           href: null, // 탭에서 숨김
         }}
       />
+      <Tabs.Screen
+        name="livepick/archive"
+        options={{
+          href: null, // 탭에서 숨김
+        }}
+      />
     </Tabs>
   );
 }
