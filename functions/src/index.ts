@@ -1,4 +1,4 @@
-﻿import * as functions from 'firebase-functions';
+import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import OpenAI from 'openai';
 import { Expo } from 'expo-server-sdk';
@@ -624,7 +624,7 @@ export const dailyLivePickRewardScheduler = functions
 
 /**
  * 모든 user_notifications 생성 시, 해당 유저에게 Expo 푸시까지 함께 전송하는 트리거.
- * - title/body/data 필드를 그대로 사용하여 푸시를 보냅니다.
+ * - title/body/type/data 필드를 푸시 payload로 전달합니다.
  */
 export const onUserNotificationCreated = functions
   .region('asia-northeast3')
@@ -646,7 +646,24 @@ export const onUserNotificationCreated = functions
         return null;
       }
 
-      await sendUserPushNotification(uid, title, body, data?.data || {});
+      // 사용자의 알림 수신 여부 확인 (notificationEnabled === false면 푸시 생략)
+      try {
+        const userSnap = await admin.firestore().collection('users').doc(uid).get();
+        const userData = userSnap.data() as any | undefined;
+        if (userData && userData.notificationEnabled === false) {
+          console.log('[onUserNotificationCreated] 알림 비활성 유저, 푸시 생략:', uid);
+          return null;
+        }
+      } catch (userCheckError: any) {
+        console.warn('[onUserNotificationCreated] 사용자 알림 설정 조회 실패(무시):', userCheckError?.message || userCheckError);
+      }
+
+      const payloadData = {
+        type: data?.type,
+        ...(data?.data || {}),
+      };
+
+      await sendUserPushNotification(uid, title, body, payloadData);
       console.log('[onUserNotificationCreated] 푸시 전송 완료', { uid, notificationId: context.params.notificationId });
       return null;
     } catch (error: any) {
