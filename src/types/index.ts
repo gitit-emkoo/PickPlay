@@ -50,6 +50,11 @@ export interface UserData {
   // --- 기기 식별 필드 (앱 재설치 시 복구용) ---
   deviceUID?: string | null; // 기기 고유 ID (선택적, 이전 버전 사용자는 없을 수 있음)
 
+  // --- 전화번호 인증 필드 (보상 교환용) ---
+  phoneNumber?: string | null; // E.164 포맷 전화번호 (예: +821012345678)
+  phoneVerified?: boolean; // 전화번호 인증 완료 여부
+  phoneVerifiedAt?: FirebaseFirestoreTypes.Timestamp | Date; // 인증 완료 시각
+
   // --- 튜토리얼 필드 ---
   tutorial?: {
     mainAnswered: boolean; // 메인 질문에 답변했는지
@@ -83,6 +88,7 @@ export type PointHistoryReason =
   | 'ad_bonus'
   | 'livepick_question_creation'
   | 'tutorial_reward'
+  | 'reward_exchange' // 보상 교환 시 포인트 차감
   | 'manual'
   | 'etc';
 
@@ -93,6 +99,35 @@ export interface PointHistory {
   reason: PointHistoryReason;
   description?: string;
   createdAt: FirebaseFirestoreTypes.Timestamp | Date;
+}
+
+// 교환 가능한 보상 상품
+export interface RewardItem {
+  id: string;
+  title: string;
+  description: string;
+  requiredPoints: number;
+  isActive: boolean;
+  sortOrder: number;
+  imageUrl?: string;
+  type?: 'giftcard' | 'coupon' | 'etc';
+}
+
+// 교환 신청 내역
+export type ExchangeRequestStatus = 'requested' | 'pending' | 'completed' | 'cancelled';
+
+export interface ExchangeRequest {
+  id: string;
+  uid: string;
+  rewardItemId: string;
+  rewardTitle: string; // 당시 상품명 스냅샷
+  usedPoints: number;
+  status: ExchangeRequestStatus;
+  createdAt: FirebaseFirestoreTypes.Timestamp | Date;
+  updatedAt?: FirebaseFirestoreTypes.Timestamp | Date;
+  completedAt?: FirebaseFirestoreTypes.Timestamp | Date;
+  cancelledAt?: FirebaseFirestoreTypes.Timestamp | Date;
+  adminMemo?: string;
 }
 
 

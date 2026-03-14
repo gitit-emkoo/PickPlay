@@ -79,6 +79,26 @@ export default function TabsLayout() {
           href: null, // 탭에서 숨김
         }}
       />
+      {/* point-exchange 폴더 내부 서브 화면들은 탭에서 숨김 */}
+      <Tabs.Screen
+        name="point-exchange/index"
+        options={{
+          href: null, // 탭에서 숨김
+        }}
+      />
+      <Tabs.Screen
+        name="point-exchange/history"
+        options={{
+          href: null, // 탭에서 숨김
+        }}
+      />
+      {/* auth 폴더 내부 서브 화면들은 탭에서 숨김 */}
+      <Tabs.Screen
+        name="auth/phone-verify"
+        options={{
+          href: null, // 탭에서 숨김
+        }}
+      />
     </Tabs>
   );
 }

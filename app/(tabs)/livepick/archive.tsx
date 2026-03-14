@@ -11,6 +11,13 @@ const CATEGORIES: Array<'일상' | '연애' | '가치관' | '엔터테인먼트'
 
 const PAGE_SIZE = 50;
 
+/** 지난 주 TOP이 없을 때(아직 한 주가 안 지났거나 해당 주 질문 없음) 보여줄 더미 카드용 데이터. 다음 주부터 실제 TOP으로 교체됨. */
+const DUMMY_WEEKLY_TOP: Pick<LivePickQuestion, 'title' | 'participantCount' | 'category'> = {
+  title: '이곳에는 매주 가장 많은 투표를 받은 질문이 표시됩니다.',
+  participantCount: 0,
+  category: '일상',
+};
+
 export default function LivePickArchiveScreen() {
   const router = useRouter();
   const [questions, setQuestions] = useState<LivePickQuestion[]>([]);
@@ -60,21 +67,31 @@ export default function LivePickArchiveScreen() {
     loadArchivedQuestions(true);
   };
 
-  // 지난 주 Weekly TOP 질문 로드
+  // 지난 주 Weekly TOP 질문 로드 (로딩 타임아웃 시 더미 표시되도록 함)
   useEffect(() => {
+    let cancelled = false;
+    const timeoutId = setTimeout(() => {
+      if (!cancelled) setWeeklyWinnerLoading(false);
+    }, 8000);
+
     const loadWeeklyWinner = async () => {
       try {
         setWeeklyWinnerLoading(true);
         const winner = await getWeeklyWinner(lastWeekKey);
-        setWeeklyWinner(winner);
+        if (!cancelled) setWeeklyWinner(winner);
       } catch (error) {
         console.error('[LivePickArchive] Weekly TOP 질문 로드 실패:', error);
+        if (!cancelled) setWeeklyWinner(null);
       } finally {
-        setWeeklyWinnerLoading(false);
+        if (!cancelled) setWeeklyWinnerLoading(false);
       }
     };
 
     loadWeeklyWinner();
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
   }, [lastWeekKey]);
 
   // 검색 모달 애니메이션
@@ -271,7 +288,7 @@ export default function LivePickArchiveScreen() {
         </Text>
       </View>
 
-      {/* 지난 주 Weekly TOP 질문 하이라이트 */}
+      {/* 지난 주 Weekly TOP: 로딩 중이면 스피너, 실제 TOP(참여 1명 이상)이 있으면 실제 카드, 그 외(질문 없음/참여 0)는 무조건 더미 카드. "없습니다" 문구는 사용하지 않음. */}
       <View style={styles.weeklyWinnerContainer}>
         <Text style={styles.weeklyWinnerTitle}>지난 주 Weekly TOP 질문</Text>
         {weeklyWinnerLoading ? (
@@ -279,11 +296,7 @@ export default function LivePickArchiveScreen() {
             <ActivityIndicator size="small" color={colors.primary} />
             <Text style={styles.weeklyWinnerLoadingText}>불러오는 중...</Text>
           </View>
-        ) : !weeklyWinner ? (
-          <Text style={styles.weeklyWinnerEmptyText}>
-            지난 주에는 선정된 Weekly TOP 질문이 없습니다.
-          </Text>
-        ) : (
+        ) : (weeklyWinner != null && (weeklyWinner.participantCount ?? 0) > 0) ? (
           <View style={styles.weeklyWinnerCard}>
             <Text style={styles.weeklyWinnerQuestionTitle} numberOfLines={2}>
               {weeklyWinner.title}
@@ -300,6 +313,30 @@ export default function LivePickArchiveScreen() {
                 <Text style={styles.weeklyWinnerMetaText}>{weeklyWinner.category}</Text>
               </View>
             </View>
+          </View>
+        ) : (
+          <View style={styles.weeklyWinnerCard}>
+            <View style={styles.weeklyWinnerDummyBadge}>
+              <Text style={styles.weeklyWinnerDummyBadgeText}>샘플</Text>
+            </View>
+            <Text style={styles.weeklyWinnerQuestionTitle} numberOfLines={2}>
+              {DUMMY_WEEKLY_TOP.title}
+            </Text>
+            <View style={styles.weeklyWinnerMeta}>
+              <View style={styles.weeklyWinnerMetaItem}>
+                <Ionicons name="people" size={14} color={colors.textSecondary} />
+                <Text style={styles.weeklyWinnerMetaText}>
+                  {DUMMY_WEEKLY_TOP.participantCount}명 참여
+                </Text>
+              </View>
+              <View style={styles.weeklyWinnerMetaItem}>
+                <Ionicons name="pricetag" size={14} color={colors.textSecondary} />
+                <Text style={styles.weeklyWinnerMetaText}>{DUMMY_WEEKLY_TOP.category}</Text>
+              </View>
+            </View>
+            <Text style={styles.weeklyWinnerDummyNote}>
+              다음 주부터 실제 주간 TOP 질문이 표시됩니다.
+            </Text>
           </View>
         )}
       </View>
@@ -583,9 +620,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
   },
-  weeklyWinnerEmptyText: {
-    fontSize: 12,
+  weeklyWinnerDummyBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.border,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginBottom: 6,
+  },
+  weeklyWinnerDummyBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
     color: colors.textSecondary,
+  },
+  weeklyWinnerDummyNote: {
+    fontSize: 11,
+    color: colors.textLight,
+    marginTop: 6,
   },
   weeklyWinnerCard: {
     marginTop: 4,

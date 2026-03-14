@@ -15,6 +15,7 @@ const COLLECTIONS = {
   PARTICIPATIONS: 'livepick_participations',
   REWARDS: 'livepick_rewards',
   REPORTS: 'livepick_reports',
+  WEEKLY_WINNERS: 'livepick_weekly_winners',
 } as const;
 
 const ensureAuthenticatedUser = async (expectedUid?: string): Promise<string> => {
@@ -204,16 +205,84 @@ export async function getTodayLivePickQuestionCount(uid: string): Promise<number
 }
 
 /**
- * 특정 주(weekKey)의 Weekly TOP 질문을 계산합니다.
- * - participantCount 기준 내림차순
- * - 동점이면 createdAt 빠른 순
- * - 그래도 같으면 id 기준으로 정렬
+ * 해당 주 질문 목록에서 Weekly TOP 1건을 계산합니다.
+ * - participantCount 내림차순 → createdAt 오름차순 → id 오름차순
+ */
+function computeWeeklyWinnerFromQuestions(questions: LivePickQuestion[]): LivePickQuestion | null {
+  if (questions.length === 0) return null;
+  const sorted = [...questions].sort((a, b) => {
+    const aCount = a.participantCount || 0;
+    const bCount = b.participantCount || 0;
+    if (bCount !== aCount) return bCount - aCount;
+    const aCreated =
+      a.createdAt instanceof Date
+        ? a.createdAt
+        : (a.createdAt as FirebaseFirestoreTypes.Timestamp).toDate();
+    const bCreated =
+      b.createdAt instanceof Date
+        ? b.createdAt
+        : (b.createdAt as FirebaseFirestoreTypes.Timestamp).toDate();
+    const diff = aCreated.getTime() - bCreated.getTime();
+    if (diff !== 0) return diff;
+    if (a.id < b.id) return -1;
+    if (a.id > b.id) return 1;
+    return 0;
+  });
+  return sorted[0] || null;
+}
+
+/**
+ * 저장된 Weekly TOP 문서를 LivePickQuestion 형태로 변환합니다.
+ */
+function weeklyWinnerDocToQuestion(
+  weekKey: string,
+  data: FirebaseFirestoreTypes.DocumentData
+): LivePickQuestion {
+  const createdAt = data.createdAt?.toDate
+    ? data.createdAt.toDate()
+    : new Date((data.createdAt as FirebaseFirestoreTypes.Timestamp)?.toMillis?.() ?? 0);
+  return {
+    id: data.id,
+    createdBy: data.createdBy,
+    title: data.title,
+    option1: data.option1,
+    option2: data.option2,
+    category: data.category,
+    tags: data.tags ?? [],
+    participantCount: data.participantCount ?? 0,
+    option1Count: data.option1Count ?? 0,
+    option2Count: data.option2Count ?? 0,
+    pointDeducted: data.pointDeducted ?? 0,
+    rewardGiven: data.rewardGiven ?? false,
+    createdAt,
+    weekKey: data.weekKey ?? weekKey,
+    status: data.status ?? 'active',
+  } as LivePickQuestion;
+}
+
+/**
+ * 특정 주(weekKey)의 Weekly TOP 질문을 반환합니다.
+ * - 이미 저장된 값이 있으면 조회만 하고 반환 (한 번 계산 후 재사용).
+ * - 지난 주인데 저장이 없으면 한 번 계산해서 저장한 뒤 반환.
+ * - 현재 주는 저장하지 않고 매번 계산만 반환.
  * @param weekKey 'YYYY-MM-DD' 형식의 주 키 (그 주 월요일, KST 기준)
  * @returns 해당 주의 TOP 질문 1개 (없으면 null)
  */
 export async function getWeeklyWinner(weekKey: string): Promise<LivePickQuestion | null> {
   try {
-    // 1. 해당 주의 질문 전체 조회 (status는 우선 active/closed 모두 허용)
+    const currentWeek = currentWeekKeyKST();
+    const winnerRef = firestore()
+      .collection(COLLECTIONS.WEEKLY_WINNERS)
+      .doc(weekKey);
+
+    // 1. 저장된 값이 있으면 그대로 반환
+    const cached = await winnerRef.get();
+    if (cached.exists && cached.data()) {
+      const data = cached.data()!;
+      return weeklyWinnerDocToQuestion(weekKey, data);
+    }
+
+    // 2. 해당 주 질문 조회 후 계산
     const snapshot = await firestore()
       .collection(COLLECTIONS.QUESTIONS)
       .where('weekKey', '==', weekKey)
@@ -233,38 +302,40 @@ export async function getWeeklyWinner(weekKey: string): Promise<LivePickQuestion
       } as LivePickQuestion);
     });
 
-    // 2. 메모리 상에서 정렬 규칙 적용
-    questions.sort((a, b) => {
-      const aCount = a.participantCount || 0;
-      const bCount = b.participantCount || 0;
-      if (bCount !== aCount) {
-        // 참여자 수 많은 순
-        return bCount - aCount;
+    const winner = computeWeeklyWinnerFromQuestions(questions);
+    if (!winner) return null;
+
+    // 3. 지난 주인 경우에만 한 번 저장 (현재 주는 참여가 계속 변하므로 저장하지 않음)
+    if (weekKey < currentWeek) {
+      try {
+        const payload: Record<string, unknown> = {
+          id: winner.id,
+          createdBy: winner.createdBy,
+          title: winner.title,
+          option1: winner.option1,
+          option2: winner.option2,
+          category: winner.category,
+          tags: winner.tags ?? [],
+          participantCount: winner.participantCount ?? 0,
+          option1Count: winner.option1Count ?? 0,
+          option2Count: winner.option2Count ?? 0,
+          pointDeducted: winner.pointDeducted ?? 0,
+          rewardGiven: winner.rewardGiven ?? false,
+          weekKey: winner.weekKey ?? weekKey,
+          status: winner.status ?? 'active',
+        };
+        payload.createdAt =
+          winner.createdAt instanceof Date
+            ? firestore.Timestamp.fromDate(winner.createdAt)
+            : winner.createdAt;
+        await winnerRef.set(payload);
+        console.log('[LivePick] getWeeklyWinner 저장 완료:', weekKey, winner.id);
+      } catch (writeError: any) {
+        console.warn('[LivePick] getWeeklyWinner 저장 실패(계산값은 반환):', writeError?.message);
       }
+    }
 
-      // createdAt 빠른 순
-      const aCreated =
-        a.createdAt instanceof Date
-          ? a.createdAt
-          : (a.createdAt as FirebaseFirestoreTypes.Timestamp).toDate();
-      const bCreated =
-        b.createdAt instanceof Date
-          ? b.createdAt
-          : (b.createdAt as FirebaseFirestoreTypes.Timestamp).toDate();
-
-      const diff = aCreated.getTime() - bCreated.getTime();
-      if (diff !== 0) {
-        return diff;
-      }
-
-      // 그래도 같으면 id 기준으로 정렬 (안정성 확보)
-      if (a.id < b.id) return -1;
-      if (a.id > b.id) return 1;
-      return 0;
-    });
-
-    // 3. 정렬 결과의 첫 번째 질문이 해당 주의 Weekly TOP 질문
-    return questions[0] || null;
+    return winner;
   } catch (error: any) {
     console.error('[LivePick] getWeeklyWinner 실패:', {
       weekKey,

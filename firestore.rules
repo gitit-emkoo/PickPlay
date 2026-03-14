@@ -91,15 +91,15 @@ service cloud.firestore {
             && resource.data.deviceUID == null
             && request.resource.data.deviceUID is string) ||
           
-          // 3. 포인트 변경 (증가는 최대 1000P, 감소는 최대 20P까지만)
+          // 3. 포인트 변경 (증가는 최대 1000P, 감소는 최대 2000P까지만)
           (request.resource.data.diff(resource.data).changedKeys().hasOnly(['points'])
             && (
               // 증가: 최대 1000P
               (request.resource.data.points >= resource.data.points
                 && request.resource.data.points - resource.data.points <= 1000) ||
-              // 감소: 최대 20P (라이브픽 질문 생성 등)
+              // 감소: 최대 2000P (라이브픽 질문 생성, 보상 교환 등)
               (request.resource.data.points < resource.data.points
-                && resource.data.points - request.resource.data.points <= 20
+                && resource.data.points - request.resource.data.points <= 2000
                 && request.resource.data.points >= 0)
             )) ||
           
@@ -149,7 +149,13 @@ service cloud.firestore {
 
           // 9. 사용자 알림 설정(notificationEnabled)만 변경
           (request.resource.data.diff(resource.data).changedKeys().hasOnly(['notificationEnabled'])
-            && (request.resource.data.notificationEnabled == true || request.resource.data.notificationEnabled == false))
+            && (request.resource.data.notificationEnabled == true || request.resource.data.notificationEnabled == false)) ||
+
+          // 10. 전화번호 인증 정보 추가/업데이트 (phoneNumber, phoneVerified, phoneVerifiedAt)
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phoneNumber', 'phoneVerified', 'phoneVerifiedAt'])
+            && request.resource.data.phoneNumber is string
+            && request.resource.data.phoneNumber.size() > 0
+            && request.resource.data.phoneVerified == true)
         );
       
       // 삭제는 관리자만
@@ -279,6 +285,15 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // 주간 TOP 질문 캐시 (지난 주 한 번만 계산 후 저장, 이후 조회만)
+    match /livepick_weekly_winners/{weekKey} {
+      allow read: if signedIn();
+      // 생성: 인증된 사용자가 해당 주(weekKey) 캐시 문서만 생성 가능 (문서 ID = weekKey)
+      allow create: if signedIn()
+        && request.resource.data.weekKey == weekKey;
+      allow update, delete: if isAdmin();
+    }
+
     // 포인트 적립/소멸 내역
     match /point_history/{docId} {
       // 단일 문서 읽기: 본인 것만
@@ -393,6 +408,38 @@ service cloud.firestore {
         && request.resource.data.read is bool;
       
       // 삭제는 관리자만
+      allow delete: if isAdmin();
+    }
+    
+    // ============================================
+    // 보상 교환 관련 컬렉션
+    // ============================================
+    
+    // 교환 가능한 상품 목록
+    match /reward_items/{rewardId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    
+    // 교환 신청 내역
+    match /exchange_requests/{requestId} {
+      // 본인의 신청 내역만 읽기 가능
+      allow read: if signedIn() && (request.auth.uid == resource.data.uid || isAdmin());
+      
+      // 신청 생성: 본인만 가능, 필수 필드 검증
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.rewardItemId is string
+        && request.resource.data.rewardTitle is string
+        && request.resource.data.usedPoints is int
+        && request.resource.data.usedPoints > 0
+        && request.resource.data.status == 'requested'
+        && request.resource.data.createdAt != null;
+      
+      // 업데이트: 관리자만 가능 (상태 변경 등)
+      allow update: if isAdmin();
+      
+      // 삭제: 관리자만 가능
       allow delete: if isAdmin();
     }
     

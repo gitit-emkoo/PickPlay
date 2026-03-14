@@ -537,7 +537,11 @@ export default function MyPageScreen() {
             
             {/* 포인트 및 연속 참여 */}
             <View style={styles.statsRow}>
-              <View style={styles.statCard}>
+              <TouchableOpacity
+                style={styles.statCard}
+                activeOpacity={0.7}
+                onPress={() => router.push('/(tabs)/point-exchange')}
+              >
                 <View style={styles.statIcon}>
                   <LottieView
                     source={{ uri: "https://lottie.host/c691c7ab-e2e2-4a77-a50e-cef6c130dce1/GjbXQZOTda.lottie" }}
@@ -548,7 +552,7 @@ export default function MyPageScreen() {
                 </View>
                 <Text style={styles.statValue}>{userData.points}P</Text>
                 <Text style={styles.statLabel}>포인트</Text>
-              </View>
+              </TouchableOpacity>
               
               <View style={styles.statCard}>
                 <View style={styles.statIcon}>
