@@ -156,6 +156,14 @@ service cloud.firestore {
             && request.resource.data.phoneNumber is string
             && request.resource.data.phoneNumber.size() > 0
             && request.resource.data.phoneVerified == true)
+        ) ||
+        
+          // 11. 관리자 포인트 지급 (주간 TOP 보상 등): points만 증가, 1회 최대 10000P
+          (isAdmin()
+            && request.resource.data.diff(resource.data).changedKeys().hasOnly(['points'])
+            && request.resource.data.points >= resource.data.points
+            && request.resource.data.points - resource.data.points <= 10000
+            && request.resource.data.points >= 0)
         );
       
       // 삭제는 관리자만
