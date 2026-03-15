@@ -10,6 +10,7 @@ import { currentWeekKeyKST } from '../../src/utils/date';
 import { watchAuth } from '../../src/services/firebase';
 import { getTutorialStatus } from '../../src/services/tutorial';
 import TutorialTooltip from '../components/TutorialTooltip';
+import BannerAdComponent from '../components/BannerAdComponent';
 
 const CATEGORIES: Array<'일상' | '연애' | '가치관' | '엔터테인먼트' | '상상'> = ['일상', '연애', '가치관', '엔터테인먼트', '상상'];
 
@@ -759,11 +760,24 @@ export default function LivePickScreen() {
             );
           }
 
+          // 질문 5개마다 배너 1개 끼우기
+          const listItems: Array<{ type: 'question'; question: LivePickQuestion } | { type: 'banner'; key: string }> = [];
+          displayQuestions.forEach((question, i) => {
+            listItems.push({ type: 'question', question });
+            if ((i + 1) % 5 === 0) listItems.push({ type: 'banner', key: `banner-${i}` });
+          });
+
           return (
             <>
-              {displayQuestions.map((question) => (
-                <QuestionCard key={question.id} question={question} />
-              ))}
+              {listItems.map((item) =>
+                item.type === 'question' ? (
+                  <QuestionCard key={item.question.id} question={item.question} />
+                ) : (
+                  <View key={item.key} style={{ width: '100%', marginVertical: 12, alignItems: 'center' }}>
+                    <BannerAdComponent />
+                  </View>
+                )
+              )}
               {hasMore && !loadingMore && (
                 <TouchableOpacity
                   style={{ marginTop: 8, alignSelf: 'center', flexDirection: 'row', alignItems: 'center' }}
