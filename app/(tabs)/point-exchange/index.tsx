@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Modal } from 'react-native';
-import { useRouter } from 'expo-router';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Modal, RefreshControl, Image } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../../../src/styles/colors';
 import { watchAuth } from '../../../src/services/firebase';
@@ -41,20 +41,24 @@ export default function PointExchangeScreen() {
     return unsubscribe;
   }, []);
 
-  useEffect(() => {
-    const loadItems = async () => {
-      try {
-        setItemsLoading(true);
-        const items = await getActiveRewardItems();
-        setRewardItems(items);
-      } catch (error) {
-        console.error('[PointExchange] 상품 목록 로드 실패:', error);
-      } finally {
-        setItemsLoading(false);
-      }
-    };
-    loadItems();
+  const loadItems = useCallback(async () => {
+    try {
+      setItemsLoading(true);
+      const items = await getActiveRewardItems();
+      setRewardItems(items);
+    } catch (error) {
+      console.error('[PointExchange] 상품 목록 로드 실패:', error);
+    } finally {
+      setItemsLoading(false);
+    }
   }, []);
+
+  // 포인트 교환소 화면에 들어올 때마다 상품 목록 다시 불러오기 (관리자에서 등록한 상품 바로 반영)
+  useFocusEffect(
+    useCallback(() => {
+      loadItems();
+    }, [loadItems])
+  );
 
   const handleExchangePress = async (item: RewardItem) => {
     if (!user || !userData) return;
@@ -125,7 +129,12 @@ export default function PointExchangeScreen() {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView
+        style={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={itemsLoading} onRefresh={loadItems} colors={[colors.primary]} />
+        }
+      >
         {userData && (
           <View style={styles.topSection}>
             <Text style={styles.nickname}>{userData.nickname}</Text>
@@ -156,9 +165,22 @@ export default function PointExchangeScreen() {
           ) : (
             rewardItems.map((item) => (
               <View key={item.id} style={styles.itemCard}>
+                {item.imageUrl?.trim() ? (
+                  <Image
+                    source={{ uri: item.imageUrl.trim() }}
+                    style={styles.itemImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={[styles.itemImage, styles.itemImagePlaceholder]}>
+                    <Ionicons name="gift-outline" size={28} color={colors.textLight} />
+                  </View>
+                )}
                 <View style={styles.itemInfo}>
                   <Text style={styles.itemTitle}>{item.title}</Text>
-                  <Text style={styles.itemDescription}>{item.description}</Text>
+                  {item.description ? (
+                    <Text style={styles.itemDescription} numberOfLines={2}>{item.description}</Text>
+                  ) : null}
                   <View style={styles.itemPoints}>
                     <Ionicons name="diamond" size={16} color={colors.primary} />
                     <Text style={styles.itemPointsText}>{item.requiredPoints}P</Text>
@@ -384,7 +406,6 @@ const styles = StyleSheet.create({
   itemCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     backgroundColor: colors.surface,
     borderRadius: 12,
     padding: 16,
@@ -395,9 +416,21 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  itemImage: {
+    width: 72,
+    height: 72,
+    borderRadius: 8,
+    marginRight: 12,
+    backgroundColor: colors.border,
+  },
+  itemImagePlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   itemInfo: {
     flex: 1,
     marginRight: 12,
+    minWidth: 0,
   },
   itemTitle: {
     fontSize: 16,
