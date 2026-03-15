@@ -79,6 +79,12 @@ export default function TabsLayout() {
           href: null, // 탭에서 숨김
         }}
       />
+      <Tabs.Screen
+        name="livepick/weekly-top"
+        options={{
+          href: null, // 탭에서 숨김
+        }}
+      />
       {/* point-exchange 폴더 내부 서브 화면들은 탭에서 숨김 */}
       <Tabs.Screen
         name="point-exchange/index"

@@ -16,17 +16,17 @@ export const currentDateKey = () => {
   return parseInt(`${year}${month}${day}`);
 };
 
-// 주간 라이브픽용: 한국시간 기준으로 해당 날짜가 속한 주의 월요일 날짜(YYYY-MM-DD)를 계산
+// 주간 라이브픽용: 한국시간(KST) 기준으로 해당 날짜가 속한 주의 월요일 날짜(YYYY-MM-DD)를 계산
+// 예: 3월 9일(월)~15일(일) 주 → "2026-03-09", 3월 11일에 만든 질문 → "2026-03-09"
 export const getKoreanWeekKeyFromDate = (date: Date): string => {
-  // KST 기준으로 변환
-  const utcMillis = date.getTime() + date.getTimezoneOffset() * 60000;
-  const korea = new Date(utcMillis + 9 * 60 * 60 * 1000);
-  // 요일 (일:0, 월:1, ... 토:6)
+  // UTC + 9h = KST 시각으로 해석한 Date (이 Date의 getUTC* 값이 곧 KST 달력 값)
+  const kstMillis = date.getTime() + 9 * 60 * 60 * 1000;
+  const korea = new Date(kstMillis);
+  // KST 기준 요일 (일:0, 월:1, ... 토:6)
   const day = korea.getUTCDay();
-  // 해당 주의 월요일까지 되돌아가기
-  // 월요일(1)이면 diff=0, 일요일(0)이면 6일 전으로
   const diffToMonday = day === 0 ? 6 : day - 1;
-  const monday = new Date(korea.getTime() - diffToMonday * 24 * 60 * 60 * 1000);
+  const mondayMillis = kstMillis - diffToMonday * 24 * 60 * 60 * 1000;
+  const monday = new Date(mondayMillis);
   const year = monday.getUTCFullYear();
   const month = String(monday.getUTCMonth() + 1).padStart(2, '0');
   const dayOfMonth = String(monday.getUTCDate()).padStart(2, '0');

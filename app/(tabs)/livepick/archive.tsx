@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Modal, TextInput, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../../../src/styles/colors';
 import { LivePickQuestion } from '../../../src/types/livepick';
-import { getLivePickQuestions, getWeeklyWinner } from '../../../src/services/livepick';
+import { getLivePickQuestions, getWeeklyWinner, getWeeklyWinners } from '../../../src/services/livepick';
 import { currentWeekKeyKST, getKoreanWeekKeyFromDate } from '../../../src/utils/date';
 
 const CATEGORIES: Array<'일상' | '연애' | '가치관' | '엔터테인먼트' | '상상'> = ['일상', '연애', '가치관', '엔터테인먼트', '상상'];
@@ -62,37 +62,35 @@ export default function LivePickArchiveScreen() {
     loadArchivedQuestions(false);
   }, [sortBy]);
 
+  const loadWeeklyWinner = useCallback(async () => {
+    try {
+      setWeeklyWinnerLoading(true);
+      let winner = await getWeeklyWinner(lastWeekKey);
+      if (!winner || (winner.title?.trim() ?? '') === '') {
+        const all = await getWeeklyWinners();
+        if (all.length > 0 && all[0].weekKey && all[0].weekKey < currentWeekKeyKST()) {
+          winner = all[0];
+        }
+      }
+      setWeeklyWinner(winner);
+    } catch (error) {
+      console.error('[LivePickArchive] Weekly TOP 질문 로드 실패:', error);
+      setWeeklyWinner(null);
+    } finally {
+      setWeeklyWinnerLoading(false);
+    }
+  }, [lastWeekKey]);
+
   const onRefresh = () => {
     setRefreshing(true);
     loadArchivedQuestions(true);
+    loadWeeklyWinner(); // 당겨서 새로고침 시 위클리 탑도 다시 불러옴
   };
 
-  // 지난 주 Weekly TOP 질문 로드 (로딩 타임아웃 시 더미 표시되도록 함)
+  // 지난 주 Weekly TOP 질문 초기 로드
   useEffect(() => {
-    let cancelled = false;
-    const timeoutId = setTimeout(() => {
-      if (!cancelled) setWeeklyWinnerLoading(false);
-    }, 8000);
-
-    const loadWeeklyWinner = async () => {
-      try {
-        setWeeklyWinnerLoading(true);
-        const winner = await getWeeklyWinner(lastWeekKey);
-        if (!cancelled) setWeeklyWinner(winner);
-      } catch (error) {
-        console.error('[LivePickArchive] Weekly TOP 질문 로드 실패:', error);
-        if (!cancelled) setWeeklyWinner(null);
-      } finally {
-        if (!cancelled) setWeeklyWinnerLoading(false);
-      }
-    };
-
     loadWeeklyWinner();
-    return () => {
-      cancelled = true;
-      clearTimeout(timeoutId);
-    };
-  }, [lastWeekKey]);
+  }, [loadWeeklyWinner]);
 
   // 검색 모달 애니메이션
   useEffect(() => {
@@ -280,68 +278,7 @@ export default function LivePickArchiveScreen() {
         </View>
       </View>
 
-      {/* 지난 질문 안내 */}
-      <View style={styles.infoBox}>
-        <Ionicons name="time-outline" size={16} color={colors.primary} />
-        <Text style={styles.infoText}>
-          지난 주까지 진행된 라이브픽 질문의 결과를 확인할 수 있어요.
-        </Text>
-      </View>
-
-      {/* 지난 주 Weekly TOP: 로딩 중이면 스피너, 실제 TOP(참여 1명 이상)이 있으면 실제 카드, 그 외(질문 없음/참여 0)는 무조건 더미 카드. "없습니다" 문구는 사용하지 않음. */}
-      <View style={styles.weeklyWinnerContainer}>
-        <Text style={styles.weeklyWinnerTitle}>지난 주 Weekly TOP 질문</Text>
-        {weeklyWinnerLoading ? (
-          <View style={styles.weeklyWinnerLoading}>
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={styles.weeklyWinnerLoadingText}>불러오는 중...</Text>
-          </View>
-        ) : (weeklyWinner != null && (weeklyWinner.participantCount ?? 0) > 0) ? (
-          <View style={styles.weeklyWinnerCard}>
-            <Text style={styles.weeklyWinnerQuestionTitle} numberOfLines={2}>
-              {weeklyWinner.title}
-            </Text>
-            <View style={styles.weeklyWinnerMeta}>
-              <View style={styles.weeklyWinnerMetaItem}>
-                <Ionicons name="people" size={14} color={colors.textSecondary} />
-                <Text style={styles.weeklyWinnerMetaText}>
-                  {weeklyWinner.participantCount || 0}명 참여
-                </Text>
-              </View>
-              <View style={styles.weeklyWinnerMetaItem}>
-                <Ionicons name="pricetag" size={14} color={colors.textSecondary} />
-                <Text style={styles.weeklyWinnerMetaText}>{weeklyWinner.category}</Text>
-              </View>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.weeklyWinnerCard}>
-            <View style={styles.weeklyWinnerDummyBadge}>
-              <Text style={styles.weeklyWinnerDummyBadgeText}>샘플</Text>
-            </View>
-            <Text style={styles.weeklyWinnerQuestionTitle} numberOfLines={2}>
-              {DUMMY_WEEKLY_TOP.title}
-            </Text>
-            <View style={styles.weeklyWinnerMeta}>
-              <View style={styles.weeklyWinnerMetaItem}>
-                <Ionicons name="people" size={14} color={colors.textSecondary} />
-                <Text style={styles.weeklyWinnerMetaText}>
-                  {DUMMY_WEEKLY_TOP.participantCount}명 참여
-                </Text>
-              </View>
-              <View style={styles.weeklyWinnerMetaItem}>
-                <Ionicons name="pricetag" size={14} color={colors.textSecondary} />
-                <Text style={styles.weeklyWinnerMetaText}>{DUMMY_WEEKLY_TOP.category}</Text>
-              </View>
-            </View>
-            <Text style={styles.weeklyWinnerDummyNote}>
-              다음 주부터 실제 주간 TOP 질문이 표시됩니다.
-            </Text>
-          </View>
-        )}
-      </View>
-
-      {/* 카테고리 필터 (라이브픽과 동일) */}
+      {/* 카테고리 필터: 상단 고정 */}
       <View style={styles.categoryFilter}>
         <ScrollView
           horizontal
@@ -388,33 +325,102 @@ export default function LivePickArchiveScreen() {
         </ScrollView>
       </View>
 
-      {/* 리스트 */}
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>지난 질문을 불러오는 중...</Text>
+      {/* 스크롤 영역: 안내 텍스트 → 지난주 TOP → 리스트 */}
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        showsVerticalScrollIndicator={true}
+      >
+        <View style={styles.infoBox}>
+          <Ionicons name="time-outline" size={16} color={colors.primary} />
+          <Text style={styles.infoText}>
+            지난 주까지 진행된 라이브픽 질문의 결과를 확인할 수 있어요.
+          </Text>
         </View>
-      ) : (
-        <ScrollView
-          style={styles.content}
-          contentContainerStyle={styles.contentContainer}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-        >
-          {filteredQuestions.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="calendar-outline" size={48} color={colors.textLight} />
-              <Text style={styles.emptyText}>아직 지난 질문이 없어요.</Text>
-              <Text style={styles.emptySubtext}>
-                이번 주 라이브픽 질문이 종료되면 이곳에서 확인하실 수 있어요.
-              </Text>
+
+        {/* 지난 주 Weekly TOP: 클릭 시 주간 TOP 전체 목록 페이지로 이동 (스크롤에 포함) */}
+        <View style={styles.weeklyWinnerContainer}>
+          <Text style={styles.weeklyWinnerTitle}>지난 주 Weekly TOP 질문</Text>
+          {weeklyWinnerLoading ? (
+            <View style={styles.weeklyWinnerLoading}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.weeklyWinnerLoadingText}>불러오는 중...</Text>
             </View>
           ) : (
-            filteredQuestions.map(renderCard)
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => router.push('/(tabs)/livepick/weekly-top')}
+            >
+              {(weeklyWinner != null && (weeklyWinner.title?.trim() ?? '') !== '') ? (
+                <View style={styles.weeklyWinnerCard}>
+                  <Text style={styles.weeklyWinnerQuestionTitle} numberOfLines={2}>
+                    {weeklyWinner.title}
+                  </Text>
+                  <View style={styles.weeklyWinnerMeta}>
+                    <View style={styles.weeklyWinnerMetaItem}>
+                      <Ionicons name="people" size={14} color={colors.textSecondary} />
+                      <Text style={styles.weeklyWinnerMetaText}>
+                        {weeklyWinner.participantCount || 0}명 참여
+                      </Text>
+                    </View>
+                    <View style={styles.weeklyWinnerMetaItem}>
+                      <Ionicons name="pricetag" size={14} color={colors.textSecondary} />
+                      <Text style={styles.weeklyWinnerMetaText}>{weeklyWinner.category}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.weeklyWinnerTapHint}>탭하면 지난 모든 주간 TOP 보기</Text>
+                </View>
+              ) : (
+                <View style={styles.weeklyWinnerCard}>
+                  <View style={styles.weeklyWinnerDummyBadge}>
+                    <Text style={styles.weeklyWinnerDummyBadgeText}>샘플</Text>
+                  </View>
+                  <Text style={styles.weeklyWinnerQuestionTitle} numberOfLines={2}>
+                    {DUMMY_WEEKLY_TOP.title}
+                  </Text>
+                  <View style={styles.weeklyWinnerMeta}>
+                    <View style={styles.weeklyWinnerMetaItem}>
+                      <Ionicons name="people" size={14} color={colors.textSecondary} />
+                      <Text style={styles.weeklyWinnerMetaText}>
+                        {DUMMY_WEEKLY_TOP.participantCount}명 참여
+                      </Text>
+                    </View>
+                    <View style={styles.weeklyWinnerMetaItem}>
+                      <Ionicons name="pricetag" size={14} color={colors.textSecondary} />
+                      <Text style={styles.weeklyWinnerMetaText}>{DUMMY_WEEKLY_TOP.category}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.weeklyWinnerDummyNote}>
+                    다음 주부터 실제 주간 TOP 질문이 표시됩니다.
+                  </Text>
+                  <Text style={styles.weeklyWinnerTapHint}>탭하면 주간 TOP 목록 보기</Text>
+                </View>
+              )}
+            </TouchableOpacity>
           )}
-        </ScrollView>
-      )}
+        </View>
+
+        {/* 리스트 */}
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.loadingText}>지난 질문을 불러오는 중...</Text>
+          </View>
+        ) : filteredQuestions.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="calendar-outline" size={48} color={colors.textLight} />
+            <Text style={styles.emptyText}>아직 지난 질문이 없어요.</Text>
+            <Text style={styles.emptySubtext}>
+              이번 주 라이브픽 질문이 종료되면 이곳에서 확인하실 수 있어요.
+            </Text>
+          </View>
+        ) : (
+          filteredQuestions.map(renderCard)
+        )}
+      </ScrollView>
 
       {/* 검색 모달 */}
       <Modal
@@ -587,12 +593,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    paddingVertical: 2,
     gap: 8,
-    zIndex: 1,
   },
   infoText: {
     flex: 1,
@@ -600,10 +602,15 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   weeklyWinnerContainer: {
-    paddingHorizontal: 20,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 14,
     paddingTop: 10,
-    paddingBottom: 4,
+    paddingBottom: 10,
     backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: 12,
   },
   weeklyWinnerTitle: {
     fontSize: 14,
@@ -637,6 +644,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.textLight,
     marginTop: 6,
+  },
+  weeklyWinnerTapHint: {
+    fontSize: 11,
+    color: colors.primary,
+    marginTop: 8,
   },
   weeklyWinnerCard: {
     marginTop: 4,

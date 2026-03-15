@@ -84,6 +84,7 @@ export type PointHistoryReason =
   | 'ladder_reward'
   | 'creator_reward'
   | 'top_reward'
+  | 'weekly_top_reward' // 주간 TOP 질문 보상 (관리자 지급)
   | 'majority_reward'
   | 'ad_bonus'
   | 'livepick_question_creation'

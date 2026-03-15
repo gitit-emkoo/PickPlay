@@ -77,94 +77,101 @@ service cloud.firestore {
         );
       
       // 업데이트: 필드별 세밀한 권한 제어
-      allow update: if signedIn() 
-        && request.auth.uid == uid
-        && (
-          // 1. 닉네임만 수정하는 경우 (사용자가 직접 수정 가능)
-          (request.resource.data.diff(resource.data).changedKeys().hasOnly(['nickname'])
-            && request.resource.data.nickname is string
-            && request.resource.data.nickname.size() > 0
-            && request.resource.data.nickname.size() <= 20) ||
-          
-          // 2. deviceUID 추가 (기존 사용자 문서에 deviceUID가 없을 때 추가)
-          (request.resource.data.diff(resource.data).changedKeys().hasOnly(['deviceUID'])
-            && resource.data.deviceUID == null
-            && request.resource.data.deviceUID is string) ||
-          
-          // 3. 포인트 변경 (증가는 최대 1000P, 감소는 최대 2000P까지만)
-          (request.resource.data.diff(resource.data).changedKeys().hasOnly(['points'])
-            && (
-              // 증가: 최대 1000P
-              (request.resource.data.points >= resource.data.points
-                && request.resource.data.points - resource.data.points <= 1000) ||
-              // 감소: 최대 2000P (라이브픽 질문 생성, 보상 교환 등)
-              (request.resource.data.points < resource.data.points
-                && resource.data.points - request.resource.data.points <= 2000
-                && request.resource.data.points >= 0)
-            )) ||
-          
-          // 4. 포인트와 튜토리얼 보상 상태 동시 업데이트 (튜토리얼 완료 시)
-          (request.resource.data.diff(resource.data).changedKeys().hasOnly(['points', 'tutorial'])
-            && request.resource.data.points >= resource.data.points
-            && request.resource.data.points - resource.data.points <= 1000
-            && request.resource.data.tutorial.rewardGiven500 == true
-            && resource.data.tutorial.rewardGiven500 == false) ||
-          
-          // 5. 튜토리얼 상태만 업데이트 (미션 완료 시)
-          (request.resource.data.diff(resource.data).changedKeys().hasOnly(['tutorial'])
-            && (
-              // mainAnswered가 false에서 true로 변경
-              (request.resource.data.tutorial.mainAnswered == true 
-                && resource.data.tutorial.mainAnswered == false) ||
-              // livepickParticipated가 false에서 true로 변경
-              (request.resource.data.tutorial.livepickParticipated == true 
-                && resource.data.tutorial.livepickParticipated == false) ||
-              // livepickCreated가 false에서 true로 변경
-              (request.resource.data.tutorial.livepickCreated == true 
-                && resource.data.tutorial.livepickCreated == false) ||
-              // rewardGiven500이 false에서 true로 변경
-              (request.resource.data.tutorial.rewardGiven500 == true 
-                && resource.data.tutorial.rewardGiven500 == false)
-            )) ||
-          
-          // 6. 게임 로직에서 자동 업데이트되는 필드들
-          //    - 답변 제출 시: totalSelections, streakCount, lastAnswerDate만 업데이트
-          (request.resource.data.diff(resource.data).changedKeys().hasOnly(['totalSelections', 'streakCount', 'lastAnswerDate'])
-            && request.resource.data.streakCount >= resource.data.streakCount // 연속 참여는 증가 또는 유지
-            && request.resource.data.totalSelections >= resource.data.totalSelections // 총 선택 수는 증가만
-            && request.resource.data.totalSelections == resource.data.totalSelections + 1) || // 정확히 1 증가해야 함
-          
-          // 7. 포인트 변경 (포인트와 함께 다른 필드 업데이트 가능)
-          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['points', 'streakCount', 'totalSelections', 'lastAnswerDate', 'characterId', 'adjective1', 'adjective2'])
-            && request.resource.data.points >= resource.data.points // 포인트는 증가만
-            && request.resource.data.points - resource.data.points <= 1000 // 한 번에 최대 1000P
-            && request.resource.data.streakCount >= resource.data.streakCount // 연속 참여는 증가 또는 유지
-            && request.resource.data.totalSelections >= resource.data.totalSelections) || // 총 선택 수는 증가만
-          
-          // 8. 애니마코드 업데이트 (characterId, adjective1, adjective2만)
-          (request.resource.data.diff(resource.data).changedKeys().hasOnly(['characterId', 'adjective1', 'adjective2'])
-            && (request.resource.data.characterId == null || request.resource.data.characterId is string)
-            && (request.resource.data.adjective1 == null || request.resource.data.adjective1 is string)
-            && (request.resource.data.adjective2 == null || request.resource.data.adjective2 is string)) ||
+      // - 일반 사용자는 자신의 문서만, 정해진 패턴으로만 수정 가능
+      // - 관리자는 다른 사용자의 points를 늘려줄 수 있음 (주간 TOP 보상 등)
+      allow update: if signedIn() && (
+        // [일반 사용자용] 자신의 문서만 업데이트 허용
+        (
+          request.auth.uid == uid &&
+          (
+            // 1. 닉네임만 수정하는 경우 (사용자가 직접 수정 가능)
+            (request.resource.data.diff(resource.data).changedKeys().hasOnly(['nickname'])
+              && request.resource.data.nickname is string
+              && request.resource.data.nickname.size() > 0
+              && request.resource.data.nickname.size() <= 20) ||
+            
+            // 2. deviceUID 추가 (기존 사용자 문서에 deviceUID가 없을 때 추가)
+            (request.resource.data.diff(resource.data).changedKeys().hasOnly(['deviceUID'])
+              && resource.data.deviceUID == null
+              && request.resource.data.deviceUID is string) ||
+            
+            // 3. 포인트 변경 (증가는 최대 1000P, 감소는 최대 2000P까지만)
+            (request.resource.data.diff(resource.data).changedKeys().hasOnly(['points'])
+              && (
+                // 증가: 최대 1000P
+                (request.resource.data.points >= resource.data.points
+                  && request.resource.data.points - resource.data.points <= 1000) ||
+                // 감소: 최대 2000P (라이브픽 질문 생성, 보상 교환 등)
+                (request.resource.data.points < resource.data.points
+                  && resource.data.points - request.resource.data.points <= 2000
+                  && request.resource.data.points >= 0)
+              )) ||
+            
+            // 4. 포인트와 튜토리얼 보상 상태 동시 업데이트 (튜토리얼 완료 시)
+            (request.resource.data.diff(resource.data).changedKeys().hasOnly(['points', 'tutorial'])
+              && request.resource.data.points >= resource.data.points
+              && request.resource.data.points - resource.data.points <= 1000
+              && request.resource.data.tutorial.rewardGiven500 == true
+              && resource.data.tutorial.rewardGiven500 == false) ||
+            
+            // 5. 튜토리얼 상태만 업데이트 (미션 완료 시)
+            (request.resource.data.diff(resource.data).changedKeys().hasOnly(['tutorial'])
+              && (
+                // mainAnswered가 false에서 true로 변경
+                (request.resource.data.tutorial.mainAnswered == true 
+                  && resource.data.tutorial.mainAnswered == false) ||
+                // livepickParticipated가 false에서 true로 변경
+                (request.resource.data.tutorial.livepickParticipated == true 
+                  && resource.data.tutorial.livepickParticipated == false) ||
+                // livepickCreated가 false에서 true로 변경
+                (request.resource.data.tutorial.livepickCreated == true 
+                  && resource.data.tutorial.livepickCreated == false) ||
+                // rewardGiven500이 false에서 true로 변경
+                (request.resource.data.tutorial.rewardGiven500 == true 
+                  && resource.data.tutorial.rewardGiven500 == false)
+              )) ||
+            
+            // 6. 게임 로직에서 자동 업데이트되는 필드들
+            //    - 답변 제출 시: totalSelections, streakCount, lastAnswerDate만 업데이트
+            (request.resource.data.diff(resource.data).changedKeys().hasOnly(['totalSelections', 'streakCount', 'lastAnswerDate'])
+              && request.resource.data.streakCount >= resource.data.streakCount // 연속 참여는 증가 또는 유지
+              && request.resource.data.totalSelections >= resource.data.totalSelections // 총 선택 수는 증가만
+              && request.resource.data.totalSelections == resource.data.totalSelections + 1) || // 정확히 1 증가해야 함
+            
+            // 7. 포인트 변경 (포인트와 함께 다른 필드 업데이트 가능)
+            (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['points', 'streakCount', 'totalSelections', 'lastAnswerDate', 'characterId', 'adjective1', 'adjective2'])
+              && request.resource.data.points >= resource.data.points // 포인트는 증가만
+              && request.resource.data.points - resource.data.points <= 1000 // 한 번에 최대 1000P
+              && request.resource.data.streakCount >= resource.data.streakCount // 연속 참여는 증가 또는 유지
+              && request.resource.data.totalSelections >= resource.data.totalSelections) || // 총 선택 수는 증가만
+            
+            // 8. 애니마코드 업데이트 (characterId, adjective1, adjective2만)
+            (request.resource.data.diff(resource.data).changedKeys().hasOnly(['characterId', 'adjective1', 'adjective2'])
+              && (request.resource.data.characterId == null || request.resource.data.characterId is string)
+              && (request.resource.data.adjective1 == null || request.resource.data.adjective1 is string)
+              && (request.resource.data.adjective2 == null || request.resource.data.adjective2 is string)) ||
 
-          // 9. 사용자 알림 설정(notificationEnabled)만 변경
-          (request.resource.data.diff(resource.data).changedKeys().hasOnly(['notificationEnabled'])
-            && (request.resource.data.notificationEnabled == true || request.resource.data.notificationEnabled == false)) ||
+            // 9. 사용자 알림 설정(notificationEnabled)만 변경
+            (request.resource.data.diff(resource.data).changedKeys().hasOnly(['notificationEnabled'])
+              && (request.resource.data.notificationEnabled == true || request.resource.data.notificationEnabled == false)) ||
 
-          // 10. 전화번호 인증 정보 추가/업데이트 (phoneNumber, phoneVerified, phoneVerifiedAt)
-          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phoneNumber', 'phoneVerified', 'phoneVerifiedAt'])
-            && request.resource.data.phoneNumber is string
-            && request.resource.data.phoneNumber.size() > 0
-            && request.resource.data.phoneVerified == true)
+            // 10. 전화번호 인증 정보 추가/업데이트 (phoneNumber, phoneVerified, phoneVerifiedAt)
+            (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['phoneNumber', 'phoneVerified', 'phoneVerifiedAt'])
+              && request.resource.data.phoneNumber is string
+              && request.resource.data.phoneNumber.size() > 0
+              && request.resource.data.phoneVerified == true)
+          )
         ) ||
-        
-          // 11. 관리자 포인트 지급 (주간 TOP 보상 등): points만 증가, 1회 최대 10000P
-          (isAdmin()
-            && request.resource.data.diff(resource.data).changedKeys().hasOnly(['points'])
-            && request.resource.data.points >= resource.data.points
-            && request.resource.data.points - resource.data.points <= 10000
-            && request.resource.data.points >= 0)
-        );
+        // [관리자용] 어떤 사용자의 points든 증가만 가능 (주간 TOP 보상 등)
+        (
+          isAdmin()
+          && request.resource.data.diff(resource.data).changedKeys().hasOnly(['points'])
+          && request.resource.data.points is number
+          && request.resource.data.points >= resource.data.get('points', 0)
+          && request.resource.data.points - resource.data.get('points', 0) <= 10000
+          && request.resource.data.points >= 0
+        )
+      );
       
       // 삭제는 관리자만
       allow delete: if isAdmin();
@@ -307,18 +314,24 @@ service cloud.firestore {
       // 단일 문서 읽기: 본인 것만
       allow get: if signedIn() && request.auth.uid == resource.data.uid;
       // 쿼리(list): 인증된 사용자 허용
-      // Firestore는 쿼리 결과의 각 문서가 allow get 규칙을 만족하는지 확인
-      // where('uid', '==', uid)로 필터링되므로 결과 문서들은 모두 allow get 조건을 만족
       allow list: if signedIn();
       
-      // 생성: 본인의 내역만 생성 가능 (필수 필드 검증)
-      allow create: if signedIn()
-        && request.auth.uid == request.resource.data.uid
-        && request.resource.data.keys().hasAll(['uid', 'amount', 'reason', 'createdAt'])
-        && request.resource.data.uid is string
-        && request.resource.data.amount is number
-        && request.resource.data.reason is string
-        && (request.resource.data.description == null || request.resource.data.description is string);
+      // 생성: 본인 내역 또는 관리자 대신 기록 (주간 TOP 보상 등)
+      allow create: if (
+        (signedIn()
+          && request.auth.uid == request.resource.data.uid
+          && request.resource.data.keys().hasAll(['uid', 'amount', 'reason', 'createdAt'])
+          && request.resource.data.uid is string
+          && request.resource.data.amount is number
+          && request.resource.data.reason is string
+          && (request.resource.data.description == null || request.resource.data.description is string))
+        || (isAdmin()
+          && request.resource.data.keys().hasAll(['uid', 'amount', 'reason', 'createdAt'])
+          && request.resource.data.uid is string
+          && request.resource.data.amount is number
+          && request.resource.data.reason is string
+          && (request.resource.data.description == null || request.resource.data.description is string))
+      );
       
       // 수정/삭제는 금지 (한 번 기록된 내역은 변경 불가)
       allow update, delete: if false;

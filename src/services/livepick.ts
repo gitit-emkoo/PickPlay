@@ -242,12 +242,12 @@ function weeklyWinnerDocToQuestion(
     ? data.createdAt.toDate()
     : new Date((data.createdAt as FirebaseFirestoreTypes.Timestamp)?.toMillis?.() ?? 0);
   return {
-    id: data.id,
-    createdBy: data.createdBy,
-    title: data.title,
-    option1: data.option1,
-    option2: data.option2,
-    category: data.category,
+    id: data.id ?? '',
+    createdBy: data.createdBy ?? '',
+    title: data.title ?? '',
+    option1: data.option1 ?? '',
+    option2: data.option2 ?? '',
+    category: data.category ?? '일상',
     tags: data.tags ?? [],
     participantCount: data.participantCount ?? 0,
     option1Count: data.option1Count ?? 0,
@@ -258,6 +258,21 @@ function weeklyWinnerDocToQuestion(
     weekKey: data.weekKey ?? weekKey,
     status: data.status ?? 'active',
   } as LivePickQuestion;
+}
+
+/**
+ * 저장된 모든 주간 TOP 질문을 weekKey 내림차순으로 반환합니다.
+ * (지난주, 지지난주, 지지지난주 … 전부 표시용)
+ */
+export async function getWeeklyWinners(): Promise<LivePickQuestion[]> {
+  const snapshot = await firestore().collection(COLLECTIONS.WEEKLY_WINNERS).get();
+  const list: LivePickQuestion[] = [];
+  snapshot.forEach((doc) => {
+    const data = doc.data();
+    list.push(weeklyWinnerDocToQuestion(doc.id, data));
+  });
+  list.sort((a, b) => (b.weekKey ?? '').localeCompare(a.weekKey ?? ''));
+  return list;
 }
 
 /**
