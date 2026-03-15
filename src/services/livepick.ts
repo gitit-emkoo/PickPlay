@@ -633,7 +633,7 @@ export async function receiveBasicReward(uid: string, questionId: string): Promi
  * 사다리 게임 보상을 지급합니다.
  * @param uid 사용자 UID
  * @param questionId 질문 ID
- * @param rewardPoints 지급할 포인트 (10P / 20P / 100P / 200P / 300P 중 하나)
+ * @param rewardPoints 지급할 포인트 (15P / 20P / 100P / 200P / 300P 중 하나)
  */
 export async function receiveLadderReward(
   uid: string,
@@ -643,7 +643,7 @@ export async function receiveLadderReward(
   try {
     await ensureAuthenticatedUser(uid);
 
-    const allowedRewards = [10, 20, 100, 200, 300];
+    const allowedRewards = [15, 20, 100, 200, 300];
     if (!allowedRewards.includes(rewardPoints)) {
       throw new Error('유효하지 않은 사다리 보상 금액입니다.');
     }

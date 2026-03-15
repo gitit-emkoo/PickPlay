@@ -3,7 +3,7 @@
     "immediateReward": 5,
     "ladderGameRewards": [
       {
-        "points": 10,
+        "points": 15,
         "probability": 0.7
       },
       {
