@@ -439,6 +439,36 @@ export async function getLivePickQuestions(
 }
 
 /**
+ * 내가 생성한 LivePick 질문 목록을 조회합니다.
+ * @param uid 사용자 UID (생성자)
+ * @param limit 최대 개수 (기본 50)
+ */
+export async function getMyLivePickQuestions(uid: string, limit: number = 50): Promise<LivePickQuestion[]> {
+  try {
+    const snapshot = await firestore()
+      .collection(COLLECTIONS.QUESTIONS)
+      .where('createdBy', '==', uid)
+      .orderBy('createdAt', 'desc')
+      .limit(limit)
+      .get({ source: 'server' });
+
+    const questions: LivePickQuestion[] = [];
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      questions.push({
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt as any),
+      } as LivePickQuestion);
+    });
+    return questions;
+  } catch (error: any) {
+    console.error('❌ [LivePick] 내 질문 목록 조회 실패:', error);
+    throw error;
+  }
+}
+
+/**
  * 특정 질문을 조회합니다.
  * @param questionId 질문 ID
  * @returns 질문 데이터 또는 null

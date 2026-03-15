@@ -64,7 +64,8 @@ const getDummyQuestion = (id: string): LivePickQuestion | null => {
 
 export default function QuestionDetailScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id: string; from?: string }>();
+  const id = params.id as string;
   const [user, setUser] = useState<{ uid: string } | null>(null);
   const [question, setQuestion] = useState<LivePickQuestion | null>(null);
   const [loading, setLoading] = useState(true);
@@ -210,8 +211,12 @@ export default function QuestionDetailScreen() {
   useEffect(() => {
     if (Platform.OS === 'android') {
       const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-        // 목록 화면으로 이동
-        router.push('/(tabs)/livepick');
+        // 진입 경로에 따라 적절한 화면으로 이동
+        if (params.from === 'my_created') {
+          router.push('/my-created-questions');
+        } else {
+          router.push('/(tabs)/livepick');
+        }
         return true; // 기본 동작 방지
       });
 
@@ -708,8 +713,12 @@ export default function QuestionDetailScreen() {
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => {
-            // 목록 화면으로 이동 (목록 화면이 다시 마운트되면 자동으로 갱신됨)
-            router.push('/(tabs)/livepick');
+            // 진입 경로에 따라 적절한 화면으로 이동
+            if (params.from === 'my_created') {
+              router.push('/my-created-questions');
+            } else {
+              router.push('/(tabs)/livepick');
+            }
           }}
           activeOpacity={0.7}
         >

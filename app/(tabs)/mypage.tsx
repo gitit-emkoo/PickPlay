@@ -675,6 +675,18 @@ export default function MyPageScreen() {
             </View>
           )}
 
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => router.push('/my-created-questions')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.menuLeft}>
+              <Ionicons name="create-outline" size={24} color={colors.primary} />
+              <Text style={styles.menuText}>내가 생성한 질문</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.textLight} />
+          </TouchableOpacity>
+
           <TouchableOpacity 
             style={styles.menuItem}
             onPress={() => openLink('https://pickplay.waveon.me/pages/1757817752093')}
