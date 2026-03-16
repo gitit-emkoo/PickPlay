@@ -40,7 +40,34 @@ async function sendUserPushNotification(
       data,
     };
 
-    await expo.sendPushNotificationsAsync([message]);
+    const tickets = await expo.sendPushNotificationsAsync([message]);
+
+    // Expo 응답에서 토큰 만료/비유효 에러를 감지하여 user_push_tokens 정리
+    for (const ticket of tickets) {
+      if (ticket.status === 'error') {
+        const errorCode = (ticket as any).details?.error;
+        console.warn('[sendUserPushNotification] Expo 푸시 전송 에러', {
+          uid,
+          error: ticket.message,
+          errorCode,
+        });
+
+        // 더 이상 사용 불가능한 토큰이면 삭제
+        const HARD_FAILURE_ERRORS = ['DeviceNotRegistered', 'InvalidCredentials'];
+        if (errorCode && HARD_FAILURE_ERRORS.includes(errorCode)) {
+          try {
+            await admin.firestore().collection('user_push_tokens').doc(uid).delete();
+            console.log('[sendUserPushNotification] 만료/비유효 토큰 문서 삭제 완료', { uid, errorCode });
+          } catch (cleanupError: any) {
+            console.warn(
+              '[sendUserPushNotification] 토큰 정리 중 오류(무시 가능):',
+              cleanupError?.message || cleanupError,
+            );
+          }
+        }
+      }
+    }
+
     console.log('[sendUserPushNotification] 푸시 전송 완료', { uid });
   } catch (error: any) {
     console.error('[sendUserPushNotification] 푸시 전송 실패:', error?.message || error);

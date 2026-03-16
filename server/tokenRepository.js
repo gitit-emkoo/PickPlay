@@ -117,7 +117,7 @@ async function fetchSchedulerConfig() {
         isEnabled: true,
         scheduleTime: '20:15',
         title: '오늘의 질문이 기다리고 있어요! 🎯',
-        body: '지금 참여하고 보상 받기! (20:15)'
+        body: '지금 참여하고 보상 받기!'
       };
     }
     return doc.data();
@@ -127,7 +127,7 @@ async function fetchSchedulerConfig() {
       isEnabled: true,
       scheduleTime: '20:15',
       title: '오늘의 질문이 기다리고 있어요! 🎯',
-      body: '지금 참여하고 보상 받기! (20:15)'
+      body: '지금 참여하고 보상 받기!'
     };
   }
 }

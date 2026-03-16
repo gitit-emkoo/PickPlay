@@ -91,7 +91,7 @@ Response: { "ok": true, "sent": 2, "type": "test", "platform": "all" }
 - URL: Cloud Run/Functions에 배포된 `/broadcast/daily`
 - 본문(JSON):
 ```
-{ "title": "오늘의 질문이 기다리고 있어요! 🎯", "body": "지금 참여하고 보상 받기! (20:15)" }
+{ "title": "오늘의 질문이 기다리고 있어요! 🎯", "body": "지금 참여하고 보상 받기!" }
 ```
 - 인증: 서비스 계정(OIDC) 지정 권장
 
