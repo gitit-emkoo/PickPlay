@@ -683,7 +683,7 @@ export const onUserNotificationCreated = functions
 export const sendInactiveUserNotifications = functions
   .region('asia-northeast3')
   .pubsub
-  .schedule('0 4 * * *') // 매일 새벽 4시 (KST)
+  .schedule('0 14 * * *') // 매일 새벽 4시 (KST)
   .timeZone('Asia/Seoul')
   .onRun(async () => {
     try {
