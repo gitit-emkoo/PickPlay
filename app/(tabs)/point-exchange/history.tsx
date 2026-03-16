@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import LottieView from 'lottie-react-native';
 import colors from '../../../src/styles/colors';
 import { watchAuth } from '../../../src/services/firebase';
 import { ExchangeRequest, ExchangeRequestStatus } from '../../../src/types';
@@ -15,9 +16,9 @@ const STATUS_LABELS: Record<ExchangeRequestStatus, string> = {
 };
 
 const STATUS_COLORS: Record<ExchangeRequestStatus, string> = {
-  requested: colors.primary,
+  requested: '#22c55e', // 신청완료: 초록
   pending: colors.accent,
-  completed: colors.success || '#4CAF50',
+  completed: colors.primary, // 발송완료: 파란색(기존 primary)
   cancelled: colors.textLight,
 };
 
@@ -25,12 +26,25 @@ export default function ExchangeHistoryScreen() {
   const router = useRouter();
   const [user, setUser] = useState<{ uid: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [requests, setRequests] = useState<ExchangeRequest[]>([]);
 
+  const formatPoints = (value: number | undefined | null) =>
+    typeof value === 'number' ? value.toLocaleString('ko-KR') : '0';
+
+  const loadHistory = useCallback(async () => {
+    try {
+      const history = await getExchangeHistory();
+      setRequests(history);
+    } catch (error) {
+      console.error('[ExchangeHistory] 내역 로드 실패:', error);
+    }
+  }, []);
+
   useEffect(() => {
-    const unsubscribe = watchAuth(async (user) => {
-      setUser(user);
-      if (user) {
+    const unsubscribe = watchAuth(async (authUser) => {
+      setUser(authUser);
+      if (authUser) {
         try {
           const history = await getExchangeHistory();
           setRequests(history);
@@ -42,6 +56,12 @@ export default function ExchangeHistoryScreen() {
     });
     return unsubscribe;
   }, []);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadHistory();
+    setRefreshing(false);
+  }, [loadHistory]);
 
   const formatDate = (value: any) => {
     try {
@@ -66,7 +86,7 @@ export default function ExchangeHistoryScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/point-exchange')} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>교환 내역</Text>
@@ -82,14 +102,24 @@ export default function ExchangeHistoryScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.push('/(tabs)/point-exchange')} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>교환 내역</Text>
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary]}
+          />
+        }
+      >
         {requests.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="receipt-outline" size={64} color={colors.textLight} />
@@ -126,9 +156,16 @@ export default function ExchangeHistoryScreen() {
                   <Text style={styles.requestValue}>{formatDate(request.createdAt)}</Text>
                 </View>
                 <View style={styles.requestRow}>
-                  <Ionicons name="diamond-outline" size={16} color={colors.textSecondary} />
+                  <View style={styles.pointsLottieWrapper}>
+                    <LottieView
+                      source={{ uri: "https://lottie.host/c691c7ab-e2e2-4a77-a50e-cef6c130dce1/GjbXQZOTda.lottie" }}
+                      loop
+                      autoPlay
+                      style={styles.pointsLottie}
+                    />
+                  </View>
                   <Text style={styles.requestLabel}>사용 포인트</Text>
-                  <Text style={styles.requestValue}>{request.usedPoints}P</Text>
+                  <Text style={styles.requestValue}>{formatPoints(request.usedPoints)}P</Text>
                 </View>
               </View>
             </View>
@@ -229,6 +266,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  pointsLottieWrapper: {
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pointsLottie: {
+    width: 20,
+    height: 20,
   },
   requestLabel: {
     fontSize: 13,

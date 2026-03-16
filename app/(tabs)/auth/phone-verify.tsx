@@ -4,7 +4,6 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../../../src/styles/colors';
 import { requestVerificationCode, verifyCode } from '../../../src/services/phoneVerification';
-import { linkPhoneToCurrentUser } from '../../../src/services/userProfile';
 
 export default function PhoneVerifyScreen() {
   const router = useRouter();
@@ -57,8 +56,6 @@ export default function PhoneVerifyScreen() {
       const result = await verifyCode(e164Phone, verificationCode);
 
       if (result.success) {
-        await linkPhoneToCurrentUser(e164Phone);
-        
         Alert.alert(
           '인증 완료',
           '인증이 완료되었어요.\n이제 상품을 교환할 수 있어요.',
@@ -151,10 +148,6 @@ export default function PhoneVerifyScreen() {
                   <Text style={styles.verifyButtonText}>인증하기</Text>
                 )}
               </TouchableOpacity>
-
-              <Text style={styles.devNote}>
-                💡 개발 모드: 인증번호 "1234"를 입력하세요.
-              </Text>
             </>
           )}
         </View>
@@ -276,12 +269,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: 'white',
-  },
-  devNote: {
-    fontSize: 12,
-    color: colors.accent,
-    textAlign: 'center',
-    marginTop: 12,
   },
   infoBox: {
     flexDirection: 'row',

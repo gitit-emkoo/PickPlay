@@ -185,7 +185,7 @@ export default function LivePickArchiveScreen() {
       {/* 헤더 */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>지난질문</Text>
+          <Text style={styles.headerTitle}>지난 라이브픽</Text>
         </View>
         <View style={styles.headerActions}>
           {/* 검색 버튼 */}
@@ -198,73 +198,16 @@ export default function LivePickArchiveScreen() {
           </TouchableOpacity>
 
           {/* 정렬 버튼 */}
-          <View style={{ position: 'relative', zIndex: 1000 }}>
-            <TouchableOpacity
-              style={styles.sortButton}
-              activeOpacity={0.7}
-              onPress={() => setShowSortDropdown(!showSortDropdown)}
-            >
-              <Ionicons name="menu" size={20} color={colors.primary} />
-            </TouchableOpacity>
+          <View style={{ position: 'relative', zIndex: 10000 }}>
+          <TouchableOpacity
+            style={styles.sortButton}
+            activeOpacity={0.7}
+            onPress={() => setShowSortDropdown(!showSortDropdown)}
+          >
+            <Ionicons name="menu" size={20} color={colors.primary} />
+          </TouchableOpacity>
 
-            {/* 정렬 드롭다운 */}
-            {showSortDropdown && (
-              <>
-                <TouchableOpacity
-                  style={StyleSheet.absoluteFill}
-                  activeOpacity={1}
-                  onPress={() => setShowSortDropdown(false)}
-                />
-                <View style={styles.sortDropdown}>
-                  <TouchableOpacity
-                    style={[
-                      styles.sortOption,
-                      sortBy === 'latest' && styles.sortOptionActive,
-                    ]}
-                    onPress={() => {
-                      setSortBy('latest');
-                      setShowSortDropdown(false);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.sortOptionText,
-                        sortBy === 'latest' && styles.sortOptionTextActive,
-                      ]}
-                    >
-                      최신순
-                    </Text>
-                    {sortBy === 'latest' && (
-                      <Ionicons name="checkmark" size={16} color="white" />
-                    )}
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.sortOption,
-                      sortBy === 'popular' && styles.sortOptionActive,
-                    ]}
-                    onPress={() => {
-                      setSortBy('popular');
-                      setShowSortDropdown(false);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.sortOptionText,
-                        sortBy === 'popular' && styles.sortOptionTextActive,
-                      ]}
-                    >
-                      인기순
-                    </Text>
-                    {sortBy === 'popular' && (
-                      <Ionicons name="checkmark" size={16} color="white" />
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
+          {/* 드롭다운은 화면 전체 오버레이로 별도 렌더링 */}
           </View>
 
           {/* 닫기 버튼 */}
@@ -324,6 +267,65 @@ export default function LivePickArchiveScreen() {
           ))}
         </ScrollView>
       </View>
+
+      {/* 정렬 드롭다운: 화면 전체 기준 오버레이 (항상 맨 위) */}
+      {showSortDropdown && (
+        <>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setShowSortDropdown(false)}
+          />
+          <View style={styles.sortDropdown}>
+            <TouchableOpacity
+              style={[
+                styles.sortOption,
+                sortBy === 'latest' && styles.sortOptionActive,
+              ]}
+              onPress={() => {
+                setSortBy('latest');
+                setShowSortDropdown(false);
+              }}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.sortOptionText,
+                  sortBy === 'latest' && styles.sortOptionTextActive,
+                ]}
+              >
+                최신순
+              </Text>
+              {sortBy === 'latest' && (
+                <Ionicons name="checkmark" size={16} color="white" />
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.sortOption,
+                sortBy === 'popular' && styles.sortOptionActive,
+              ]}
+              onPress={() => {
+                setSortBy('popular');
+                setShowSortDropdown(false);
+              }}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.sortOptionText,
+                  sortBy === 'popular' && styles.sortOptionTextActive,
+                ]}
+              >
+                인기순
+              </Text>
+              {sortBy === 'popular' && (
+                <Ionicons name="checkmark" size={16} color="white" />
+              )}
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
 
       {/* 스크롤 영역: 안내 텍스트 → 지난주 TOP → 리스트 */}
       <ScrollView
@@ -554,8 +556,8 @@ const styles = StyleSheet.create({
   },
   sortDropdown: {
     position: 'absolute',
-    top: 48,
-    right: 0,
+    top: 64,
+    right: 16,
     backgroundColor: colors.surface,
     borderRadius: 12,
     padding: 8,
@@ -683,33 +685,37 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   categoryFilter: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 4,
     backgroundColor: colors.background,
+    paddingVertical: 12,
   },
   categoryFilterContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingHorizontal: 20,
     gap: 8,
-    paddingHorizontal: 4,
+    paddingTop: 6,
+    paddingBottom: 6,
   },
   categoryButton: {
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
+    marginRight: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2,
   },
   categoryButtonActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
   categoryButtonText: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    fontWeight: '500',
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
   },
   categoryButtonTextActive: {
     color: 'white',

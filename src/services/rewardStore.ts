@@ -192,3 +192,56 @@ export async function getExchangeHistory(limit: number = 50): Promise<ExchangeRe
     throw error;
   }
 }
+
+/** 관리자용: 전체 교환 요청 목록 (최신순). Firestore 규칙에서 isAdmin만 list 가능. */
+export async function getAdminExchangeRequests(limit: number = 100): Promise<ExchangeRequest[]> {
+  try {
+    const snapshot = await firestore()
+      .collection(COLLECTIONS.EXCHANGE_REQUESTS)
+      .orderBy('createdAt', 'desc')
+      .limit(limit)
+      .get();
+
+    const requests: ExchangeRequest[] = [];
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      requests.push({
+        id: doc.id,
+        uid: data.uid,
+        rewardItemId: data.rewardItemId,
+        rewardTitle: data.rewardTitle,
+        usedPoints: data.usedPoints,
+        status: data.status,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
+        completedAt: data.completedAt,
+        cancelledAt: data.cancelledAt,
+        adminMemo: data.adminMemo,
+      } as ExchangeRequest);
+    });
+
+    console.log(`[RewardStore] 관리자 교환 요청 ${requests.length}개 조회 완료`);
+    return requests;
+  } catch (error: any) {
+    console.error('[RewardStore] 관리자 교환 요청 조회 실패:', error);
+    throw error;
+  }
+}
+
+/** 관리자용: 교환 요청을 처리완료(발송완료)로 변경 */
+export async function markExchangeRequestCompleted(requestId: string): Promise<void> {
+  try {
+    await firestore()
+      .collection(COLLECTIONS.EXCHANGE_REQUESTS)
+      .doc(requestId)
+      .update({
+        status: 'completed',
+        updatedAt: firestore.FieldValue.serverTimestamp(),
+        completedAt: firestore.FieldValue.serverTimestamp(),
+      });
+    console.log(`[RewardStore] 교환 요청 처리완료: ${requestId}`);
+  } catch (error: any) {
+    console.error('[RewardStore] 처리완료 업데이트 실패:', error);
+    throw error;
+  }
+}

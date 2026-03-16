@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Modal, RefreshControl, Image } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import LottieView from 'lottie-react-native';
 import colors from '../../../src/styles/colors';
 import { watchAuth } from '../../../src/services/firebase';
 import { ensureUser } from '../../../src/services/store';
@@ -22,6 +23,9 @@ export default function PointExchangeScreen() {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState<RewardItem | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  const formatPoints = (value: number | undefined | null) =>
+    typeof value === 'number' ? value.toLocaleString('ko-KR') : '0';
 
   useEffect(() => {
     const unsubscribe = watchAuth(async (user) => {
@@ -53,11 +57,15 @@ export default function PointExchangeScreen() {
     }
   }, []);
 
-  // 포인트 교환소 화면에 들어올 때마다 상품 목록 다시 불러오기 (관리자에서 등록한 상품 바로 반영)
+  // 포인트 교환소 화면에 들어올 때마다 상품 목록 + 사용자/인증 상태 다시 불러오기 (인증 완료 후 돌아왔을 때 반영)
   useFocusEffect(
     useCallback(() => {
       loadItems();
-    }, [loadItems])
+      if (user?.uid) {
+        ensureUser(user.uid).then(setUserData).catch(() => {});
+        isPhoneVerified().then(setPhoneVerified).catch(() => {});
+      }
+    }, [loadItems, user?.uid])
   );
 
   const handleExchangePress = async (item: RewardItem) => {
@@ -88,7 +96,7 @@ export default function PointExchangeScreen() {
       setShowConfirmModal(false);
       Alert.alert(
         '교환 신청 완료',
-        `${selectedItem.title} 교환 신청이 완료되었습니다.\n교환 내역에서 확인하실 수 있습니다.`,
+        `${selectedItem.title} 교환 신청이 완료되었습니다.\n1~2일 이내에 발송되며 교환 내역에서 확인하실 수 있습니다.`,
         [{ text: '확인' }]
       );
 
@@ -106,7 +114,7 @@ export default function PointExchangeScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/mypage')} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>포인트 교환소</Text>
@@ -122,7 +130,7 @@ export default function PointExchangeScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.push('/(tabs)/mypage')} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>포인트 교환소</Text>
@@ -137,10 +145,25 @@ export default function PointExchangeScreen() {
       >
         {userData && (
           <View style={styles.topSection}>
-            <Text style={styles.nickname}>{userData.nickname}</Text>
+            <View style={styles.nicknameRow}>
+              <Text style={styles.nickname}>{userData.nickname}</Text>
+              {phoneVerified && (
+                <View style={styles.verifiedBadge}>
+                  <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
+                  <Text style={styles.verifiedBadgeText}>인증완료</Text>
+                </View>
+              )}
+            </View>
             <View style={styles.pointsContainer}>
-              <Ionicons name="diamond" size={32} color={colors.primary} />
-              <Text style={styles.points}>{userData.points}P</Text>
+              <View style={styles.pointsLottieWrapper}>
+                <LottieView
+                  source={{ uri: "https://lottie.host/c691c7ab-e2e2-4a77-a50e-cef6c130dce1/GjbXQZOTda.lottie" }}
+                  loop
+                  autoPlay
+                  style={styles.pointsLottie}
+                />
+              </View>
+              <Text style={styles.points}>{formatPoints(userData.points)}P</Text>
             </View>
             <TouchableOpacity
               style={styles.historyButton}
@@ -150,6 +173,12 @@ export default function PointExchangeScreen() {
               <Text style={styles.historyButtonText}>교환 내역 보기</Text>
               <Ionicons name="chevron-forward" size={18} color={colors.primary} />
             </TouchableOpacity>
+            <View style={styles.infoBox}>
+              <Ionicons name="information-circle" size={16} color={colors.primary} />
+              <Text style={styles.infoText}>
+                2,000P부터 자유롭게 사용할 수 있고, 연속 달성과 다양한 이벤트를 통해 더 많은 포인트를 획득할 수 있어요!
+              </Text>
+            </View>
           </View>
         )}
 
@@ -181,29 +210,38 @@ export default function PointExchangeScreen() {
                   {item.description ? (
                     <Text style={styles.itemDescription} numberOfLines={2}>{item.description}</Text>
                   ) : null}
-                  <View style={styles.itemPoints}>
-                    <Ionicons name="diamond" size={16} color={colors.primary} />
-                    <Text style={styles.itemPointsText}>{item.requiredPoints}P</Text>
+                  <View style={styles.itemBottomRow}>
+                    <View style={styles.itemPoints}>
+                      <View style={styles.itemPointsLottieWrapper}>
+                        <LottieView
+                          source={{ uri: "https://lottie.host/c691c7ab-e2e2-4a77-a50e-cef6c130dce1/GjbXQZOTda.lottie" }}
+                          loop
+                          autoPlay
+                          style={styles.itemPointsLottie}
+                        />
+                      </View>
+                      <Text style={styles.itemPointsText}>{formatPoints(item.requiredPoints)}P</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[
+                        styles.exchangeButton,
+                        userData && userData.points < item.requiredPoints && styles.exchangeButtonDisabled,
+                      ]}
+                      activeOpacity={0.7}
+                      onPress={() => handleExchangePress(item)}
+                      disabled={!userData || userData.points < item.requiredPoints}
+                    >
+                      <Text
+                        style={[
+                          styles.exchangeButtonText,
+                          userData && userData.points < item.requiredPoints && styles.exchangeButtonTextDisabled,
+                        ]}
+                      >
+                        교환하기
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
-                <TouchableOpacity
-                  style={[
-                    styles.exchangeButton,
-                    userData && userData.points < item.requiredPoints && styles.exchangeButtonDisabled,
-                  ]}
-                  activeOpacity={0.7}
-                  onPress={() => handleExchangePress(item)}
-                  disabled={!userData || userData.points < item.requiredPoints}
-                >
-                  <Text
-                    style={[
-                      styles.exchangeButtonText,
-                      userData && userData.points < item.requiredPoints && styles.exchangeButtonTextDisabled,
-                    ]}
-                  >
-                    교환하기
-                  </Text>
-                </TouchableOpacity>
               </View>
             ))
           )}
@@ -270,16 +308,16 @@ export default function PointExchangeScreen() {
                   </View>
                   <View style={styles.confirmRow}>
                     <Text style={styles.confirmLabel}>사용 포인트</Text>
-                    <Text style={styles.confirmValue}>{selectedItem.requiredPoints}P</Text>
+                    <Text style={styles.confirmValue}>{formatPoints(selectedItem.requiredPoints)}P</Text>
                   </View>
                   <View style={styles.confirmRow}>
                     <Text style={styles.confirmLabel}>현재 보유</Text>
-                    <Text style={styles.confirmValue}>{userData.points}P</Text>
+                    <Text style={styles.confirmValue}>{formatPoints(userData.points)}P</Text>
                   </View>
                   <View style={[styles.confirmRow, styles.confirmRowHighlight]}>
                     <Text style={styles.confirmLabel}>차감 후</Text>
                     <Text style={[styles.confirmValue, styles.confirmValueHighlight]}>
-                      {userData.points - selectedItem.requiredPoints}P
+                      {formatPoints(userData.points - selectedItem.requiredPoints)}P
                     </Text>
                   </View>
                 </View>
@@ -352,17 +390,47 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
+  nicknameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
   nickname: {
     fontSize: 18,
     fontWeight: '700',
     color: colors.text,
-    marginBottom: 12,
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.primary + '18',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  verifiedBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
   },
   pointsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginBottom: 16,
+  },
+  pointsLottieWrapper: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pointsLottie: {
+    width: 40,
+    height: 40,
   },
   points: {
     fontSize: 32,
@@ -429,7 +497,6 @@ const styles = StyleSheet.create({
   },
   itemInfo: {
     flex: 1,
-    marginRight: 12,
     minWidth: 0,
   },
   itemTitle: {
@@ -441,12 +508,28 @@ const styles = StyleSheet.create({
   itemDescription: {
     fontSize: 13,
     color: colors.textSecondary,
-    marginBottom: 8,
+    marginBottom: 10,
+  },
+  itemBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
   },
   itemPoints: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+  },
+  itemPointsLottieWrapper: {
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  itemPointsLottie: {
+    width: 20,
+    height: 20,
   },
   itemPointsText: {
     fontSize: 14,
@@ -554,6 +637,22 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  infoBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: '#E6F2FF',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginTop: 12,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.text,
   },
   modalConfirmButton: {
     backgroundColor: colors.primary,

@@ -1924,3 +1924,155 @@ export const migrateUserData = functions
     }
   });
 
+// ========== 전화번호 인증 (솔라피 SMS) ==========
+// 환경 변수: SOLAPI_API_KEY, SOLAPI_API_SECRET, SOLAPI_SENDER_NUMBER(발신번호 예: 01012345678)
+// Firebase 콘솔 > Functions > 환경 구성 에서 설정하거나, firebase functions:config:set solapi.api_key="..." 등
+
+const PHONE_VERIFICATION_COLLECTION = 'phone_verification_pending';
+const CODE_EXPIRY_MINUTES = 5;
+const CODE_LENGTH = 6;
+
+function sanitizePhoneForDocId(phoneNumber: string): string {
+  return phoneNumber.replace(/\D/g, '');
+}
+
+function e164ToKoreanPhone(e164: string): string {
+  const digits = e164.replace(/\D/g, '');
+  if (digits.startsWith('82') && digits.length >= 10) {
+    return '0' + digits.slice(2);
+  }
+  return digits.slice(-11);
+}
+
+function generateVerificationCode(): string {
+  const digits = '0123456789';
+  let code = '';
+  for (let i = 0; i < CODE_LENGTH; i++) {
+    code += digits[Math.floor(Math.random() * 10)];
+  }
+  return code;
+}
+
+/**
+ * 인증번호 발송 (솔라피 SMS)
+ * - 6자리 코드 생성 후 Firestore에 저장, SMS 발송
+ */
+export const sendPhoneVerificationCode = functions
+  .region('asia-northeast3')
+  .runWith({ timeoutSeconds: 30, memory: '256MB' })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', '로그인이 필요합니다.');
+    }
+    const phoneNumber = data?.phoneNumber as string;
+    if (!phoneNumber || typeof phoneNumber !== 'string' || phoneNumber.replace(/\D/g, '').length < 10) {
+      throw new functions.https.HttpsError('invalid-argument', '올바른 전화번호를 입력해주세요.');
+    }
+
+    const docId = sanitizePhoneForDocId(phoneNumber);
+    const code = generateVerificationCode();
+    const db = admin.firestore();
+
+    try {
+      await db.collection(PHONE_VERIFICATION_COLLECTION).doc(docId).set({
+        code,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      const apiKey = process.env.SOLAPI_API_KEY || (functions.config().solapi as any)?.api_key;
+      const apiSecret = process.env.SOLAPI_API_SECRET || (functions.config().solapi as any)?.api_secret;
+      const senderNumber = process.env.SOLAPI_SENDER_NUMBER || (functions.config().solapi as any)?.sender_number;
+
+      if (apiKey && apiSecret && senderNumber) {
+        const { SolapiMessageService } = require('solapi');
+        const messageService = new SolapiMessageService(apiKey, apiSecret);
+        const toNumber = e164ToKoreanPhone(phoneNumber);
+        await messageService.sendOne({
+          to: toNumber,
+          from: senderNumber,
+          text: `[PickPlay] 인증번호: ${code}\n${CODE_EXPIRY_MINUTES}분 내에 입력해주세요.`,
+        });
+      } else {
+        console.log('[sendPhoneVerificationCode] Solapi 미설정, 코드만 저장 (개발용):', { docId, code });
+      }
+
+      return { success: true, message: '인증번호가 발송되었습니다.' };
+    } catch (error: any) {
+      console.error('[sendPhoneVerificationCode] 실패:', error);
+      await db.collection(PHONE_VERIFICATION_COLLECTION).doc(docId).delete().catch(() => {});
+      throw new functions.https.HttpsError(
+        'internal',
+        error.message || '인증번호 발송에 실패했습니다. 다시 시도해주세요.'
+      );
+    }
+  });
+
+/**
+ * 인증번호 검증 + users/{uid}에 전화번호·인증 완료 저장
+ */
+export const verifyPhoneCode = functions
+  .region('asia-northeast3')
+  .runWith({ timeoutSeconds: 20, memory: '256MB' })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', '로그인이 필요합니다.');
+    }
+    const uid = context.auth.uid;
+    const phoneNumber = data?.phoneNumber as string;
+    const code = data?.code as string;
+    if (!phoneNumber || !code || code.length < 4) {
+      throw new functions.https.HttpsError('invalid-argument', '전화번호와 인증번호를 입력해주세요.');
+    }
+
+    const docId = sanitizePhoneForDocId(phoneNumber);
+    const db = admin.firestore();
+    const pendingRef = db.collection(PHONE_VERIFICATION_COLLECTION).doc(docId);
+
+    try {
+      const pendingSnap = await pendingRef.get();
+      if (!pendingSnap.exists) {
+        throw new functions.https.HttpsError('failed-precondition', '인증번호가 만료되었거나 존재하지 않습니다. 다시 발송해주세요.');
+      }
+      const pendingData = pendingSnap.data()!;
+      const storedCode = pendingData.code;
+      const createdAt = (pendingData.createdAt as admin.firestore.Timestamp)?.toMillis?.() || 0;
+      const expiryMs = CODE_EXPIRY_MINUTES * 60 * 1000;
+      if (Date.now() - createdAt > expiryMs) {
+        await pendingRef.delete();
+        throw new functions.https.HttpsError('failed-precondition', '인증번호가 만료되었습니다. 다시 발송해주세요.');
+      }
+      if (storedCode !== code.trim()) {
+        throw new functions.https.HttpsError('invalid-argument', '인증번호가 일치하지 않습니다.');
+      }
+
+      await pendingRef.delete();
+
+      const e164Phone = phoneNumber.startsWith('+') ? phoneNumber : `+82${phoneNumber.replace(/^0/, '')}`;
+      const userRef = db.collection('users').doc(uid);
+      const userSnap = await userRef.get();
+      if (!userSnap.exists) {
+        throw new functions.https.HttpsError('not-found', '사용자 정보를 찾을 수 없습니다.');
+      }
+
+      const existingWithPhone = await db.collection('users').where('phoneNumber', '==', e164Phone).limit(1).get();
+      if (!existingWithPhone.empty && existingWithPhone.docs[0].id !== uid) {
+        throw new functions.https.HttpsError('already-exists', '이미 다른 계정에 등록된 전화번호입니다.');
+      }
+
+      await userRef.update({
+        phoneNumber: e164Phone,
+        phoneVerified: true,
+        phoneVerifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      return { success: true, message: '인증이 완료되었습니다.' };
+    } catch (error: any) {
+      if (error instanceof functions.https.HttpsError) throw error;
+      console.error('[verifyPhoneCode] 실패:', error);
+      throw new functions.https.HttpsError(
+        'internal',
+        error.message || '인증 처리에 실패했습니다. 다시 시도해주세요.'
+      );
+    }
+  });
+

@@ -672,16 +672,6 @@ export default function LivePickScreen() {
         </ScrollView>
       </View>
 
-      {/* 지난 질문 보기 */}
-      <View style={styles.archiveLinkContainer}>
-        <TouchableOpacity
-          onPress={() => router.push('/(tabs)/livepick/archive')}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.archiveLinkText}>지난질문보기 &gt;</Text>
-        </TouchableOpacity>
-      </View>
-
       {/* 질문 생성 가이드 모달 */}
       <Modal
         visible={showCreateWarningModal}
@@ -737,6 +727,19 @@ export default function LivePickScreen() {
           />
         }
       >
+        {/* 지난 질문 보기: 리스트 최상단에 함께 스크롤되도록 배치 */}
+        <View style={styles.archiveLinkContainer}>
+          <TouchableOpacity
+            onPress={() => router.push('/(tabs)/livepick/archive')}
+            activeOpacity={0.4}
+            style={styles.archivePillButton}
+          >
+            <Ionicons name="time-outline" size={16} color={colors.primary} style={{ marginRight: 6 }} />
+            <Text style={styles.archivePillText}>지난 라이브픽</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
+
         {loading && !refreshing ? (
           <View style={styles.emptyState}>
             <ActivityIndicator size="large" color={colors.primary} />
@@ -907,8 +910,6 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     paddingHorizontal: 20,
     backgroundColor: colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -948,10 +949,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: colors.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: 'rgba(245, 249, 255, 0.83)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2,
   },
   createButtonText: {
     fontSize: 14,
@@ -1123,32 +1131,54 @@ const styles = StyleSheet.create({
   },
   categoryFilter: {
     backgroundColor: colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingVertical: 12,
+    paddingVertical: 4,
   },
   archiveLinkContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
+    paddingHorizontal: 10,
+    paddingTop: 2,
+    paddingBottom: 2,
     alignItems: 'flex-end',
+    backgroundColor: 'transparent',
   },
-  archiveLinkText: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    textDecorationLine: 'underline',
+  archivePillButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.69)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  archivePillText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
   },
   categoryFilterContent: {
     paddingHorizontal: 20,
     gap: 8,
+    paddingTop: 6,
+    paddingBottom: 6,
   },
   categoryButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: colors.surface,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
     marginRight: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2,
   },
   categoryButtonActive: {
     backgroundColor: colors.primary,
@@ -1157,7 +1187,7 @@ const styles = StyleSheet.create({
   categoryButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.text,
+    color: colors.primary,
   },
   categoryButtonTextActive: {
     color: 'white',

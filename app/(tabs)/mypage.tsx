@@ -551,7 +551,10 @@ export default function MyPageScreen() {
                   />
                 </View>
                 <Text style={styles.statValue}>{userData.points}P</Text>
-                <Text style={styles.statLabel}>포인트</Text>
+                <View style={styles.statLabelRow}>
+                  <Text style={styles.statLabelClickable}>포인트</Text>
+                  <Ionicons name="bag-handle-outline" size={14} color={colors.primary} />
+                </View>
               </TouchableOpacity>
               
               <View style={styles.statCard}>
@@ -568,18 +571,10 @@ export default function MyPageScreen() {
               </View>
               
               <View style={styles.statCard}>
-                <Ionicons name="checkmark-circle" size={32} color={colors.primary} />
+                <Ionicons name="checkmark-circle" size={32} color={colors.primary} style={{ marginTop: 10, marginBottom: 4 }} />
                 <Text style={styles.statValue}>{userData.totalSelections || 0}</Text>
                 <Text style={styles.statLabel}>총 선택</Text>
               </View>
-            </View>
-
-            {/* 포인트 안내 */}
-            <View style={styles.infoBox}>
-              <Ionicons name="information-circle" size={16} color={colors.primary} />
-              <Text style={styles.infoText}>
-                2,000P부터 자유롭게 사용할 수 있고, 연속 달성과 다양한 이벤트를 통해 더 많은 포인트를 획득할 수 있어요!
-              </Text>
             </View>
 
             {/* 푸시 알림 설정 */}
@@ -772,7 +767,7 @@ export default function MyPageScreen() {
         <View style={styles.footer}>
           <View style={styles.footerBorder} />
           <Text style={styles.footerText}>
-            © 2025 PickPlay{`\n`}KWCC Co., Ltd. | Emkoo{`\n`}907, Dongtan-daero 646-2{`\n`}Hwaseong-si, Gyeonggi-do, Republic of Korea{`\n`}e-mail: cokwcc@gmail.com{`\n`}tel: +82-10-4857-4876{`\n`}version: {Constants.expoConfig?.version || '2.1.1'}
+            © 2025 PickPlay{`\n`}KWCC Co., Ltd. | Emkoo{`\n`}907, Dongtan-daero 646-2{`\n`}Hwaseong-si, Gyeonggi-do, Republic of Korea{`\n`}e-mail: cokwcc@gmail.com{`\n`}version: {Constants.expoConfig?.version || '2.1.2'}
           </Text>
         </View>
       </ScrollView>
@@ -1042,6 +1037,12 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  statLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
   statIcon: {
     width: 40,
     height: 40,
@@ -1062,6 +1063,11 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 12,
     color: colors.textSecondary,
+  },
+  statLabelClickable: {
+    fontSize: 12,
+    color: colors.primary,
+    textDecorationLine: 'underline',
   },
   infoBox: {
     flexDirection: 'row',
