@@ -157,8 +157,8 @@ export default function LivePickScreen() {
       }
       // 검색을 위해 전체 질문을 백그라운드에서 로드
       loadAllQuestions().catch(e => console.warn('[LivePick] 전체 질문 로드 실패:', e));
-      // 페이지네이션용으로 첫 20개만 표시 (Firestore 쿼리 레벨에서 정렬)
-      const list = await getLivePickQuestions(PAGE_SIZE, undefined, sortBy);
+      // Firestore에서는 항상 최신순으로만 가져오고, 화면에서 sortBy로 재정렬
+      const list = await getLivePickQuestions(PAGE_SIZE, undefined, 'latest');
       // 이번 주 질문만 진행중으로 사용
       const activeThisWeek = list.filter(q => q.weekKey === currentWeekKey);
       setQuestions(activeThisWeek);
@@ -220,7 +220,8 @@ export default function LivePickScreen() {
                 console.warn('[LivePick] 참여 횟수 갱신 실패:', e)
               );
             }
-            const list = await getLivePickQuestions(PAGE_SIZE, undefined, sortBy);
+            // Firestore에서는 항상 최신순으로만 가져오고, 화면에서 sortBy로 재정렬
+            const list = await getLivePickQuestions(PAGE_SIZE, undefined, 'latest');
             const activeThisWeek = list.filter(q => q.weekKey === currentWeekKey);
             setQuestions(activeThisWeek);
             setHasMore(activeThisWeek.length === PAGE_SIZE);
@@ -276,11 +277,8 @@ export default function LivePickScreen() {
       setLoadingMore(true);
       const last = questions[questions.length - 1];
       let more: LivePickQuestion[];
-      if (sortBy === 'popular') {
-        more = await getLivePickQuestions(PAGE_SIZE, undefined, sortBy, last.participantCount);
-      } else {
-        more = await getLivePickQuestions(PAGE_SIZE, last.createdAt as Date, sortBy);
-      }
+      // Firestore에서는 항상 최신순(createdAt 기준)으로 페이지네이션
+      more = await getLivePickQuestions(PAGE_SIZE, last.createdAt as Date, 'latest');
       const moreThisWeek = more.filter(q => q.weekKey === currentWeekKey);
       if (moreThisWeek.length === 0) {
         setHasMore(false);
@@ -311,46 +309,9 @@ export default function LivePickScreen() {
     }
   };
 
-  // 정렬 변경 핸들러
-  const handleSortChange = async (newSort: 'latest' | 'popular') => {
+  const handleSortChange = (newSort: 'latest' | 'popular') => {
     setSortBy(newSort);
     setShowSortDropdown(false);
-    // 정렬 변경 시 Firestore 쿼리 레벨에서 정렬된 첫 20개만 로드 (성능 최적화)
-    setLoading(true);
-    try {
-      // Firestore 쿼리 레벨에서 정렬된 결과의 첫 20개만 가져오기 (전체 질문을 로드하지 않음)
-      const list = await getLivePickQuestions(PAGE_SIZE, undefined, newSort);
-      const activeThisWeek = list.filter(q => q.weekKey === currentWeekKey);
-      setQuestions(activeThisWeek);
-      setHasMore(list.length === PAGE_SIZE);
-      // 전체 질문도 백그라운드에서 업데이트 (검색용, 정렬은 Firestore에서 처리)
-      loadAllQuestions().catch(e => console.warn('[LivePick] 전체 질문 로드 실패:', e));
-    } catch (error: any) {
-      console.error('❌ [LivePick] 정렬 변경 후 질문 목록 로드 실패:', error);
-      // 인덱스가 아직 생성되지 않은 경우 최신순으로 폴백
-      if (error?.code === 'failed-precondition' && newSort === 'popular') {
-        Alert.alert(
-          '인기순 정렬 준비 중',
-          '인기순 정렬 기능이 준비 중입니다. 잠시 후 다시 시도해주세요.',
-          [{ text: '확인', onPress: () => {
-            setSortBy('latest');
-            // 최신순으로 다시 로드
-            getLivePickQuestions(PAGE_SIZE, undefined, 'latest').then(list => {
-              const activeThisWeek = list.filter(q => q.weekKey === currentWeekKey);
-              setQuestions(activeThisWeek);
-              setHasMore(list.length === PAGE_SIZE);
-              setLoading(false);
-            }).catch(e => {
-              console.error('❌ [LivePick] 최신순 로드 실패:', e);
-              setLoading(false);
-            });
-          }}]
-        );
-        return;
-      }
-    } finally {
-      setLoading(false);
-    }
   };
 
   // 검색 모달 애니메이션 및 전체 질문 로드
@@ -377,29 +338,41 @@ export default function LivePickScreen() {
   }, [showSearchModal, searchModalAnim, allQuestions.length, isLoadingAllQuestions, loadAllQuestions]);
   
 
-  // 검색 필터링된 질문 목록 (전체 질문 기준)
   const filteredQuestions = React.useMemo(() => {
     // 검색어가 있으면 전체 질문에서 검색, 없으면 현재 페이지네이션된 질문 사용
     const sourceQuestions = searchQuery.trim() ? allQuestions : questions;
-    let filtered = sourceQuestions;
-    
+    let list = sourceQuestions;
+
     // 카테고리 필터
     if (selectedCategory !== '전체') {
-      filtered = filtered.filter((q) => q.category === selectedCategory);
+      list = list.filter((q) => q.category === selectedCategory);
     }
-    
+
     // 검색어 필터 (전체 질문에서 검색)
     if (searchQuery.trim()) {
       const query = searchQuery.trim().toLowerCase();
-      filtered = filtered.filter((q) => 
+      list = list.filter((q) =>
         q.title.toLowerCase().includes(query) ||
         q.option1.toLowerCase().includes(query) ||
         q.option2.toLowerCase().includes(query)
       );
     }
-    
-    return filtered;
-  }, [questions, allQuestions, selectedCategory, searchQuery]);
+
+    if (sortBy === 'popular') {
+      const baseList = list.length === 0 ? questions : list;
+      const sorted = [...baseList].sort(
+        (a, b) => (b.participantCount || 0) - (a.participantCount || 0),
+      );
+      return sorted;
+    }
+    // latest: createdAt 기준 내림차순
+    const sorted = [...list].sort((a, b) => {
+      const aDate = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt as any);
+      const bDate = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt as any);
+      return bDate.getTime() - aDate.getTime();
+    });
+    return sorted;
+  }, [questions, allQuestions, selectedCategory, searchQuery, sortBy]);
 
   // Pull to refresh
   const onRefresh = async () => {
