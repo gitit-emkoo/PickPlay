@@ -767,7 +767,7 @@ export default function MyPageScreen() {
         <View style={styles.footer}>
           <View style={styles.footerBorder} />
           <Text style={styles.footerText}>
-            © 2025 PickPlay{`\n`}KWCC Co., Ltd. | Emkoo{`\n`}907, Dongtan-daero 646-2{`\n`}Hwaseong-si, Gyeonggi-do, Republic of Korea{`\n`}e-mail: cokwcc@gmail.com{`\n`}version: {Constants.expoConfig?.version || '2.1.2'}
+            © 2025 PickPlay{`\n`}KWCC Co., Ltd.{`\n`}907, Dongtan-daero 646-2{`\n`}Hwaseong-si, Gyeonggi-do, Republic of Korea{`\n`}e-mail: cokwcc@gmail.com{`\n`}version: {Constants.expoConfig?.version || '2.1.2'}
           </Text>
         </View>
       </ScrollView>

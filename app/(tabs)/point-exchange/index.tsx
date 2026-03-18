@@ -117,7 +117,7 @@ export default function PointExchangeScreen() {
           <TouchableOpacity onPress={() => router.push('/(tabs)/mypage')} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>포인트 교환소</Text>
+          <Text style={styles.headerTitle}>포인트 샵</Text>
           <View style={{ width: 24 }} />
         </View>
         <View style={styles.loadingContainer}>
@@ -133,7 +133,7 @@ export default function PointExchangeScreen() {
         <TouchableOpacity onPress={() => router.push('/(tabs)/mypage')} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>포인트 교환소</Text>
+        <Text style={styles.headerTitle}>포인트 샵</Text>
         <View style={{ width: 24 }} />
       </View>
 

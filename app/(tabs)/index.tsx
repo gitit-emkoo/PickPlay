@@ -864,7 +864,8 @@ export default function HomeScreen() {
           {/* 중앙 서브타이틀 */}
           <View style={{ alignItems: 'center', marginTop: 100, marginBottom: 32 }}>
             <Text style={{ fontSize: 16, fontWeight: '600', color: colors.textSecondary, textAlign: 'center' }}>
-              매일 나의 선택을 가치로 바꾸는 <Text style={{ color: colors.primary }}> 30초 루틴</Text>{'\n'}취향? 직감? <Text style={{ color: colors.primary }}> 픽플</Text>에서는 모든 선택을 보상합니다.
+              내 선택을 가치로 만드는 <Text style={{ color: colors.primary }}> 매일 1분</Text>{'\n'}
+              나를 발견하는 <Text style={{ color: colors.primary }}>플레이!</Text>
           </Text>
         </View>
 

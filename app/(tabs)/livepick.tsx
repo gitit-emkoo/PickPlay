@@ -477,7 +477,7 @@ export default function LivePickScreen() {
       {/* 헤더 */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>라이브픽</Text>
+          <Text style={styles.headerTitle}>LivePick</Text>
           {/* 일일 참여 제한 표시 */}
           {user && (
             <View style={styles.participationBadge}>
