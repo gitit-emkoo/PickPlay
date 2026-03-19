@@ -1,5 +1,5 @@
-﻿import React, { useEffect, useState, useRef } from 'react';
-import { Alert, ScrollView, Text, TouchableOpacity, View, StyleSheet, Image, Share, Platform } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { Alert, ScrollView, Text, TouchableOpacity, View, StyleSheet, Image, Share, Platform, Modal } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loadData, ensureUser, getTodayQuestionForUser, saveAnswerAndProcessLogic, saveAnswerQuick, aggregate, getTodayAnswer, rewardWithMajority } from '../../src/services/store';
@@ -10,11 +10,11 @@ import ErrorScreen from '../components/ErrorScreen';
 import TutorialScreen from '../components/TutorialScreen';
 import NotificationModal from '../components/NotificationModal';
 import AnimaCodeRevealModal from '../components/AnimaCodeRevealModal';
-import TutorialTooltip from '../components/TutorialTooltip';
+// (튜토리얼 말풍선 제거) TutorialTooltip 사용하지 않음
 import colors from '../../src/styles/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { subscribeUnreadCount } from '../../src/services/notificationsList';
-import { getTutorialStatus, updateTutorialProgress } from '../../src/services/tutorial';
+import { getTutorialStatus, setTutorialChoice, updateTutorialProgress } from '../../src/services/tutorial';
 import * as WebBrowser from 'expo-web-browser';
 import LottieView from 'lottie-react-native';
 import BannerAdComponent from '../components/BannerAdComponent';
@@ -27,8 +27,10 @@ import { getServiceStatusConfig, getAppVersionConfig, getNoticeConfig, ServiceSt
 import type { Notice } from '../../src/types';
 import { isVersionBelowMinimum, isVersionBelowCurrent } from '../../src/utils/version';
 import Constants from 'expo-constants';
+import { useRouter } from 'expo-router';
 
 export default function HomeScreen() {
+  const router = useRouter();
   // 화면 흐름 상태
   const [showPermissionIntro, setShowPermissionIntro] = useState(false);
   const [permissionIntroChecked, setPermissionIntroChecked] = useState(false);
@@ -89,11 +91,19 @@ export default function HomeScreen() {
     livepickParticipated: boolean;
     livepickCreated: boolean;
     rewardGiven500: boolean;
+    tutorialChoice: 'pending' | 'opt_in' | 'opt_out';
     allCompleted: boolean;
   } | null>(null);
   
   // 튜토리얼 말풍선 표시 여부 (한 번만 표시)
   const [hasSeenMainTooltip, setHasSeenMainTooltip] = useState(false);
+  const [showTutorialChoiceModal, setShowTutorialChoiceModal] = useState(false);
+  const [tutorialChoiceStep, setTutorialChoiceStep] = useState<'choice' | 'mission1'>('choice');
+  const [savingTutorialChoice, setSavingTutorialChoice] = useState(false);
+  const [showSecondMissionModal, setShowSecondMissionModal] = useState(false);
+
+  // 튜토리얼 opt-in 여부는 tutorialStatus가 늦게 로드되더라도 userData로 보강
+  const isTutorialOptIn = tutorialStatus?.tutorialChoice === 'opt_in' || userData?.tutorialChoice === 'opt_in';
 
   const navigation = useNavigation();
 
@@ -432,12 +442,18 @@ export default function HomeScreen() {
       const data = await ensureUser(user.uid);
       setUserData(data);
       
-      // 튜토리얼 상태 로드
+        // 튜토리얼 상태 로드
       try {
         const status = await getTutorialStatus(user.uid);
         // null이면 신규 유저로 간주하여 기본값 설정
         if (status) {
           setTutorialStatus(status);
+            // 아직 선택하지 않은 유저면(=pending) 첫 접속 500P 안내 모달 노출
+            // 단, 이미 튜토리얼을 완료한 유저(500P 수령 포함)는 다시 노출하지 않음
+            if (status.tutorialChoice === 'pending' && !status.allCompleted && !status.rewardGiven500) {
+              setTutorialChoiceStep('choice');
+              setShowTutorialChoiceModal(true);
+            }
         } else {
           // 신규 유저의 경우 기본 튜토리얼 상태 설정
           setTutorialStatus({
@@ -445,13 +461,16 @@ export default function HomeScreen() {
             livepickParticipated: false,
             livepickCreated: false,
             rewardGiven500: false,
+              tutorialChoice: 'pending',
             allCompleted: false,
           });
+            setTutorialChoiceStep('choice');
+            setShowTutorialChoiceModal(true);
         }
         
-        // 메인 튜토리얼 말풍선 표시 여부 확인
-        const hasSeenMain = await AsyncStorage.getItem('hasSeenMainTutorialTooltip');
-        setHasSeenMainTooltip(hasSeenMain === 'true');
+          // 메인 튜토리얼 1단계 모달 표시 여부 확인
+          const hasSeenMain = await AsyncStorage.getItem('hasSeenMainTutorialTooltip');
+          setHasSeenMainTooltip(hasSeenMain === 'true'); // 기존 키 재사용 (중복 표시 방지)
       } catch (e) {
         console.warn('[Tutorial] 튜토리얼 상태 로드 실패:', e);
         // 에러 발생 시에도 신규 유저로 간주하여 기본값 설정
@@ -460,8 +479,11 @@ export default function HomeScreen() {
           livepickParticipated: false,
           livepickCreated: false,
           rewardGiven500: false,
+          tutorialChoice: 'pending',
           allCompleted: false,
         });
+        setTutorialChoiceStep('choice');
+        setShowTutorialChoiceModal(true);
       }
       
       const q = getTodayQuestionForUser(data);
@@ -873,20 +895,7 @@ export default function HomeScreen() {
           {question ? (
           <View style={{ backgroundColor: colors.surface, borderRadius: 20, padding: 24, marginBottom: 24, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 4, position: 'relative' }}>
             {/* 튜토리얼 말풍선 (메인 질문 안내) - 튜토리얼 미완료 시 한 번만 표시 */}
-            {tutorialStatus && !tutorialStatus.mainAnswered && userChoice === null && !hasSeenMainTooltip && (
-              <TutorialTooltip
-                title="튜토리얼 하기!"
-                message="보상 : 500P!"
-                position="bottom"
-                style={{ top: -50, left: 100, right: 20 }}
-                color="#FF5722"
-                blink={true}
-                onDismiss={async () => {
-                  await AsyncStorage.setItem('hasSeenMainTutorialTooltip', 'true');
-                  setHasSeenMainTooltip(true);
-                }}
-              />
-            )}
+            {/* (삭제) 메인 질문 튜토리얼 말풍선 - 첫번째 미션 모달로 대체 */}
             <Text style={{ fontSize: 20, fontWeight: '700', color: colors.primary, textAlign: 'center', lineHeight: 28, marginBottom: 24 }}>
               Q. 나의 <Text style={{ color: colors.accent }}>{(question as any).text ?? (question as any).question_text} 취향은?</Text>
           </Text>
@@ -959,17 +968,12 @@ export default function HomeScreen() {
         </TouchableOpacity>
 
           {/* 보상 받기 버튼 (광고 연동 전 플레이스홀더) */}
-            {tutorialStatus && tutorialStatus.mainAnswered && userChoice !== null && !rewardCompleted && (
-              <View style={{ position: 'relative', alignSelf: 'center' }}>
-                {/* 튜토리얼 말풍선 (보상 받기 안내) */}
-                <TutorialTooltip
-                  message="보상을 받아보세요"
-                  position="bottom"
-                  style={{ top: -40, left: 50, right: 60 }}
-                  width={160}
-                  color="#FF5722"
-                  blink={true}
-                />
+            {tutorialStatus &&
+              tutorialStatus.tutorialChoice === 'opt_in' &&
+              tutorialStatus.mainAnswered &&
+              userChoice !== null &&
+              !rewardCompleted && (
+              <View style={{ alignSelf: 'center' }}>
               <TouchableOpacity onPress={handleGrantReward} style={{
                   marginTop: 8,
                   backgroundColor: (() => { const m = getStreakMultiplier(userData?.streakCount); return m === 3 ? '#8e44ad' : m === 2 ? '#2ecc71' : colors.primary; })(),
@@ -998,6 +1002,138 @@ export default function HomeScreen() {
               <Text style={{ fontSize: 16, color: 'white', fontWeight: '700' }}>{msg}</Text>
           </View>
         )}
+
+        {/* 첫 접속 500P 튜토리얼 선택 모달 */}
+        <Modal
+          visible={showTutorialChoiceModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {
+            if (!savingTutorialChoice) setShowTutorialChoiceModal(false);
+          }}
+        >
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }}>
+            <View style={{ width: '100%', borderRadius: 20, backgroundColor: colors.background, paddingHorizontal: 20, paddingTop: 22, paddingBottom: 16 }}>
+              {tutorialChoiceStep === 'choice' ? (
+                <>
+                  <Text style={{ fontSize: 18, fontWeight: '800', color: colors.primary, marginBottom: 10 }}>
+                    첫 접속 500P 추가 보상 안내
+                  </Text>
+                  <Text style={{ fontSize: 14, color: colors.text, lineHeight: 20, marginBottom: 16 }}>
+                    간단한 3가지 미션을 완료하면
+                    추가 <Text style={{ fontWeight: '800', color: colors.primary }}>500P</Text>를 받을 수 있어요.{`\n`}
+                    지금 바로 시작해볼까요?
+                  </Text>
+
+                  <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10 }}>
+                    <TouchableOpacity
+                      activeOpacity={0.7}
+                      disabled={savingTutorialChoice}
+                      onPress={async () => {
+                        if (!user) return;
+                        setShowTutorialChoiceModal(false);
+                        try {
+                          setSavingTutorialChoice(true);
+                          await setTutorialChoice(user.uid, 'opt_out');
+                          setTutorialStatus((prev) => (prev ? { ...prev, tutorialChoice: 'opt_out' } : prev));
+                        } catch (e: any) {
+                          console.warn('[Tutorial] 튜토리얼 선택 저장 실패(opt_out):', e?.message || e);
+                        } finally {
+                          setSavingTutorialChoice(false);
+                        }
+                      }}
+                      style={{ paddingVertical: 10, paddingHorizontal: 14, borderRadius: 999, backgroundColor: '#f0f0f5' }}
+                    >
+                      <Text style={{ fontSize: 14, color: colors.text, fontWeight: '600' }}>닫기</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      activeOpacity={0.7}
+                      disabled={savingTutorialChoice}
+                      onPress={async () => {
+                        if (!user) return;
+                        // 모달 스택킹 방지를 위해 같은 Modal 안에서 step만 전환
+                        setTutorialChoiceStep('mission1');
+                        try {
+                          setSavingTutorialChoice(true);
+                          await setTutorialChoice(user.uid, 'opt_in');
+                          const status = await getTutorialStatus(user.uid);
+                          if (status) setTutorialStatus(status);
+                        } catch (e: any) {
+                          console.warn('[Tutorial] 튜토리얼 선택 저장 실패(opt_in):', e?.message || e);
+                          setTutorialStatus((prev) => (prev ? { ...prev, tutorialChoice: 'opt_in' } : prev));
+                        } finally {
+                          setSavingTutorialChoice(false);
+                        }
+                      }}
+                      style={{ paddingVertical: 10, paddingHorizontal: 14, borderRadius: 999, backgroundColor: colors.primary }}
+                    >
+                      <Text style={{ fontSize: 14, color: 'white', fontWeight: '800' }}>
+                        {savingTutorialChoice ? '저장 중...' : '도전하기'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text style={{ fontSize: 18, fontWeight: '800', color: colors.primary, marginBottom: 10 }}>
+                    첫번째 미션
+                  </Text>
+                  <Text style={{ fontSize: 14, color: colors.text, lineHeight: 20, marginBottom: 16 }}>
+                    오늘의 데일리픽에 참여하고 보상을 받아보세요.
+                  </Text>
+                  <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+                    <TouchableOpacity
+                      activeOpacity={0.7}
+                      onPress={async () => {
+                        setShowTutorialChoiceModal(false);
+                        try {
+                          await AsyncStorage.setItem('hasSeenMainTutorialTooltip', 'true');
+                          setHasSeenMainTooltip(true);
+                        } catch {}
+                      }}
+                      style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 999, backgroundColor: colors.primary }}
+                    >
+                      <Text style={{ fontSize: 14, color: 'white', fontWeight: '800' }}>시작하기</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </View>
+          </View>
+        </Modal>
+
+        {/* 두번째 미션 안내 모달 (데일리픽 보상 완료 → 라이브픽 이동) */}
+        <Modal
+          visible={showSecondMissionModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowSecondMissionModal(false)}
+        >
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }}>
+            <View style={{ width: '100%', borderRadius: 20, backgroundColor: colors.background, paddingHorizontal: 20, paddingTop: 22, paddingBottom: 16 }}>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: colors.primary, marginBottom: 10 }}>
+                두 번째 미션
+              </Text>
+              <Text style={{ fontSize: 14, color: colors.text, lineHeight: 20, marginBottom: 16 }}>
+                라이브픽에서 관심 가는 질문에 참여하고{'\n'}
+                보상을 받아보세요
+              </Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    setShowSecondMissionModal(false);
+                    router.push('/(tabs)/livepick');
+                  }}
+                  style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 999, backgroundColor: colors.primary }}
+                >
+                  <Text style={{ fontSize: 14, color: 'white', fontWeight: '800' }}>라이브 픽으로 이동</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
           {/* 연속 참여 정보 */}
         {userData && (
@@ -1089,7 +1225,12 @@ export default function HomeScreen() {
             <Text style={{ fontSize: 18, fontWeight: '700', color: colors.primary, textAlign: 'center', marginBottom: 20 }}>보상이 적립되었습니다.</Text>
             <TouchableOpacity onPress={() => {
               setShowRewardDoneModal(false);
-              setShowLivePickGuideModal(true);
+              // 튜토리얼 opt-in 유저: 3번 모달(두 번째 미션)로 진행
+              if (isTutorialOptIn) {
+                setShowSecondMissionModal(true);
+              } else {
+                setShowLivePickGuideModal(true);
+              }
             }} style={{ backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24 }}>
               <Text style={{ fontSize: 16, color: 'white', fontWeight: '600', textAlign: 'center' }}>확인</Text>
             </TouchableOpacity>

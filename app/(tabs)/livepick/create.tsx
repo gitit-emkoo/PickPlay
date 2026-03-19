@@ -6,6 +6,8 @@ import colors from '../../../src/styles/colors';
 import { watchAuth } from '../../../src/services/firebase';
 import { createLivePickQuestion } from '../../../src/services/livepick';
 import { getTutorialStatus } from '../../../src/services/tutorial';
+import LottieView from 'lottie-react-native';
+import confettiLottie from '../../../assets/lottie/tutorial-confetti.json';
 
 export default function CreateQuestionScreen() {
   const router = useRouter();
@@ -17,6 +19,7 @@ export default function CreateQuestionScreen() {
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showTutorialCompleteModal, setShowTutorialCompleteModal] = useState(false);
+  const [confettiPlayCount, setConfettiPlayCount] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createdQuestionId, setCreatedQuestionId] = useState<string | null>(null);
   const [tutorialStatus, setTutorialStatus] = useState<{
@@ -24,6 +27,7 @@ export default function CreateQuestionScreen() {
     livepickParticipated: boolean;
     livepickCreated: boolean;
     rewardGiven500: boolean;
+    tutorialChoice: 'pending' | 'opt_in' | 'opt_out';
     allCompleted: boolean;
   } | null>(null);
 
@@ -388,14 +392,49 @@ export default function CreateQuestionScreen() {
         }}
       >
         <View style={styles.modalOverlay}>
+          {/* 폭죽/꽃가루 로티: 모달보다 크게, 최상단 */}
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              justifyContent: 'center',
+              alignItems: 'center',
+              zIndex: 9999,
+              elevation: 9999,
+            }}
+          >
+            <LottieView
+              source={confettiLottie}
+              autoPlay
+              loop={false}
+              key={`confetti-big-${confettiPlayCount}`}
+              onAnimationFinish={() => {
+                // 3번 재생: 0 -> 1 -> 2 (총 3회)
+                setConfettiPlayCount((prev) => (prev < 2 ? prev + 1 : prev));
+              }}
+              style={{ width: 420, height: 420 }}
+            />
+          </View>
           <View style={styles.modalContent}>
             <View style={styles.modalIcon}>
-              <Ionicons name="trophy" size={48} color={colors.primary} />
+              <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="trophy" size={48} color={colors.primary} />
+                <LottieView
+                  source={confettiLottie}
+                  autoPlay
+                  loop={false}
+                  key={`confetti-icon-${confettiPlayCount}`}
+                  style={{ width: 70, height: 70, marginTop: -10 }}
+                />
+              </View>
             </View>
             <Text style={styles.modalTitle}>축하합니다! 🎉</Text>
             <Text style={styles.modalMessage}>
-              튜토리얼 완료로 <Text style={styles.modalHighlight}>500P</Text>가 지급되었습니다!{'\n\n'}
-              이제 애니마 코드도 깨워보고 라이브픽으로 보상을 더 받아보세요!
+              <Text style={styles.modalHighlight}>500P</Text>가 지급되었습니다!
             </Text>
             <TouchableOpacity
               style={{
@@ -409,6 +448,7 @@ export default function CreateQuestionScreen() {
               }}
               onPress={() => {
                 setShowTutorialCompleteModal(false);
+                setConfettiPlayCount(0);
                 if (createdQuestionId) {
                   // 질문 상세 화면으로 이동
                   router.replace(`/(tabs)/livepick/${createdQuestionId}`);

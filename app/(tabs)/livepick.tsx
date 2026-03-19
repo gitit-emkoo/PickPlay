@@ -9,7 +9,7 @@ import { getLivePickQuestions, getTodayParticipationCount, getTodayLivePickQuest
 import { currentWeekKeyKST } from '../../src/utils/date';
 import { watchAuth } from '../../src/services/firebase';
 import { getTutorialStatus } from '../../src/services/tutorial';
-import TutorialTooltip from '../components/TutorialTooltip';
+// 튜토리얼은 말풍선 대신 모달로만 안내합니다.
 import BannerAdComponent from '../components/BannerAdComponent';
 
 const CATEGORIES: Array<'일상' | '연애' | '가치관' | '엔터테인먼트' | '상상'> = ['일상', '연애', '가치관', '엔터테인먼트', '상상'];
@@ -31,14 +31,11 @@ export default function LivePickScreen() {
     livepickParticipated: boolean;
     livepickCreated: boolean;
     rewardGiven500: boolean;
+    tutorialChoice: 'pending' | 'opt_in' | 'opt_out';
     allCompleted: boolean;
   } | null>(null);
   
-  // 튜토리얼 말풍선 표시 여부 (한 번만 표시) - useRef로 관리하여 리렌더링 시에도 유지
-  const hasSeenLivepickTooltipRef = useRef(false);
-  const hasSeenCreateTooltipRef = useRef(false);
-  const [hasSeenLivepickTooltip, setHasSeenLivepickTooltip] = useState(false);
-  const [hasSeenCreateTooltip, setHasSeenCreateTooltip] = useState(false);
+  // (말풍선 제거) hasSeen*Tooltip 상태/플래그는 더 이상 사용하지 않습니다.
   const [showCreateWarningModal, setShowCreateWarningModal] = useState(false);
   const [isCheckingCreateLimit, setIsCheckingCreateLimit] = useState(false);
 
@@ -85,21 +82,12 @@ export default function LivePickScreen() {
               livepickParticipated: false,
               livepickCreated: false,
               rewardGiven500: false,
+              tutorialChoice: 'pending',
               allCompleted: false,
             });
           }
           
-          // 튜토리얼 말풍선 표시 여부 확인 (한 번만 로드하여 리렌더링 시에도 유지)
-          const [hasSeenLivepick, hasSeenCreate] = await Promise.all([
-            AsyncStorage.getItem('hasSeenLivepickTutorialTooltip'),
-            AsyncStorage.getItem('hasSeenCreateTutorialTooltip'),
-          ]);
-          const seenLivepick = hasSeenLivepick === 'true';
-          const seenCreate = hasSeenCreate === 'true';
-          hasSeenLivepickTooltipRef.current = seenLivepick;
-          hasSeenCreateTooltipRef.current = seenCreate;
-          setHasSeenLivepickTooltip(seenLivepick);
-          setHasSeenCreateTooltip(seenCreate);
+          // 말풍선 제거로 인해 관련 AsyncStorage 플래그는 더 이상 로드하지 않습니다.
         } catch (e) {
           console.warn('[Tutorial] 튜토리얼 상태 로드 실패:', e);
           // 에러 발생 시 기본값 설정
@@ -108,6 +96,7 @@ export default function LivePickScreen() {
             livepickParticipated: false,
             livepickCreated: false,
             rewardGiven500: false,
+            tutorialChoice: 'pending',
             allCompleted: false,
           });
         }
@@ -577,23 +566,6 @@ export default function LivePickScreen() {
               <Ionicons name="add-circle" size={24} color={colors.primary} />
               <Text style={styles.createButtonText}>질문 만들기</Text>
             </TouchableOpacity>
-            
-            {/* 튜토리얼 말풍선 (질문 만들기 안내) - 라이브픽 참여 후 한 번만 표시 */}
-            {tutorialStatus && tutorialStatus.livepickParticipated && !tutorialStatus.livepickCreated && !hasSeenCreateTooltipRef.current && !hasSeenCreateTooltip && (
-              <TutorialTooltip
-                message="나만의 라이브픽 질문을 만들어보세요"
-                position="right"
-                style={{ position: 'absolute', top: -10, right: '100%', marginRight: 8 }}
-                width={200}
-                color="#FF5722"
-                blink={true}
-                onDismiss={async () => {
-                  await AsyncStorage.setItem('hasSeenCreateTutorialTooltip', 'true');
-                  hasSeenCreateTooltipRef.current = true;
-                  setHasSeenCreateTooltip(true);
-                }}
-              />
-            )}
           </View>
         </View>
       </View>
@@ -775,34 +747,6 @@ export default function LivePickScreen() {
           );
         })()}
       </ScrollView>
-
-      {/* 라이브픽 튜토리얼 말풍선 - 화면 최상단 오버레이로 표시 (한 번만 표시) */}
-      {tutorialStatus && !tutorialStatus.livepickParticipated && !hasSeenLivepickTooltipRef.current && !hasSeenLivepickTooltip && (
-        <View
-          pointerEvents="box-none"
-          style={{
-            position: 'absolute',
-            top: 140, // 헤더 + 카테고리 바로 아래 정도
-            left: 0,
-            right: 0,
-            zIndex: 1000,
-            alignItems: 'center',
-          }}
-        >
-          <TutorialTooltip
-            message="라이브픽 질문에 한 번 참여해보세요"
-            position="bottom"
-            style={{}}
-            color="#FF5722"
-            blink={true}
-            onDismiss={async () => {
-              await AsyncStorage.setItem('hasSeenLivepickTutorialTooltip', 'true');
-              hasSeenLivepickTooltipRef.current = true;
-              setHasSeenLivepickTooltip(true);
-            }}
-          />
-        </View>
-      )}
 
       {/* 검색 모달 */}
       <Modal

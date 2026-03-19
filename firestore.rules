@@ -50,12 +50,12 @@ service cloud.firestore {
         && request.auth.uid == uid
         && (
           // 기존 앱: deviceUID 없이 생성 (신규 사용자만)
-          (request.resource.data.keys().hasOnly(['uid', 'nickname', 'points', 'streakCount', 'totalSelections', 'lastAnswerDate', 'createdAt', 'characterId', 'adjective1', 'adjective2', 'tutorial'])
+          (request.resource.data.keys().hasOnly(['uid', 'nickname', 'points', 'streakCount', 'totalSelections', 'lastAnswerDate', 'createdAt', 'characterId', 'adjective1', 'adjective2', 'tutorial', 'tutorialChoice'])
             && request.resource.data.points == 0
             && request.resource.data.streakCount == 0
             && request.resource.data.totalSelections == 0) ||
           // 새 앱: deviceUID 포함하여 생성 (신규 사용자만)
-          (request.resource.data.keys().hasOnly(['uid', 'nickname', 'points', 'streakCount', 'totalSelections', 'lastAnswerDate', 'createdAt', 'characterId', 'adjective1', 'adjective2', 'tutorial', 'deviceUID'])
+          (request.resource.data.keys().hasOnly(['uid', 'nickname', 'points', 'streakCount', 'totalSelections', 'lastAnswerDate', 'createdAt', 'characterId', 'adjective1', 'adjective2', 'tutorial', 'deviceUID', 'tutorialChoice'])
             && request.resource.data.points == 0
             && request.resource.data.streakCount == 0
             && request.resource.data.totalSelections == 0
@@ -73,7 +73,7 @@ service cloud.firestore {
             && request.resource.data.totalSelections is int
             && request.resource.data.totalSelections >= 0
             && request.resource.data.createdAt != null
-            && request.resource.data.keys().hasAny(['characterId', 'adjective1', 'adjective2', 'tutorial']))
+            && request.resource.data.keys().hasAny(['characterId', 'adjective1', 'adjective2', 'tutorial', 'tutorialChoice']))
         );
       
       // 업데이트: 필드별 세밀한 권한 제어
@@ -134,7 +134,9 @@ service cloud.firestore {
             // 6. 게임 로직에서 자동 업데이트되는 필드들
             //    - 답변 제출 시: totalSelections, streakCount, lastAnswerDate만 업데이트
             (request.resource.data.diff(resource.data).changedKeys().hasOnly(['totalSelections', 'streakCount', 'lastAnswerDate'])
-              && request.resource.data.streakCount >= resource.data.streakCount // 연속 참여는 증가 또는 유지
+              && request.resource.data.streakCount is int
+              && request.resource.data.streakCount >= 0 // 리셋(감소)도 허용
+              && request.resource.data.streakCount <= 365 // 비정상적으로 큰 값 방지
               && request.resource.data.totalSelections >= resource.data.totalSelections // 총 선택 수는 증가만
               && request.resource.data.totalSelections == resource.data.totalSelections + 1) || // 정확히 1 증가해야 함
             
@@ -160,6 +162,20 @@ service cloud.firestore {
               && request.resource.data.phoneNumber is string
               && request.resource.data.phoneNumber.size() > 0
               && request.resource.data.phoneVerified == true)
+            ||
+            // 11. 튜토리얼 선택 상태(tutorialChoice)만 변경 (pending/opt_in/opt_out)
+            (request.resource.data.diff(resource.data).changedKeys().hasOnly(['tutorialChoice'])
+              && (request.resource.data.tutorialChoice in ['pending', 'opt_in', 'opt_out']))
+            ||
+            // 12. opt-in 선택 시 tutorial 초기 구조 생성까지 함께 허용
+            // - setTutorialChoice()가 tutorialChoice + tutorial(모두 false) 를 같이 업데이트함
+            (request.resource.data.diff(resource.data).changedKeys().hasOnly(['tutorialChoice', 'tutorial'])
+              && resource.data.tutorial == null
+              && request.resource.data.tutorialChoice == 'opt_in'
+              && request.resource.data.tutorial.mainAnswered == false
+              && request.resource.data.tutorial.livepickParticipated == false
+              && request.resource.data.tutorial.livepickCreated == false
+              && request.resource.data.tutorial.rewardGiven500 == false)
           )
         ) ||
         // [관리자용] 어떤 사용자의 points든 증가만 가능 (주간 TOP 보상 등)

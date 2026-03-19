@@ -56,6 +56,7 @@ export interface UserData {
   phoneVerifiedAt?: FirebaseFirestoreTypes.Timestamp | Date; // 인증 완료 시각
 
   // --- 튜토리얼 필드 ---
+  tutorialChoice?: 'pending' | 'opt_in' | 'opt_out';
   tutorial?: {
     mainAnswered: boolean; // 메인 질문에 답변했는지
     livepickParticipated: boolean; // 라이브픽 질문에 참여했는지

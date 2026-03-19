@@ -182,12 +182,27 @@ export const saveAnswerAndProcessLogic = async (userData: UserData, question: Qu
       }
       const currentUserData = userDoc.data() as UserData;
 
+      // Firestore rules에서 숫자 연산/비교가 안전하게 통과하도록 타입을 정규화
+      // (레거시 데이터에서 totalSelections/streakCount/lastAnswerDate가 string일 수 있음)
+      const normalizeNumber = (v: any, fallback = 0) => {
+        if (typeof v === 'number' && Number.isFinite(v)) return v;
+        if (typeof v === 'string') {
+          const n = parseInt(v.replace(/-/g, ''), 10);
+          return Number.isFinite(n) ? n : fallback;
+        }
+        return fallback;
+      };
+      const currentTotalSelections = normalizeNumber((currentUserData as any).totalSelections, 0);
+      const currentStreakCount = normalizeNumber((currentUserData as any).streakCount, 0);
+      // lastAnswerDate는 아래에서 이미 string/number를 처리하지만, 우선 숫자화된 값도 준비
+      const currentLastAnswerDateNum = normalizeNumber((currentUserData as any).lastAnswerDate, 0);
+
       // 테스트 유저는 연속 참여일수 계산 단순화
       let newStreakCount = 1;
       if (TEST_UIDS.includes(uid)) {
         // 테스트 유저는 항상 연속 참여로 처리
-        newStreakCount = (currentUserData.streakCount || 0) + 1;
-        console.log(`[Streak] 테스트 유저 연속 참여: ${currentUserData.streakCount} → ${newStreakCount}`);
+        newStreakCount = currentStreakCount + 1;
+        console.log(`[Streak] 테스트 유저 연속 참여: ${currentStreakCount} → ${newStreakCount}`);
       } else {
         // 일반 유저는 기존 로직 유지
         const kstNow = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
@@ -199,20 +214,16 @@ export const saveAnswerAndProcessLogic = async (userData: UserData, question: Qu
         const yesterdayKey = parseInt(`${year}${month}${day}`, 10);
 
         // lastAnswerDate를 숫자로 변환 (문자열일 수 있음)
-        const lastAnswerDateRaw: unknown = currentUserData.lastAnswerDate;
-        let lastAnswerDateNum = 0;
-        if (typeof lastAnswerDateRaw === 'string') {
-          lastAnswerDateNum = parseInt(lastAnswerDateRaw.replace(/-/g, ''), 10);
-        } else if (typeof lastAnswerDateRaw === 'number') {
-          lastAnswerDateNum = lastAnswerDateRaw;
-        }
+        const lastAnswerDateRaw: unknown = (currentUserData as any).lastAnswerDate;
+        let lastAnswerDateNum = currentLastAnswerDateNum;
+        if (typeof lastAnswerDateRaw === 'number') lastAnswerDateNum = lastAnswerDateRaw;
 
         console.log(`[Streak] 연속 참여일수 계산:`, {
           todayKey: todayKey,
           yesterdayKey: yesterdayKey,
-          lastAnswerDate: currentUserData.lastAnswerDate,
+          lastAnswerDate: (currentUserData as any).lastAnswerDate,
           lastAnswerDateNum: lastAnswerDateNum,
-          currentStreakCount: currentUserData.streakCount,
+          currentStreakCount: currentStreakCount,
           isYesterdayAnswered: lastAnswerDateNum === yesterdayKey,
           isTodayAnswered: lastAnswerDateNum === todayKey
         });
@@ -220,12 +231,12 @@ export const saveAnswerAndProcessLogic = async (userData: UserData, question: Qu
         // 오늘 이미 투표했는지 확인 (중복 방지)
         if (lastAnswerDateNum === todayKey) {
           // 오늘 이미 투표했으면 현재 streakCount 유지
-          newStreakCount = currentUserData.streakCount || 1;
+          newStreakCount = currentStreakCount || 1;
           console.log(`[Streak] 오늘 이미 투표함. 현재 streakCount 유지: ${newStreakCount}`);
         } else if (lastAnswerDateNum === yesterdayKey) {
           // 어제 투표했으면 연속 참여
-          newStreakCount = (currentUserData.streakCount || 0) + 1;
-          console.log(`[Streak] 연속 참여 감지: ${currentUserData.streakCount} → ${newStreakCount}`);
+          newStreakCount = currentStreakCount + 1;
+          console.log(`[Streak] 연속 참여 감지: ${currentStreakCount} → ${newStreakCount}`);
         } else if (lastAnswerDateNum === 0 || !currentUserData.lastAnswerDate) {
           // 첫 투표이거나 lastAnswerDate가 없으면 1일
           newStreakCount = 1;
@@ -238,14 +249,14 @@ export const saveAnswerAndProcessLogic = async (userData: UserData, question: Qu
       }
       
       // 트랜잭션 업데이트 (FieldValue.increment 대신 실제 값 사용 - Firestore 규칙 검증을 위해)
-      const newTotalSelections = (currentUserData.totalSelections || 0) + 1;
+      const newTotalSelections = currentTotalSelections + 1;
       transaction.update(userRef, {
         totalSelections: newTotalSelections,
         streakCount: newStreakCount,
         lastAnswerDate: todayKey,
       });
 
-      updatedTotalSelections = (currentUserData.totalSelections || 0) + 1;
+      updatedTotalSelections = newTotalSelections;
       updatedUserData = { 
         ...currentUserData, 
         totalSelections: updatedTotalSelections,
