@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, Modal, BackHandler, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, Modal, BackHandler, Platform, KeyboardAvoidingView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../../../src/styles/colors';
@@ -11,6 +11,7 @@ import confettiLottie from '../../../assets/lottie/tutorial-confetti.json';
 
 export default function CreateQuestionScreen() {
   const router = useRouter();
+  const scrollViewRef = React.useRef<ScrollView>(null);
   const [user, setUser] = useState<{ uid: string } | null>(null);
   const [title, setTitle] = useState('');
   const [option1, setOption1] = useState('');
@@ -35,6 +36,14 @@ export default function CreateQuestionScreen() {
   
   const MAX_TITLE_LENGTH = 40;
   const MAX_OPTION_LENGTH = 20;
+
+  const handleOption2Focus = () => {
+    // 키보드가 올라오면 ScrollView가 자동으로 이동하지 않는 경우가 있어,
+    // 선택지 2 입력 시점에 한 번 아래로 스크롤되게 처리합니다.
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 60);
+  };
 
   // 사용자 인증 확인
   useEffect(() => {
@@ -172,7 +181,23 @@ export default function CreateQuestionScreen() {
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+      <KeyboardAvoidingView
+        style={styles.content}
+        // iOS는 behavior="padding" 조합에서 과도한 상단 여백이 생기는 경우가 있어
+        // "position"으로 이동(여백이 덜 생김)하도록 조정합니다.
+        behavior={Platform.OS === 'ios' ? 'position' : 'height'}
+        keyboardVerticalOffset={0}
+      >
+        <ScrollView
+          ref={scrollViewRef}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[
+            styles.contentContainer,
+            // KeyboardAvoidingView가 이미 키보드 높이를 반영하므로
+            // iOS에서 과도한 paddingBottom을 주지 않도록 합니다.
+            { paddingBottom: 48 },
+          ]}
+        >
         {/* 상단 안내 문구 */}
         <View style={styles.infoBanner}>
           <Text style={styles.infoBannerText}>
@@ -251,6 +276,7 @@ export default function CreateQuestionScreen() {
             placeholderTextColor={colors.textLight}
             value={option2}
             onChangeText={setOption2}
+            onFocus={handleOption2Focus}
             maxLength={MAX_OPTION_LENGTH}
           />
           <Text style={[
@@ -292,7 +318,8 @@ export default function CreateQuestionScreen() {
             {isSubmitting ? '등록 중...' : '질문 업로드하기'}
           </Text>
         </TouchableOpacity>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* 카테고리 선택 모달 */}
       <Modal
