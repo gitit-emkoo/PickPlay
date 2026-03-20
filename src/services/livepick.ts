@@ -608,7 +608,7 @@ export async function participateInLivePick(
 }
 
 /**
- * 기본 보상(10P)을 지급합니다.
+ * 기본 보상(5P)을 지급합니다.
  * @param uid 사용자 UID
  * @param questionId 질문 ID
  */
@@ -638,16 +638,16 @@ export async function receiveBasicReward(uid: string, questionId: string): Promi
         basicRewardReceived: true,
       });
 
-      // 사용자 포인트 증가 (명령문: 즉시 보상 10P)
+      // 사용자 포인트 증가 (즉시 보상 5P)
       const userRef = firestore().collection('users').doc(uid);
       transaction.update(userRef, {
-        points: firestore.FieldValue.increment(10),
+        points: firestore.FieldValue.increment(5),
       });
     });
 
     // 포인트 내역 기록
     try {
-      await recordPointHistory(uid, 10, 'basic_reward', '라이브픽 기본 보상 (광고 미시청)');
+      await recordPointHistory(uid, 5, 'basic_reward', '라이브픽 기본 보상 (광고 미시청)');
     } catch (e) {
       console.warn('[LivePick] 포인트 내역 기록 실패(무시 가능):', (e as any)?.message || e);
     }
@@ -663,7 +663,7 @@ export async function receiveBasicReward(uid: string, questionId: string): Promi
  * 사다리 게임 보상을 지급합니다.
  * @param uid 사용자 UID
  * @param questionId 질문 ID
- * @param rewardPoints 지급할 포인트 (15P / 20P / 100P / 200P / 300P 중 하나)
+ * @param rewardPoints 지급할 포인트 (10P / 20P / 100P / 200P / 300P 중 하나)
  */
 export async function receiveLadderReward(
   uid: string,
@@ -673,7 +673,7 @@ export async function receiveLadderReward(
   try {
     await ensureAuthenticatedUser(uid);
 
-    const allowedRewards = [15, 20, 100, 200, 300];
+    const allowedRewards = [10, 20, 100, 200, 300];
     if (!allowedRewards.includes(rewardPoints)) {
       throw new Error('유효하지 않은 사다리 보상 금액입니다.');
     }

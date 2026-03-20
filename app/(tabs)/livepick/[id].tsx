@@ -77,6 +77,8 @@ export default function QuestionDetailScreen() {
   const [showParticipateModal, setShowParticipateModal] = useState(false);
   const [showLadderGame, setShowLadderGame] = useState(false);
   const [showRewardModal, setShowRewardModal] = useState(false);
+  /** 사다리 → 보상 모달 전환 시 iOS에서 인스턴스 재사용으로 모달이 안 뜨는 경우 완화 */
+  const [rewardModalInstanceKey, setRewardModalInstanceKey] = useState(0);
   const [showFinalMissionModal, setShowFinalMissionModal] = useState(false);
   const [rewardPoints, setRewardPoints] = useState(0);
   const [isLadderReward, setIsLadderReward] = useState(false);
@@ -460,7 +462,7 @@ export default function QuestionDetailScreen() {
     setShowParticipateModal(true);
   };
 
-  // 10P 받기 선택 (명령문: 즉시 보상 10P)
+  // 5P 받기 선택 (즉시 보상 5P)
   const handleReceiveBasicReward = async () => {
     if (!user || !question || selectedOption === null) return;
 
@@ -481,7 +483,7 @@ export default function QuestionDetailScreen() {
       setTodayParticipationCount(newCount);
       
       // 5. 보상 모달 표시
-      setRewardPoints(10);
+      setRewardPoints(5);
       setIsLadderReward(false);
       // ParticipateModal이 fade out 되는 타이밍과 충돌해서 간헐적으로 화면이 멈추는 현상이 있어
       // 보상 모달은 약간 지연 후 열어 모달 스택을 안정화한다.
@@ -498,7 +500,7 @@ export default function QuestionDetailScreen() {
         console.warn('[Tutorial] 라이브픽 참여 튜토리얼 업데이트 실패:', e);
       }
 
-      console.log('✅ 기본 보상 지급 완료 (10P)');
+      console.log('✅ 기본 보상 지급 완료 (5P)');
     } catch (error: any) {
       console.error('❌ 보상 지급 실패:', error);
       const errorMessage = error?.message || '보상 지급에 실패했습니다.';
@@ -623,14 +625,19 @@ export default function QuestionDetailScreen() {
       console.log('✅ [LivePick] 사다리 게임 보상 지급 완료:', points, 'P');
       
       // 사다리 게임 모달 닫기 (1초 후)
+      // iOS: 광고 전체화면 + RN Modal 연속 전환 시 스택이 꼬이기 쉬움 →
+      // 사다리 dismiss 애니메이션 후 InteractionManager + 충분한 지연 뒤 보상 Modal 표시
       setTimeout(() => {
         setShowLadderGame(false);
-        // 보상 모달 표시 (모달 닫힌 후 300ms)
-        setTimeout(() => {
-          setRewardPoints(points);
-          setIsLadderReward(true);
-          setShowRewardModal(true);
-        }, 300);
+        const afterLadderCloseMs = Platform.OS === 'ios' ? 700 : 280;
+        InteractionManager.runAfterInteractions(() => {
+          setTimeout(() => {
+            setRewardPoints(points);
+            setIsLadderReward(true);
+            setRewardModalInstanceKey((k) => k + 1);
+            setShowRewardModal(true);
+          }, afterLadderCloseMs);
+        });
       }, 1000);
     } catch (error: any) {
       console.error('❌ [LivePick] 보상 지급 실패:', error);
@@ -654,7 +661,14 @@ export default function QuestionDetailScreen() {
     // 먼저 현재 모달을 확실히 닫고(애니메이션/dismiss 완료 시간 확보),
     // 그 다음 다음 단계 모달을 띄워 모달 스택 충돌을 방지합니다.
     setShowRewardModal(false);
-    await new Promise<void>((resolve) => setTimeout(resolve, 350));
+    // iOS에서는 전체화면 모달 + 다음 모달 전환 타이밍이 조금만 꼬여도
+    // "보이지 않는 투명 오버레이"처럼 UI가 멈춘 상태가 될 수 있어,
+    // 안전하게 다른 모달 상태도 함께 정리하고 더 여유 있게 대기합니다.
+    setShowLadderGame(false);
+    setShowParticipateModal(false);
+
+    const waitMs = Platform.OS === 'ios' ? 650 : 350;
+    await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
 
     if (!user) {
       router.push('/(tabs)/livepick');
@@ -678,11 +692,15 @@ export default function QuestionDetailScreen() {
         !latest?.livepickCreated;
 
       if (shouldShowFinal) {
-        // RewardModal dismiss 직후 모달 스택이 꼬일 수 있어 한 번 더 tick을 양보
-        setTimeout(() => setShowFinalMissionModal(true), 0);
+        // RewardModal dismiss 직후 바로 모달을 띄우면 iOS에서 스택이 꼬일 수 있음.
+        InteractionManager.runAfterInteractions(() => {
+          setShowFinalMissionModal(true);
+        });
       } else {
         setShowFinalMissionModal(false);
-        router.push('/(tabs)/livepick');
+        InteractionManager.runAfterInteractions(() => {
+          router.push('/(tabs)/livepick');
+        });
       }
     } catch (e) {
       // 조회 실패 시 fallback: 기존 state 기준으로 처리
@@ -693,8 +711,11 @@ export default function QuestionDetailScreen() {
         tutorialStatus?.livepickParticipated &&
         !tutorialStatus?.livepickCreated;
 
-      if (shouldShowFinal) setTimeout(() => setShowFinalMissionModal(true), 0);
-      else router.push('/(tabs)/livepick');
+      if (shouldShowFinal) {
+        InteractionManager.runAfterInteractions(() => setShowFinalMissionModal(true));
+      } else {
+        InteractionManager.runAfterInteractions(() => router.push('/(tabs)/livepick'));
+      }
     }
   };
 
@@ -791,30 +812,22 @@ export default function QuestionDetailScreen() {
           <Text style={styles.participantText}>{question.participantCount}명 참여 중</Text>
         </View>
 
-        {/* 일일 참여 제한 표시 */}
+        {/* 일일 참여 제한 표시 (메인 LivePick 헤더 배지와 동일) */}
         {user && (
-          <View style={[
-            styles.dailyLimitInfo,
-            todayParticipationCount >= 4 && styles.dailyLimitInfoWarning
-          ]}>
-            <View style={styles.dailyLimitContent}>
-              <Ionicons 
-                name={todayParticipationCount >= 4 ? "alert-circle" : "time"} 
-                size={18} 
-                color={todayParticipationCount >= 4 ? colors.warning : colors.textSecondary} 
-              />
-              <Text style={[
+          <View style={styles.dailyLimitInfo}>
+            <Ionicons
+              name="time"
+              size={14}
+              color={todayParticipationCount >= 4 ? colors.warning : colors.primary}
+            />
+            <Text
+              style={[
                 styles.dailyLimitText,
-                todayParticipationCount >= 4 && styles.dailyLimitTextWarning
-              ]}>
-                오늘 남은 참여: {Math.max(0, 4 - todayParticipationCount)}/4회
-              </Text>
-            </View>
-            {todayParticipationCount >= 4 && (
-              <Text style={styles.dailyLimitWarning}>
-                내일 다시 참여하실 수 있습니다
-              </Text>
-            )}
+                todayParticipationCount >= 4 && styles.dailyLimitTextWarning,
+              ]}
+            >
+              오늘 {todayParticipationCount}/4회
+            </Text>
           </View>
         )}
 
@@ -881,7 +894,7 @@ export default function QuestionDetailScreen() {
             <Text style={styles.infoText}>
               {user && question && question.createdBy === user.uid
                 ? '자신이 만든 질문에는 참여할 수 없습니다.'
-                : '선택지를 클릭하여 참여하세요.\n참여 후 10P를 받거나 광고 시청 후 추가 보상을 받을 수 있습니다.'}
+                : '선택지를 클릭하여 참여하세요.\n참여 후 5P를 받거나 광고 시청 후 추가 보상을 받을 수 있습니다.'}
             </Text>
           </View>
         )}
@@ -958,6 +971,7 @@ export default function QuestionDetailScreen() {
         visible={showLadderGame}
         transparent
         animationType="slide"
+        presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
         onRequestClose={() => {
           console.log('🔙 [LivePick] 사다리 게임 모달 닫기 요청');
           setShowLadderGame(false);
@@ -975,6 +989,7 @@ export default function QuestionDetailScreen() {
 
       {/* 보상 모달 */}
       <RewardModal
+        key={`reward-modal-${rewardModalInstanceKey}`}
         visible={showRewardModal}
         points={rewardPoints}
         isLadderReward={isLadderReward}
@@ -1207,20 +1222,22 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   dailyLimitInfo: {
-    flexDirection: 'column',
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 4,
+    alignSelf: 'flex-end',
     marginBottom: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
     backgroundColor: colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
   },
   dailyLimitInfoWarning: {
-    backgroundColor: '#FFF4E6',
-    borderColor: colors.warning,
+    // 더 이상 배경을 바꾸지 않고, 텍스트/아이콘 색으로만 경고를 표현합니다.
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
   },
   dailyLimitContent: {
     flexDirection: 'row',
@@ -1229,14 +1246,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   dailyLimitText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
-    color: colors.textSecondary,
-    flexShrink: 1,
+    color: colors.primary,
   },
   dailyLimitTextWarning: {
     color: colors.warning,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   dailyLimitWarning: {
     fontSize: 12,

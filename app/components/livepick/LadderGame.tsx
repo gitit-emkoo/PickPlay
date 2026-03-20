@@ -18,7 +18,7 @@ interface LadderGameProps {
 }
 
 const REWARD_PROBABILITIES = [
-  { points: 15, probability: 0.73 },
+  { points: 10, probability: 0.73 },
   { points: 20, probability: 0.2 },
   { points: 100, probability: 0.04 },
   { points: 200, probability: 0.02 },
@@ -32,7 +32,7 @@ const getRewardByProbability = (): number => {
     cumulative += reward.probability;
     if (random <= cumulative) return reward.points;
   }
-  return 15;
+  return 10;
 };
 
 export default function LadderGame({ visible, onResult }: LadderGameProps) {

@@ -168,8 +168,8 @@ export default function CreateQuestionScreen() {
 
   return (
     <View style={styles.container}>
-      {/* 헤더 */}
-      <View style={styles.header}>
+      {/* 헤더 — iOS에서만 KeyboardAvoidingView 위로 스크롤 콘텐츠가 겹치지 않도록 최상단 zIndex */}
+      <View style={[styles.header, Platform.OS === 'ios' && styles.headerIosOnTop]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.replace('/(tabs)/livepick')}
@@ -182,7 +182,7 @@ export default function CreateQuestionScreen() {
       </View>
 
       <KeyboardAvoidingView
-        style={styles.content}
+        style={[styles.content, Platform.OS === 'ios' && styles.contentBelowHeaderIos]}
         // iOS는 behavior="padding" 조합에서 과도한 상단 여백이 생기는 경우가 있어
         // "position"으로 이동(여백이 덜 생김)하도록 조정합니다.
         behavior={Platform.OS === 'ios' ? 'position' : 'height'}
@@ -511,6 +511,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  /** iOS: 키보드 회피 시 본문이 위로 밀릴 때 헤더가 항상 위에 보이도록 */
+  headerIosOnTop: {
+    zIndex: 10000,
+    elevation: 10000,
+  },
   backButton: {
     padding: 4,
   },
@@ -524,6 +529,9 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  contentBelowHeaderIos: {
+    zIndex: 0,
   },
   contentContainer: {
     padding: 20,
