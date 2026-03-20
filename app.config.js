@@ -28,6 +28,8 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.pickplay.kwcc',
+      // EAS appVersionSource가 local일 때 사용됨. App Store 실제 빌드가 더 크면 제출 전에 반드시 올려 주세요.
+      buildNumber: '21',
       googleServicesFile: './GoogleService-Info.plist',
       infoPlist: {
         GADApplicationIdentifier: 'ca-app-pub-2555567440328829~5483134579',
@@ -36,6 +38,7 @@ module.exports = {
     },
     android: {
       package: 'com.pickplay.kwcc',
+      versionCode: 58,
       googleServicesFile: './google-services.json',
       adaptiveIcon: {
         foregroundImage: './assets/images/adaptive-icon.png',

@@ -75,7 +75,7 @@
     "@testing-library/react-native": "^13.3.3",
     "@types/jest": "^30.0.0",
     "@types/react": "^18.3.12",
-    "eslint": "^9.25.0",
+    "eslint": "^8.57.0",
     "eslint-config-expo": "~8.0.1",
     "expo-server-sdk": "^3.15.0",
     "firebase-admin": "^12.7.0",
