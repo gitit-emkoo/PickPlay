@@ -133,11 +133,20 @@ export async function getTutorialStatus(uid: string): Promise<{
 
     const userData = userDoc.data() as UserData;
     // 기존 유저 호환:
-    // - tutorialChoice가 없고 tutorial 필드가 이미 있으면(과거 튜토리얼 진행/완료 유저) pending으로 보지 않음
-    //   -> 완료 유저가 다시 "도전하기" 모달을 보지 않게 하기 위함
+    // - tutorialChoice가 없을 때, 이미 미션을 진행·완료한 유저만 opt_in으로 간주 (선택 모달 생략)
+    // - tutorial만 있고 4개가 전부 false인 신규/미선택 유저는 pending (첫 접속 선택 모달 표시)
     const tutorialChoice =
       userData.tutorialChoice ??
-      (userData.tutorial ? 'opt_in' : 'pending');
+      (() => {
+        const t = userData.tutorial;
+        if (!t) return 'pending';
+        const hasAnyProgress =
+          !!t.mainAnswered ||
+          !!t.livepickParticipated ||
+          !!t.livepickCreated ||
+          !!t.rewardGiven500;
+        return hasAnyProgress ? 'opt_in' : 'pending';
+      })();
     
     // opt-in이 아닌 유저는 tutorial이 없어도 그대로 반환 (자동 생성하지 않음)
     const tutorial = userData.tutorial || {

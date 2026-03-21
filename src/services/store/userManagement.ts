@@ -199,6 +199,8 @@ export const ensureUser = async (uid: string): Promise<UserData> => {
         livepickCreated: false,
         rewardGiven500: false,
       },
+      // 첫 접속 500P 안내 모달(opt_in / opt_out) — 신규는 반드시 선택 전까지 pending
+      tutorialChoice: 'pending' as const,
     };
 
     // 트랜잭션을 사용하여 원자적으로 문서 생성 (이미 존재하면 읽기)
@@ -836,5 +838,6 @@ function createFallbackUserData(uid: string, deviceUID: string): UserData {
       livepickCreated: false,
       rewardGiven500: false,
     },
+    tutorialChoice: 'pending' as const,
   };
 }

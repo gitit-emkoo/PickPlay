@@ -84,5 +84,13 @@
   "react-native-google-mobile-ads": {
     "ios_app_id": "ca-app-pub-2555567440328829~5483134579",
     "android_app_id": "ca-app-pub-2555567440328829~4208779024"
+  },
+  "expo": {
+    "android": {
+      "versionCode": 59
+    },
+    "ios": {
+      "buildNumber": "22"
+    }
   }
 }

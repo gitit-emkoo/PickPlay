@@ -967,11 +967,8 @@ export default function HomeScreen() {
             <Text style={{ fontSize: 16, color: colors.primary, fontWeight: '600', textDecorationLine: 'underline' }}>🔗 30초루틴 픽플레이 친구에게 알려주기</Text>
         </TouchableOpacity>
 
-          {/* 보상 받기 버튼 (광고 연동 전 플레이스홀더) */}
-            {tutorialStatus &&
-              tutorialStatus.tutorialChoice === 'opt_in' &&
-              tutorialStatus.mainAnswered &&
-              userChoice !== null &&
+          {/* 보상 받기: 데일리픽 보상은 튜토리얼(500P) opt-in과 무관 — pending/opt_out 유저도 답변 후 받을 수 있어야 함 */}
+            {userChoice !== null &&
               !rewardCompleted && (
               <View style={{ alignSelf: 'center' }}>
               <TouchableOpacity onPress={handleGrantReward} style={{
