@@ -3,8 +3,8 @@ module.exports = {
     name: 'pickplay',
     slug: 'today-balance',
     scheme: 'pickplay',
-    version: '2.1.2',
-    runtimeVersion: '2.1.2',
+    version: '2.1.3',
+    runtimeVersion: '2.1.3',
     extra: {
       eas: {
         projectId: '14d1ecb2-a3c0-4425-ac97-0ec33b289905'
@@ -28,17 +28,18 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.pickplay.kwcc',
-      // EAS appVersionSource가 local일 때 사용됨. App Store 실제 빌드가 더 크면 제출 전에 반드시 올려 주세요.
-      buildNumber: '21',
+      // App Store: 마케팅 버전은 app.json/version 과 동일. 빌드 119 (autoIncrement 끔)
+      buildNumber: '119',
       googleServicesFile: './GoogleService-Info.plist',
       infoPlist: {
         GADApplicationIdentifier: 'ca-app-pub-2555567440328829~5483134579',
-        NSUserTrackingUsageDescription: '이 정보를 사용하여 더 관련성 높은 맞춤형 광고를 제공합니다.'
+        NSUserTrackingUsageDescription: '이 정보를 사용하여 더 관련성 높은 맞춤형 광고를 제공합니다.',
+        ITSAppUsesNonExemptEncryption: false
       }
     },
     android: {
       package: 'com.pickplay.kwcc',
-      versionCode: 58,
+      versionCode: 119,
       googleServicesFile: './google-services.json',
       adaptiveIcon: {
         foregroundImage: './assets/images/adaptive-icon.png',
