@@ -104,6 +104,10 @@ export default function HomeScreen() {
 
   // 튜토리얼 opt-in 여부는 tutorialStatus가 늦게 로드되더라도 userData로 보강
   const isTutorialOptIn = tutorialStatus?.tutorialChoice === 'opt_in' || userData?.tutorialChoice === 'opt_in';
+  /** 두 번째 미션(라이브픽 참여 유도) — 이미 라이브픽 참여 완료면 매일 데일리 보상 후 모달이 반복되면 안 됨 */
+  const needsSecondMissionModal =
+    isTutorialOptIn &&
+    !(tutorialStatus?.livepickParticipated ?? userData?.tutorial?.livepickParticipated ?? false);
 
   const navigation = useNavigation();
 
@@ -1222,12 +1226,14 @@ export default function HomeScreen() {
             <Text style={{ fontSize: 18, fontWeight: '700', color: colors.primary, textAlign: 'center', marginBottom: 20 }}>보상이 적립되었습니다.</Text>
             <TouchableOpacity onPress={() => {
               setShowRewardDoneModal(false);
-              // 튜토리얼 opt-in 유저: 3번 모달(두 번째 미션)로 진행
-              if (isTutorialOptIn) {
+              // 튜토리얼 opt-in + 아직 라이브픽 미션 미완료일 때만 두 번째 미션 모달 (완료 유저는 매일 반복 노출 방지)
+              if (needsSecondMissionModal) {
                 setShowSecondMissionModal(true);
-              } else {
+              } else if (!isTutorialOptIn) {
+                // opt-out / pending 등: 기존 라이브픽 안내
                 setShowLivePickGuideModal(true);
               }
+              // opt-in + 이미 라이브픽 참여 완료: 데일리 보상 후 추가 모달 없음
             }} style={{ backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24 }}>
               <Text style={{ fontSize: 16, color: 'white', fontWeight: '600', textAlign: 'center' }}>확인</Text>
             </TouchableOpacity>

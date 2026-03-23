@@ -28,8 +28,8 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.pickplay.kwcc',
-      // App Store: 마케팅 버전은 app.json/version 과 동일. 빌드 119 (autoIncrement 끔)
-      buildNumber: '119',
+      // App Store: 마케팅 버전은 app.json/version 과 동일. 빌드 121 (autoIncrement 끔)
+      buildNumber: '121',
       googleServicesFile: './GoogleService-Info.plist',
       infoPlist: {
         GADApplicationIdentifier: 'ca-app-pub-2555567440328829~5483134579',
@@ -39,7 +39,7 @@ module.exports = {
     },
     android: {
       package: 'com.pickplay.kwcc',
-      versionCode: 119,
+      versionCode: 121,
       googleServicesFile: './google-services.json',
       adaptiveIcon: {
         foregroundImage: './assets/images/adaptive-icon.png',
@@ -69,12 +69,15 @@ module.exports = {
             }
           },
           android: {
+            // enable16kbPages 등 API 35 매니페스트 속성은 compileSdk 35가 있어야 AAPT가 인식함
+            compileSdkVersion: 35,
             targetSdkVersion: 35
           }
         }
       ],
       './plugins/with-google-services-file',
       './plugins/with-admob-test-device',
+      // 16KB: android:enable16kbPages 는 현재 AAPT/도구 체인에서 스키마 미정의로 링크 실패함. Play 대응은 AGP/NDK·.so 정렬(공식 가이드) 우선.
       './plugins/with-tracking-transparency'
     ]
   },

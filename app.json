@@ -26,7 +26,7 @@
   "ios": {
     "supportsTablet": true,
     "bundleIdentifier": "com.pickplay.kwcc",
-    "buildNumber": "119",
+    "buildNumber": "121",
     "googleServicesFile": "./GoogleService-Info.plist",
     "infoPlist": {
       "GADApplicationIdentifier": "ca-app-pub-2555567440328829~5483134579",
@@ -36,7 +36,7 @@
   },
   "android": {
     "package": "com.pickplay.kwcc",
-    "versionCode": 119,
+    "versionCode": 121,
     "googleServicesFile": "./google-services.json",
     "adaptiveIcon": {
       "foregroundImage": "./assets/images/adaptive-icon.png",
@@ -65,6 +65,7 @@
           }
         },
         "android": {
+          "compileSdkVersion": 35,
           "targetSdkVersion": 35,
           "kotlinVersion": "1.9.22",
           "newArchEnabled": false
@@ -78,8 +79,7 @@
       }
     ],
     "./plugins/with-google-services-file",
-    "./plugins/with-admob-test-device",
-    "./plugins/with-16kb-pages"
+    "./plugins/with-admob-test-device"
   ],
   "react-native-google-mobile-ads": {
     "ios_app_id": "ca-app-pub-2555567440328829~5483134579",
@@ -87,10 +87,10 @@
   },
   "expo": {
     "android": {
-      "versionCode": 119
+      "versionCode": 121
     },
     "ios": {
-      "buildNumber": "119"
+      "buildNumber": "121"
     }
   }
 }
