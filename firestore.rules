@@ -153,6 +153,13 @@ service cloud.firestore {
               && (request.resource.data.adjective1 == null || request.resource.data.adjective1 is string)
               && (request.resource.data.adjective2 == null || request.resource.data.adjective2 is string)) ||
 
+            // 8b. 형용사 갱신(Logic B): 이전 스냅샷 + 새 형용사 동시 저장
+            (request.resource.data.diff(resource.data).changedKeys().hasOnly(['adjective1', 'adjective2', 'previousAdjective1', 'previousAdjective2'])
+              && (request.resource.data.adjective1 == null || request.resource.data.adjective1 is string)
+              && (request.resource.data.adjective2 == null || request.resource.data.adjective2 is string)
+              && (request.resource.data.previousAdjective1 == null || request.resource.data.previousAdjective1 is string)
+              && (request.resource.data.previousAdjective2 == null || request.resource.data.previousAdjective2 is string)) ||
+
             // 9. 사용자 알림 설정(notificationEnabled)만 변경
             (request.resource.data.diff(resource.data).changedKeys().hasOnly(['notificationEnabled'])
               && (request.resource.data.notificationEnabled == true || request.resource.data.notificationEnabled == false)) ||

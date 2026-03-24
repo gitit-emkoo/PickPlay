@@ -168,10 +168,23 @@ export const updateAdjectives_LogicB = async (userData: UserData): Promise<UserD
   if (adj1 && adj2) {
     const before = { adj1: userData.adjective1, adj2: userData.adjective2 };
     const after = { adj1, adj2 };
-    await userRef.update({ adjective1: adj1, adjective2: adj2 });
-    await addLog(uid, 'UPDATE_ADJECTIVES_LOGIC_B', { before, after, totalSelections });
+    const previousAdjective1 = userData.adjective1 ?? null;
+    const previousAdjective2 = userData.adjective2 ?? null;
+    await userRef.update({
+      previousAdjective1,
+      previousAdjective2,
+      adjective1: adj1,
+      adjective2: adj2,
+    });
+    await addLog(uid, 'UPDATE_ADJECTIVES_LOGIC_B', { before, after, totalSelections, previousAdjective1, previousAdjective2 });
     console.log(`[Logic B] 사용자 형용사 업데이트 완료: ${adj1} ${adj2}`);
-    return { ...userData, adjective1: adj1, adjective2: adj2 };
+    return {
+      ...userData,
+      previousAdjective1,
+      previousAdjective2,
+      adjective1: adj1,
+      adjective2: adj2,
+    };
   }
   return userData;
 };

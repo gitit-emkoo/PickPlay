@@ -40,6 +40,9 @@ export interface UserData {
   characterId: string | null; // 배정된 동물 ID (예: "fox")
   adjective1: string | null; // 현재 [형용사1]
   adjective2: string | null; // 현재 [형용사2]
+  /** 직전 형용사 갱신(Logic B) 이전의 조합 — 성향 변화 UI용 */
+  previousAdjective1?: string | null;
+  previousAdjective2?: string | null;
 
   // --- 기존 필드 ---
   points: number;

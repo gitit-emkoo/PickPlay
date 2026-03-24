@@ -146,7 +146,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({ userData }) => {
                       애니마코드가 탄생했어!
                     </Text>
                     <Text style={styles.evolutionSubText}>
-                      이제 더 많은 선택으로 진화시켜봐!
+                      앞으로의 선택은 너의 다음 성향을 만들어 갈거야!
                     </Text>
                   </View>
                 </>

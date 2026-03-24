@@ -4,6 +4,7 @@ import { ensureAnonymousAuth, getFunctions } from '../firebase';
 import { currentDateKey } from '../../utils/date';
 import { scheduleStreakNotification } from '../notifications';
 import { isLegacyUser, assignCharacter_LogicA, updateAdjectives_LogicB } from './character';
+import { TEST_UIDS } from '../../constants/testUids';
 
 /**
  * [V2] Firebase Cloud Function을 호출하여 AI 태그를 생성합니다.
@@ -77,7 +78,6 @@ export const saveAnswerQuick = async (userData: UserData, question: Question, se
   const todayKey = currentDateKey();
   
   // 테스트 유저는 하루 한 번 제한 없음
-  const TEST_UIDS = ['vUlyeAhYmneB5Ii6oPNR8OFCQZg1', 'C1iSsR85GoTnvVRSY2nIn9y6ZFz1'];
   if (!TEST_UIDS.includes(userData.uid) && userData.lastAnswerDate === todayKey) {
     console.warn(`[Vote] User ${userData.uid} has already voted today. Aborting.`);
     throw new Error("오늘 이미 답변했습니다.");
@@ -123,7 +123,6 @@ export const saveAnswerAndProcessLogic = async (userData: UserData, question: Qu
   const todayKey = currentDateKey();
   
   // 테스트 유저는 하루 한 번 제한 없음
-  const TEST_UIDS = ['vUlyeAhYmneB5Ii6oPNR8OFCQZg1', 'C1iSsR85GoTnvVRSY2nIn9y6ZFz1'];
   if (!TEST_UIDS.includes(userData.uid) && userData.lastAnswerDate === todayKey) {
     console.warn(`[Vote] User ${userData.uid} has already voted today. Aborting.`);
     throw new Error("오늘 이미 답변했습니다.");

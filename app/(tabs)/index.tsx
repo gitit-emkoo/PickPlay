@@ -15,6 +15,7 @@ import colors from '../../src/styles/colors';
 import { Ionicons } from '@expo/vector-icons';
 import { subscribeUnreadCount } from '../../src/services/notificationsList';
 import { getTutorialStatus, setTutorialChoice, updateTutorialProgress } from '../../src/services/tutorial';
+import { TEST_UIDS } from '../../src/constants/testUids';
 import * as WebBrowser from 'expo-web-browser';
 import LottieView from 'lottie-react-native';
 import BannerAdComponent from '../components/BannerAdComponent';
@@ -568,7 +569,6 @@ export default function HomeScreen() {
     if (!user || !userData || !question) return;
     
     // 테스트 유저는 UI 제한 없음
-    const TEST_UIDS = ['vUlyeAhYmneB5Ii6oPNR8OFCQZg1', 'C1iSsR85GoTnvVRSY2nIn9y6ZFz1'];
     if (!TEST_UIDS.includes(user.uid) && userChoice !== null) {
       setShowTomorrowModal(true);
       return;
@@ -650,7 +650,16 @@ export default function HomeScreen() {
         }
       } catch (e: any) {
         console.error('❌ 빠른 답변 저장 실패:', e);
-        // 에러 발생 시에도 UI는 이미 업데이트됨 (사용자 경험 유지)
+        // 저장 실패 시 옵티미스틱 UI·집계 되돌림 (Firestore에 답이 없으면 '답함' 표시가 남지 않도록)
+        setUserChoice(null);
+        setRewardCompleted(false);
+        setMsg('저장에 실패했습니다. 네트워크를 확인한 뒤 다시 선택해 주세요.');
+        try {
+          const result = await aggregate(question.question_id);
+          setAgg(result);
+        } catch (aggErr) {
+          console.warn('[Vote] 저장 실패 후 집계 복구 실패:', aggErr);
+        }
       }
     }, 0);
   };

@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import colors from '../../src/styles/colors';
 import { watchAuth } from '../../src/services/firebase';
 import { ensureUser } from '../../src/services/store';
 import { UserData } from '../../src/types';
 import CharacterCard from '../components/CharacterCard';
+import { getDispositionDescription } from '../../src/services/animaDispositionDescriptions';
 
 export default function AnimaCodeScreen() {
   const [user, setUser] = useState<{ uid: string } | null>(null);
@@ -30,6 +32,25 @@ export default function AnimaCodeScreen() {
   }, []);
 
   const remainingForAnima = userData ? Math.max(0, 30 - (userData.totalSelections || 0)) : 30;
+
+  const currentDispositionDescription = useMemo(() => {
+    if (!userData?.adjective1 || !userData?.adjective2) return '';
+    return getDispositionDescription(userData.adjective1, userData.adjective2);
+  }, [userData?.adjective1, userData?.adjective2]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.uid) return;
+      (async () => {
+        try {
+          const data = await ensureUser(user.uid);
+          setUserData(data);
+        } catch (e) {
+          console.warn('[AnimaCode] 화면 포커스 시 사용자 데이터 갱신 실패:', e);
+        }
+      })();
+    }, [user?.uid])
+  );
 
   return (
     <View style={styles.container}>
@@ -76,6 +97,57 @@ export default function AnimaCodeScreen() {
                     이 남았습니다.
                   </Text>
                 </View>
+              )}
+
+              {/* 성향 변화 / 성향 설명 — 캐릭터 카드( CharacterCard ) 아래에만 추가. 카드 컴포넌트는 변경 없음 */}
+              {userData.characterId && userData.adjective1 && userData.adjective2 && (
+                <>
+                  {userData.previousAdjective1 && userData.previousAdjective2 && (
+                    <View style={styles.dispositionSection}>
+                      <View style={styles.dispositionSectionHeader}>
+                        <View style={styles.dispositionIconBox}>
+                          <Ionicons name="sync" size={18} color="#fff" />
+                        </View>
+                        <Text style={styles.dispositionSectionTitle}>성향 변화</Text>
+                      </View>
+                      <View style={styles.dispositionCard}>
+                        <Text style={styles.dispositionCardLabel}>지난번 성향 → 현재 성향</Text>
+                        <View style={styles.dispositionChangeRow}>
+                          <Text style={styles.dispositionPrevText} numberOfLines={2}>
+                            {`${userData.previousAdjective1} ${userData.previousAdjective2}`}
+                          </Text>
+                          <Text style={styles.dispositionArrow}>→</Text>
+                          <Text style={styles.dispositionCurrText} numberOfLines={2}>
+                            {`${userData.adjective1} ${userData.adjective2}`}
+                          </Text>
+                        </View>
+                        <Text style={styles.dispositionFootnote}>
+                          캐릭터는 그대로, 성향은 선택에 따라 계속 변화해요!
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                  <View
+                    style={[
+                      styles.dispositionSection,
+                      userData.previousAdjective1 && userData.previousAdjective2
+                        ? { marginTop: 4 }
+                        : null,
+                    ]}
+                  >
+                    <View style={styles.dispositionSectionHeader}>
+                      <View style={[styles.dispositionIconBox, { backgroundColor: '#FF6699' }]}>
+                        <Ionicons name="chatbubble-ellipses" size={18} color="#fff" />
+                      </View>
+                      <Text style={styles.dispositionSectionTitle}>요즘 나의 성향</Text>
+                    </View>
+                    <View style={styles.dispositionCard}>
+                      <Text style={styles.dispositionCardLabel}>요즘 나의 내면은 이런 모습이에요</Text>
+                      <Text style={styles.dispositionDescriptionText}>{currentDispositionDescription}</Text>
+                    </View>
+                  </View>
+                </>
               )}
             </>
           ) : (
@@ -420,5 +492,75 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: colors.border,
     marginVertical: 8,
+  },
+  dispositionSection: {
+    width: '100%',
+    marginBottom: 16,
+  },
+  dispositionSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 10,
+  },
+  dispositionIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dispositionSectionTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  dispositionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  dispositionCardLabel: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginBottom: 10,
+    fontWeight: '600',
+  },
+  dispositionChangeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dispositionPrevText: {
+    fontSize: 15,
+    color: colors.textSecondary,
+    textDecorationLine: 'line-through',
+    flexShrink: 1,
+  },
+  dispositionArrow: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  dispositionCurrText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.text,
+    flexShrink: 1,
+  },
+  dispositionFootnote: {
+    marginTop: 12,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.textLight,
+  },
+  dispositionDescriptionText: {
+    fontSize: 15,
+    lineHeight: 24,
+    color: colors.text,
   },
 });
