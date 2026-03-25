@@ -732,7 +732,7 @@ export const sendInactiveUserNotifications = functions
 
       console.log('[sendInactiveUserNotifications] todayKey(KST):', todayKey);
 
-      const stages = [
+      const defaultStages = [
         {
           days: 3,
           code: 'inactive_3',
@@ -752,6 +752,44 @@ export const sendInactiveUserNotifications = functions
           body: '다시 시작해도 괜찮아요. 오늘 질문부터 천천히 이어가봐요.',
         },
       ];
+
+      let stages = defaultStages;
+      try {
+        const templateDoc = await admin.firestore().collection('config').doc('notificationTemplates').get();
+        if (templateDoc.exists) {
+          const t = templateDoc.data() as {
+            inactive3Title?: string;
+            inactive3Body?: string;
+            inactive5Title?: string;
+            inactive5Body?: string;
+            inactive10Title?: string;
+            inactive10Body?: string;
+          };
+          stages = [
+            {
+              days: 3,
+              code: 'inactive_3',
+              title: t.inactive3Title?.trim() || defaultStages[0].title,
+              body: t.inactive3Body?.trim() || defaultStages[0].body,
+            },
+            {
+              days: 5,
+              code: 'inactive_5',
+              title: t.inactive5Title?.trim() || defaultStages[1].title,
+              body: t.inactive5Body?.trim() || defaultStages[1].body,
+            },
+            {
+              days: 10,
+              code: 'inactive_10',
+              title: t.inactive10Title?.trim() || defaultStages[2].title,
+              body: t.inactive10Body?.trim() || defaultStages[2].body,
+            },
+          ];
+          console.log('[sendInactiveUserNotifications] notificationTemplates 적용 완료');
+        }
+      } catch (templateError: any) {
+        console.warn('[sendInactiveUserNotifications] notificationTemplates 로드 실패, 기본 문구 사용:', templateError?.message || templateError);
+      }
 
       const usersSnapshot = await admin.firestore().collection('users').get();
       console.log('[sendInactiveUserNotifications] users count:', usersSnapshot.size);
