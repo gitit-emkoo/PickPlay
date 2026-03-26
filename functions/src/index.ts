@@ -2,7 +2,6 @@ import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import OpenAI from 'openai';
 import { Expo } from 'expo-server-sdk';
-
 // Firebase Admin 초기화
 admin.initializeApp();
 
@@ -2138,6 +2137,157 @@ export const verifyPhoneCode = functions
         'internal',
         error.message || '인증 처리에 실패했습니다. 다시 시도해주세요.'
       );
+    }
+  });
+
+/**
+ * 애니마코드 공유 페이지 (스냅샷 렌더링용)
+ * - 쿼리 파라미터: snapshotId
+ * - Firestore: animacode_snapshots/{snapshotId} (isPublic=true 문서만)
+ * - 성향/문구는 "저장된 문자열"만 렌더링 (재계산 없음)
+ */
+export const animacodeSharePage = functions
+  .region('asia-northeast3')
+  .https.onRequest(async (req, res) => {
+    try {
+      const snapshotId =
+        (typeof req.query.snapshotId === 'string' ? req.query.snapshotId : null) ||
+        (typeof req.query.id === 'string' ? req.query.id : null);
+
+      if (!snapshotId) {
+        res.status(400).send('snapshotId is required');
+        return;
+      }
+
+      const docSnap = await admin
+        .firestore()
+        .collection('animacode_snapshots')
+        .doc(snapshotId)
+        .get();
+
+      if (!docSnap.exists) {
+        res.status(404).send('not found');
+        return;
+      }
+
+      const data = docSnap.data() || {};
+      if (data.isPublic !== true) {
+        res.status(404).send('not found');
+        return;
+      }
+
+      const escapeHtml = (v: unknown) =>
+        String(v ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+
+      const characterName = escapeHtml(data.characterName);
+      const characterImageBase64 =
+        typeof data.characterImageBase64 === 'string' ? data.characterImageBase64.trim() : '';
+      const adjective1 = escapeHtml(data.adjective1);
+      const adjective2 = escapeHtml(data.adjective2);
+      const previousAdjective1 = escapeHtml(data.previousAdjective1);
+      const previousAdjective2 = escapeHtml(data.previousAdjective2);
+      const dispositionDescription = escapeHtml(data.dispositionDescription);
+
+      const hasDispositionChange =
+        String(data.previousAdjective1 ?? '').trim() !== '' &&
+        String(data.previousAdjective2 ?? '').trim() !== '';
+
+      const meaningTitle = '애니마코드란?';
+      const meaningText = [
+        '애니마코드는',
+        '내 선택으로 완성되는 내면 성향 캐릭터예요.',
+        '매일 나의 선택을 분석해 나만의 캐릭터로 완성돼요.',
+        '고정된 결과가 아니라 선택을 더할수록 선명해지는 나의 기록이에요.',
+      ].map(escapeHtml);
+
+      const dispositionChangeHtml = hasDispositionChange
+        ? `
+          <h2>성향 변화</h2>
+          <div class="card">
+            <div class="row">
+              <div class="disposition-box">
+                <div class="disposition-label">지난 성향</div>
+                <div class="pill">${previousAdjective1} ${previousAdjective2}</div>
+              </div>
+              
+              <div class="disposition-box">
+                <div class="disposition-label current">현재 성향</div>
+                <div class="pill strong">${adjective1} ${adjective2}</div>
+              </div>
+            </div>
+            <div class="foot">캐릭터는 그대로, 성향은 선택에 따라 계속 변화해요!</div>
+          </div>
+        `
+        : '';
+
+      const html = `<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>애니마코드 공유</title>
+    <style>
+      body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; background: #f6f8fc; color: #0f172a; }
+      .wrap { max-width: 720px; margin: 0 auto; padding: 20px; }
+      h1 { font-size: 22px; margin: 0 0 12px; }
+      h2 { font-size: 16px; margin: 18px 0 10px; }
+      .card { background: white; border: 1px solid #e5e7eb; border-radius: 16px; padding: 14px 16px; }
+      .row { display: flex; align-items: center; justify-content: center; gap: 10px; }
+      .disposition-box { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1; }
+      .disposition-label { font-size: 11px; color: #64748b; font-weight: 600; }
+      .disposition-label.current { color: #0060CD; }
+      .pill { background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 14px; font-weight: 700; font-size: 14px; text-align: center; width: 100%; box-sizing: border-box; }
+      .pill.strong { background: #e0f2fe; border-color: #bae6fd; }
+      .arrow { font-weight: 900; color: #334155; font-size: 18px; flex-shrink: 0; }
+      .desc { font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
+      .foot { font-size: 12px; color: #64748b; margin-top: 10px; }
+      .ctaWrap { margin-top: 18px; padding: 12px 0 26px; }
+      .cta { display: block; box-sizing: border-box; width: 100%; text-align: center; text-decoration: none; background: #0060CD; color: white; font-weight: 800; padding: 14px 16px; border-radius: 14px; }
+      .mean { font-size: 14px; line-height: 1.7; white-space: pre-wrap; }
+      .animalImage { width: 78px; height: 78px; object-fit: contain; display: block; margin: 0 auto 10px; }
+      .animalName { font-size: 20px; font-weight: 900; text-align: center; margin-bottom: 6px; }
+      .animalKeyword { font-size: 14px; color: #0f172a; text-align: center; font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>친구가 지금 성향을 공유했어요!</h1>
+
+      <div class="card">
+        ${characterImageBase64 ? `<img class="animalImage" src="data:image/png;base64,${characterImageBase64}" alt="${characterName}"/>` : ''}
+        <div class="animalName">${characterName}</div>
+        <div class="animalKeyword">${adjective1} ${adjective2}</div>
+      </div>
+
+      ${dispositionChangeHtml}
+
+      <h2>요즘 나의 성향</h2>
+      <div class="card">
+        <div class="desc">${dispositionDescription}</div>
+      </div>
+
+      <h2>${escapeHtml(meaningTitle)}</h2>
+      <div class="card">
+        <div class="mean">${meaningText.join('<br/>')}</div>
+      </div>
+
+      <div class="ctaWrap">
+        <a class="cta" href="https://pickplay.waveon.me/">나의 애니마코드 만들기</a>
+      </div>
+    </div>
+  </body>
+</html>`;
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.status(200).send(html);
+    } catch (e: any) {
+      console.error('[animacodeSharePage] 실패:', e?.message || e);
+      res.status(500).send('internal error');
     }
   });
 

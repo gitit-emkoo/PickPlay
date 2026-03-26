@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Share, Clipboard, Alert, Image as RNImage } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import colors from '../../src/styles/colors';
@@ -8,11 +8,15 @@ import { ensureUser } from '../../src/services/store';
 import { UserData } from '../../src/types';
 import CharacterCard from '../components/CharacterCard';
 import { getDispositionDescription } from '../../src/services/animaDispositionDescriptions';
+import firestore from '@react-native-firebase/firestore';
+import * as FileSystem from 'expo-file-system';
+import { Asset } from 'expo-asset';
 
 export default function AnimaCodeScreen() {
   const [user, setUser] = useState<{ uid: string } | null>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isSharing, setIsSharing] = useState(false);
 
   // 사용자 인증 및 데이터 로드
   useEffect(() => {
@@ -37,6 +41,99 @@ export default function AnimaCodeScreen() {
     if (!userData?.adjective1 || !userData?.adjective2) return '';
     return getDispositionDescription(userData.adjective1, userData.adjective2);
   }, [userData?.adjective1, userData?.adjective2]);
+
+  const handleShareAnimaCode = async () => {
+    if (isSharing) return;
+    if (!userData?.characterId || !userData?.adjective1 || !userData?.adjective2) {
+      Alert.alert('공유할 수 없습니다.', '애니마코드 결과(동물/성향)가 아직 생성되지 않았습니다.');
+      return;
+    }
+
+    if (!currentDispositionDescription) {
+      Alert.alert('공유할 수 없습니다.', '성향 설명을 만들 수 없습니다.');
+      return;
+    }
+
+    const SHARE_BASE_URL =
+      'https://asia-northeast3-today-balance-fa0a5.cloudfunctions.net/animacodeSharePage';
+
+    setIsSharing(true);
+    try {
+      const characters = require('../../assets/data/characters_19.json');
+      const character = characters.find((c: any) => c.character_id === userData.characterId);
+      const characterName = character?.name ? String(character.name) : String(userData.characterId);
+
+      const characterImages: Record<string, any> = {
+        fox: require('../../assets/images/fox.png'),
+        lion: require('../../assets/images/lion.png'),
+        owl: require('../../assets/images/owl.png'),
+        dolphin: require('../../assets/images/dolphin.png'),
+        cat: require('../../assets/images/cat.png'),
+        dog: require('../../assets/images/dog.png'),
+        panda: require('../../assets/images/panda.png'),
+        giraffe: require('../../assets/images/giraffe.png'),
+        deer: require('../../assets/images/deer.png'),
+        polar_bear: require('../../assets/images/polar_bear.png'),
+        rabbit: require('../../assets/images/rabbit.png'),
+        horse: require('../../assets/images/horse.png'),
+        otter: require('../../assets/images/otter.png'),
+        leopard: require('../../assets/images/leopard.png'),
+        camel: require('../../assets/images/camel.png'),
+        meerkat: require('../../assets/images/meerkat.png'),
+        sheep: require('../../assets/images/sheep.png'),
+        tiger: require('../../assets/images/tiger.png'),
+      };
+
+      // 이미지 base64는 공유 순간 앱에서만 계산해서 저장합니다.
+      // 웹에서는 재계산하지 않고 snapshot에 저장된 base64만 렌더링합니다.
+      let characterImageBase64 = '';
+      const charKey = String(userData.characterId || '');
+      const imageModule = characterImages[charKey];
+      if (imageModule) {
+        const asset = Asset.fromModule(imageModule);
+        // static require 이미지라도 안전하게 download 호출(이미 로컬이면 빠르게 끝납니다)
+        await asset.downloadAsync();
+        const resolved = RNImage.resolveAssetSource(imageModule as any);
+        const resolvedUri = resolved?.uri;
+        const localUri = asset.localUri || asset.uri || resolvedUri;
+        if (localUri) {
+          const base64 = await FileSystem.readAsStringAsync(localUri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          characterImageBase64 = base64 || '';
+        }
+      }
+
+      // UID 등 민감 데이터는 저장하지 않고, 필요한 결과만 스냅샷으로 저장합니다.
+      const snapRef = firestore().collection('animacode_snapshots').doc();
+      await snapRef.set({
+        isPublic: true,
+        snapshotVersion: 1,
+        createdAt: firestore.FieldValue.serverTimestamp(),
+        characterId: String(userData.characterId),
+        characterName,
+        characterImageBase64,
+        adjective1: String(userData.adjective1),
+        adjective2: String(userData.adjective2),
+        previousAdjective1: userData.previousAdjective1 ? String(userData.previousAdjective1) : '',
+        previousAdjective2: userData.previousAdjective2 ? String(userData.previousAdjective2) : '',
+        dispositionDescription: String(currentDispositionDescription),
+      });
+
+      const snapshotId = snapRef.id;
+      const shareUrl = `${SHARE_BASE_URL}?snapshotId=${encodeURIComponent(snapshotId)}`;
+
+      await Clipboard.setString(shareUrl);
+      await Share.share({ message: shareUrl });
+
+      Alert.alert('공유 링크 생성 완료', '공유 페이지 링크가 복사되었습니다.');
+    } catch (e: any) {
+      console.error('[AnimaCode][Share] 스냅샷 저장/공유 실패:', e?.message || e);
+      Alert.alert('공유에 실패했습니다.', '잠시 후 다시 시도해주세요.');
+    } finally {
+      setIsSharing(false);
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -148,6 +245,22 @@ export default function AnimaCodeScreen() {
                     </View>
                   </View>
                 </>
+              )}
+
+              {/* 공유 버튼: 결과 스냅샷을 저장하고, 공유 페이지 링크를 생성합니다. */}
+              {userData.characterId && userData.adjective1 && userData.adjective2 && (
+                <View style={styles.shareRow}>
+                  <TouchableOpacity
+                    style={[styles.shareButton, isSharing ? { opacity: 0.7 } : null]}
+                    onPress={handleShareAnimaCode}
+                    disabled={isSharing}
+                    activeOpacity={0.9}
+                  >
+                    <Ionicons name="share-social" size={18} color="#fff" />
+                    <Text style={styles.shareButtonText}>{isSharing ? '공유 생성 중...' : '공유하기'}</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.shareSubText}>나를 잘 아는 친구도 이 애니마코드에 공감할까요?</Text>
+                </View>
               )}
             </>
           ) : (
@@ -562,5 +675,31 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 24,
     color: colors.text,
+  },
+  shareRow: {
+    marginTop: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shareButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: colors.primary,
+    borderRadius: 999,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+  },
+  shareButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  shareSubText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#94a3b8',
+    textAlign: 'center',
   },
 });

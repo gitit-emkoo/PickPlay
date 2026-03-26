@@ -101,9 +101,9 @@ service cloud.firestore {
                 // 증가: 최대 1000P
                 (request.resource.data.points >= resource.data.points
                   && request.resource.data.points - resource.data.points <= 1000) ||
-                // 감소: 최대 2000P (라이브픽 질문 생성, 보상 교환 등)
+                // 감소: 최대 10000P (라이브픽 질문 생성, 보상 교환 등)
                 (request.resource.data.points < resource.data.points
-                  && resource.data.points - request.resource.data.points <= 2000
+                  && resource.data.points - request.resource.data.points <= 10000
                   && request.resource.data.points >= 0)
               )) ||
             
@@ -287,6 +287,42 @@ service cloud.firestore {
     match /push_logs/{logId} {
       allow read: if isAdmin(); // 관리자만 읽기 가능
       allow write: if false; // 서버에서만 쓰기 (Cloud Functions/Run)
+    }
+
+    // 애니마코드 공유 스냅샷
+    // - UID 등 민감 정보는 저장/노출하지 않는 구조
+    // - 공유 페이지(웹/브라우저)는 isPublic=true 인 문서만 읽음
+    // - 문서 수정/삭제는 막아서 "공유 시점 스냅샷"을 보장
+    match /animacode_snapshots/{snapshotId} {
+      allow read: if resource.data.isPublic == true;
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'isPublic',
+          'snapshotVersion',
+          'createdAt',
+          'characterId',
+          'characterName',
+          'characterImageBase64',
+          'adjective1',
+          'adjective2',
+          'previousAdjective1',
+          'previousAdjective2',
+          'dispositionDescription'
+        ])
+        && request.resource.data.isPublic == true
+        && request.resource.data.snapshotVersion is number
+        && (request.resource.data.createdAt is timestamp || request.resource.data.createdAt is string)
+        && request.resource.data.characterId is string
+        && request.resource.data.characterName is string
+        && request.resource.data.characterImageBase64 is string
+        && request.resource.data.adjective1 is string
+        && request.resource.data.adjective2 is string
+        && request.resource.data.previousAdjective1 is string
+        && request.resource.data.previousAdjective2 is string
+        && request.resource.data.dispositionDescription is string;
+
+      allow update, delete: if false;
     }
     
     // ============================================
