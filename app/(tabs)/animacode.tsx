@@ -123,7 +123,15 @@ export default function AnimaCodeScreen() {
       const snapshotId = snapRef.id;
       const shareUrl = `${SHARE_BASE_URL}?snapshotId=${encodeURIComponent(snapshotId)}`;
 
-      await Clipboard.setString(shareUrl);
+      // 클립보드 복사는 보조 기능이므로 실패해도 공유 자체는 계속 진행합니다.
+      try {
+        if (Clipboard && typeof Clipboard.setString === 'function') {
+          Clipboard.setString(shareUrl);
+        }
+      } catch (clipboardError) {
+        console.warn('[AnimaCode][Share] 클립보드 복사 실패:', clipboardError);
+      }
+
       await Share.share({ message: shareUrl });
 
       Alert.alert('공유 링크 생성 완료', '공유 페이지 링크가 복사되었습니다.');
@@ -700,6 +708,9 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 14,
     color: '#94a3b8',
+    width: '100%',
+    paddingHorizontal: 16,
+    lineHeight: 20,
     textAlign: 'center',
   },
 });
