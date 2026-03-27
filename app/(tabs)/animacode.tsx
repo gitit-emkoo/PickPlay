@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Share, Clipboard, Alert, Image as RNImage } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Share, Clipboard, Alert, Image as RNImage, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import colors from '../../src/styles/colors';
@@ -17,6 +17,15 @@ export default function AnimaCodeScreen() {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSharing, setIsSharing] = useState(false);
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const [showDebugModal, setShowDebugModal] = useState(false);
+
+  const addDebugLog = useCallback((message: string, data?: unknown) => {
+    const stamp = new Date().toLocaleTimeString('ko-KR', { hour12: false });
+    const payload = data !== undefined ? ` ${JSON.stringify(data)}` : '';
+    const line = `[${stamp}] ${message}${payload}`;
+    setDebugLogs((prev) => [...prev.slice(-149), line]);
+  }, []);
 
   // 사용자 인증 및 데이터 로드
   useEffect(() => {
@@ -48,13 +57,16 @@ export default function AnimaCodeScreen() {
   }, [userData?.adjective1, userData?.adjective2]);
 
   const handleShareAnimaCode = async () => {
+    addDebugLog('[Share] 시작');
     if (isSharing) return;
     if (!userData?.characterId || !userData?.adjective1 || !userData?.adjective2) {
+      addDebugLog('[Share] 중단 - 결과 없음');
       Alert.alert('공유할 수 없습니다.', '애니마코드 결과(동물/성향)가 아직 생성되지 않았습니다.');
       return;
     }
 
     if (!currentDispositionDescription) {
+      addDebugLog('[Share] 중단 - 설명 없음');
       Alert.alert('공유할 수 없습니다.', '성향 설명을 만들 수 없습니다.');
       return;
     }
@@ -64,6 +76,7 @@ export default function AnimaCodeScreen() {
 
     setIsSharing(true);
     try {
+      addDebugLog('[Share] 캐릭터/이미지 매핑 준비');
       const characters = require('../../assets/data/characters_19.json');
       const character = characters.find((c: any) => c.character_id === userData.characterId);
       const characterName = character?.name ? String(character.name) : String(userData.characterId);
@@ -95,6 +108,7 @@ export default function AnimaCodeScreen() {
       const charKey = String(userData.characterId || '');
       const imageModule = characterImages[charKey];
       if (imageModule) {
+        addDebugLog('[Share] 이미지 asset 다운로드 시작', { charKey });
         const asset = Asset.fromModule(imageModule);
         // static require 이미지라도 안전하게 download 호출(이미 로컬이면 빠르게 끝납니다)
         await asset.downloadAsync();
@@ -106,11 +120,18 @@ export default function AnimaCodeScreen() {
             encoding: FileSystem.EncodingType.Base64,
           });
           characterImageBase64 = base64 || '';
+          addDebugLog('[Share] 이미지 base64 변환 완료', {
+            charKey,
+            length: characterImageBase64.length,
+          });
+        } else {
+          addDebugLog('[Share] 이미지 URI 없음', { charKey });
         }
       }
 
       // UID 등 민감 데이터는 저장하지 않고, 필요한 결과만 스냅샷으로 저장합니다.
       const snapRef = firestore().collection('animacode_snapshots').doc();
+      addDebugLog('[Share] Firestore 저장 시작', { snapshotId: snapRef.id });
       await snapRef.set({
         isPublic: true,
         snapshotVersion: 1,
@@ -125,24 +146,35 @@ export default function AnimaCodeScreen() {
         dispositionDescription: String(currentDispositionDescription),
         dispositionNumber: String(currentDispositionNumber || ''),
       });
+      addDebugLog('[Share] Firestore 저장 완료', { snapshotId: snapRef.id });
 
       const snapshotId = snapRef.id;
       const shareUrl = `${SHARE_BASE_URL}?snapshotId=${encodeURIComponent(snapshotId)}`;
+      addDebugLog('[Share] 공유 URL 생성', { shareUrl });
 
       // 클립보드 복사는 보조 기능이므로 실패해도 공유 자체는 계속 진행합니다.
       try {
         if (Clipboard && typeof Clipboard.setString === 'function') {
           Clipboard.setString(shareUrl);
+          addDebugLog('[Share] 클립보드 복사 성공');
         }
       } catch (clipboardError) {
         console.warn('[AnimaCode][Share] 클립보드 복사 실패:', clipboardError);
+        addDebugLog('[Share] 클립보드 복사 실패', clipboardError);
       }
 
+      addDebugLog('[Share] OS 공유 호출 시작');
       await Share.share({ message: shareUrl });
+      addDebugLog('[Share] OS 공유 호출 완료');
 
       Alert.alert('공유 링크 생성 완료', '공유 페이지 링크가 복사되었습니다.');
     } catch (e: any) {
       console.error('[AnimaCode][Share] 스냅샷 저장/공유 실패:', e?.message || e);
+      addDebugLog('[Share] 실패', {
+        message: e?.message || String(e),
+        code: e?.code,
+        name: e?.name,
+      });
       Alert.alert('공유에 실패했습니다.', '잠시 후 다시 시도해주세요.');
     } finally {
       setIsSharing(false);
@@ -274,6 +306,13 @@ export default function AnimaCodeScreen() {
                     <Text style={styles.shareButtonText}>{isSharing ? '공유 생성 중...' : '공유하기'}</Text>
                   </TouchableOpacity>
                   <Text style={styles.shareSubText}>나를 잘 아는 친구도 이 애니마코드에 공감할까요?</Text>
+                  <TouchableOpacity
+                    style={styles.debugButton}
+                    onPress={() => setShowDebugModal(true)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.debugButtonText}>디버깅 로그 보기</Text>
+                  </TouchableOpacity>
                 </View>
               )}
             </>
@@ -438,6 +477,64 @@ export default function AnimaCodeScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={showDebugModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDebugModal(false)}
+      >
+        <View style={styles.debugModalBackdrop}>
+          <View style={styles.debugModalCard}>
+            <Text style={styles.debugModalTitle}>애니마코드 공유 디버그 로그</Text>
+            <ScrollView style={styles.debugLogBox}>
+              <Text style={styles.debugLogText}>
+                {debugLogs.length > 0
+                  ? debugLogs.join('\n')
+                  : '아직 로그가 없습니다. 공유하기를 먼저 시도해 주세요.'}
+              </Text>
+            </ScrollView>
+            <View style={styles.debugModalActions}>
+              <TouchableOpacity
+                style={styles.debugActionBtn}
+                onPress={() => {
+                  const text =
+                    debugLogs.length > 0
+                      ? debugLogs.join('\n')
+                      : '아직 로그가 없습니다. 공유하기를 먼저 시도해 주세요.';
+                  try {
+                    if (Clipboard && typeof Clipboard.setString === 'function') {
+                      Clipboard.setString(text);
+                      Alert.alert('복사 완료', '디버깅 로그를 클립보드에 복사했습니다.');
+                    } else {
+                      Alert.alert('복사 실패', '클립보드 기능을 사용할 수 없습니다.');
+                    }
+                  } catch (e) {
+                    Alert.alert('복사 실패', '로그 복사 중 오류가 발생했습니다.');
+                  }
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.debugActionText}>로그 복사</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.debugActionBtn}
+                onPress={() => setDebugLogs([])}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.debugActionText}>로그 지우기</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.debugActionBtn, styles.debugActionBtnPrimary]}
+                onPress={() => setShowDebugModal(false)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.debugActionText, styles.debugActionTextPrimary]}>닫기</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -718,5 +815,75 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     lineHeight: 20,
     textAlign: 'center',
+  },
+  debugButton: {
+    marginTop: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#f8fafc',
+  },
+  debugButtonText: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '700',
+  },
+  debugModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(2,6,23,0.45)',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  debugModalCard: {
+    maxHeight: '78%',
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  debugModalTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.text,
+    marginBottom: 10,
+  },
+  debugLogBox: {
+    maxHeight: 360,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#0f172a',
+    borderRadius: 10,
+    padding: 10,
+  },
+  debugLogText: {
+    color: '#cbd5e1',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  debugModalActions: {
+    marginTop: 12,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  debugActionBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#e2e8f0',
+  },
+  debugActionBtnPrimary: {
+    backgroundColor: colors.primary,
+  },
+  debugActionText: {
+    fontSize: 12,
+    color: '#334155',
+    fontWeight: '700',
+  },
+  debugActionTextPrimary: {
+    color: '#fff',
   },
 });
