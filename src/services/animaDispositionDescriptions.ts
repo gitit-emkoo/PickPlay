@@ -1,12 +1,13 @@
 /**
  * 애니마코드 성향 조합 설명 (assets/data/Description_changedisposition.json)
- * 키: 형용사1_형용사2 — 값: { tag1, tag2, description }
+ * 키: 형용사1_형용사2 — 값: { number, tag1, tag2, description }
  */
 
 export const DISPOSITION_DESCRIPTION_FALLBACK =
   '성향 조합 설명을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.';
 
 type DispositionEntry = {
+  number?: string;
   tag1: string;
   tag2: string;
   description: string;
@@ -59,4 +60,20 @@ export function getDispositionDescription(
     return DISPOSITION_DESCRIPTION_FALLBACK;
   }
   return desc;
+}
+
+/**
+ * 현재 형용사1+형용사2 조합에 해당하는 애니마코드 번호(예: AC-01-01).
+ * 키 없거나 빈 값이면 빈 문자열 반환.
+ */
+export function getDispositionNumber(
+  tag1: string | null | undefined,
+  tag2: string | null | undefined
+): string {
+  if (!tag1?.trim() || !tag2?.trim()) return '';
+  const key = `${tag1}_${tag2}`;
+  const map = loadDispositionMap();
+  const raw = (map[key] as DispositionEntry | undefined)?.number;
+  const n = typeof raw === 'string' ? raw.trim() : '';
+  return n;
 }

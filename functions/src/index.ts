@@ -2189,6 +2189,8 @@ export const animacodeSharePage = functions
         typeof data.characterImageBase64 === 'string' ? data.characterImageBase64.trim() : '';
       const adjective1 = escapeHtml(data.adjective1);
       const adjective2 = escapeHtml(data.adjective2);
+      const dispositionNumber =
+        typeof data.dispositionNumber === 'string' ? escapeHtml(data.dispositionNumber.trim()) : '';
       const previousAdjective1 = escapeHtml(data.previousAdjective1);
       const previousAdjective2 = escapeHtml(data.previousAdjective2);
       const dispositionDescription = escapeHtml(data.dispositionDescription);
@@ -2252,6 +2254,7 @@ export const animacodeSharePage = functions
       .animalImage { width: 78px; height: 78px; object-fit: contain; display: block; margin: 0 auto 10px; }
       .animalName { font-size: 20px; font-weight: 900; text-align: center; margin-bottom: 6px; }
       .animalKeyword { font-size: 14px; color: #0f172a; text-align: center; font-weight: 700; }
+      .animalCode { margin-top: 6px; font-size: 12px; color: #0060CD; text-align: center; font-weight: 700; letter-spacing: 0.3px; }
     </style>
   </head>
   <body>
@@ -2262,6 +2265,7 @@ export const animacodeSharePage = functions
         ${characterImageBase64 ? `<img class="animalImage" src="data:image/png;base64,${characterImageBase64}" alt="${characterName}"/>` : ''}
         <div class="animalName">${characterName}</div>
         <div class="animalKeyword">${adjective1} ${adjective2}</div>
+        ${dispositionNumber ? `<div class="animalCode">${dispositionNumber}</div>` : ''}
       </div>
 
       ${dispositionChangeHtml}

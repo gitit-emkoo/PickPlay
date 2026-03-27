@@ -5,4 +5,5 @@ export const TEST_UIDS: readonly string[] = [
   'vUlyeAhYmneB5Ii6oPNR8OFCQZg1',
   'C1iSsR85GoTnvVRSY2nIn9y6ZFz1',
   'GqQB6OzKqqRSJy4ZBXX1auOuEcy2',
+  '5vDZp927tfceEzI5frWhTBFWiSD3',
 ];

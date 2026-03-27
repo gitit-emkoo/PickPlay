@@ -308,7 +308,8 @@ service cloud.firestore {
           'adjective2',
           'previousAdjective1',
           'previousAdjective2',
-          'dispositionDescription'
+          'dispositionDescription',
+          'dispositionNumber'
         ])
         && request.resource.data.isPublic == true
         && request.resource.data.snapshotVersion is number
@@ -320,7 +321,8 @@ service cloud.firestore {
         && request.resource.data.adjective2 is string
         && request.resource.data.previousAdjective1 is string
         && request.resource.data.previousAdjective2 is string
-        && request.resource.data.dispositionDescription is string;
+        && request.resource.data.dispositionDescription is string
+        && request.resource.data.dispositionNumber is string;
 
       allow update, delete: if false;
     }

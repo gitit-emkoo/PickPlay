@@ -7,7 +7,7 @@ import { watchAuth } from '../../src/services/firebase';
 import { ensureUser } from '../../src/services/store';
 import { UserData } from '../../src/types';
 import CharacterCard from '../components/CharacterCard';
-import { getDispositionDescription } from '../../src/services/animaDispositionDescriptions';
+import { getDispositionDescription, getDispositionNumber } from '../../src/services/animaDispositionDescriptions';
 import firestore from '@react-native-firebase/firestore';
 import * as FileSystem from 'expo-file-system';
 import { Asset } from 'expo-asset';
@@ -40,6 +40,11 @@ export default function AnimaCodeScreen() {
   const currentDispositionDescription = useMemo(() => {
     if (!userData?.adjective1 || !userData?.adjective2) return '';
     return getDispositionDescription(userData.adjective1, userData.adjective2);
+  }, [userData?.adjective1, userData?.adjective2]);
+
+  const currentDispositionNumber = useMemo(() => {
+    if (!userData?.adjective1 || !userData?.adjective2) return '';
+    return getDispositionNumber(userData.adjective1, userData.adjective2);
   }, [userData?.adjective1, userData?.adjective2]);
 
   const handleShareAnimaCode = async () => {
@@ -118,6 +123,7 @@ export default function AnimaCodeScreen() {
         previousAdjective1: userData.previousAdjective1 ? String(userData.previousAdjective1) : '',
         previousAdjective2: userData.previousAdjective2 ? String(userData.previousAdjective2) : '',
         dispositionDescription: String(currentDispositionDescription),
+        dispositionNumber: String(currentDispositionNumber || ''),
       });
 
       const snapshotId = snapRef.id;
