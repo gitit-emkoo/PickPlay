@@ -1,5 +1,18 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Share, Clipboard, Alert, Image as RNImage, Modal } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  ActivityIndicator,
+  TouchableOpacity,
+  Share,
+  Clipboard,
+  Alert,
+  Image as RNImage,
+  Modal,
+  Platform,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import colors from '../../src/styles/colors';
@@ -11,8 +24,9 @@ import { getDispositionDescription, getDispositionNumber } from '../../src/servi
 import firestore from '@react-native-firebase/firestore';
 import * as FileSystem from 'expo-file-system';
 import { Asset } from 'expo-asset';
+import { downloadAsync as downloadBundledAssetToCache } from 'expo-asset/build/ExpoAsset';
 
-/** Android 릴리즈에서 localUri가 스킴 없는 내부 문자열(예: assets_images_sheep)로 잡히는 경우가 있어, FileSystem이 읽을 수 있는 URI만 사용합니다. */
+/** expo-file-system readAsStringAsync가 읽을 수 있는 URI(스킴 포함) */
 function isExpoFileSystemReadableUri(uri: string): boolean {
   return (
     uri.startsWith('file://') ||
@@ -22,6 +36,11 @@ function isExpoFileSystemReadableUri(uri: string): boolean {
   );
 }
 
+/**
+ * Android에서 번들 이미지 URI가 `assets_images_panda`처럼 콜론 없는 drawable 이름이면,
+ * expo-asset의 Asset은 Image 호환을 위해 downloaded=true로 두고 실제 파일 복사를 생략함(expo-asset Asset.js).
+ * 공유용 base64는 파일 경로가 필요하므로 ExpoAsset.downloadAsync로 캐시에 복사한 뒤 읽는다.
+ */
 async function readBundledCharacterImageAsBase64(
   imageModule: any,
   charKey: string,
@@ -33,7 +52,20 @@ async function readBundledCharacterImageAsBase64(
   const candidates = [asset.localUri, asset.uri, resolved?.uri].filter(
     (u): u is string => typeof u === 'string' && u.length > 0
   );
-  const uri = candidates.find(isExpoFileSystemReadableUri);
+  let uri = candidates.find(isExpoFileSystemReadableUri);
+
+  if (!uri && Platform.OS === 'android') {
+    const rawUri = asset.uri || candidates[0];
+    if (rawUri && !rawUri.includes(':')) {
+      try {
+        uri = await downloadBundledAssetToCache(rawUri, asset.hash, asset.type);
+      } catch (e) {
+        log('[Share] Android drawable → 캐시 복사 실패', { charKey, error: e });
+        return '';
+      }
+    }
+  }
+
   if (!uri) {
     log('[Share] 이미지 URI 없음(읽기 가능한 스킴 없음)', { charKey, candidates });
     return '';

@@ -28,8 +28,8 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.pickplay.kwcc',
-      // App Store: 마케팅 버전은 app.json/version 과 동일. 빌드 125 (autoIncrement 끔)
-      buildNumber: '125',
+      // App Store: 마케팅 버전은 app.json/version 과 동일. 빌드 126 (autoIncrement 끔)
+      buildNumber: '126',
       googleServicesFile: './GoogleService-Info.plist',
       infoPlist: {
         GADApplicationIdentifier: 'ca-app-pub-2555567440328829~5483134579',
@@ -39,7 +39,7 @@ module.exports = {
     },
     android: {
       package: 'com.pickplay.kwcc',
-      versionCode: 125,
+      versionCode: 126,
       googleServicesFile: './google-services.json',
       adaptiveIcon: {
         foregroundImage: './assets/images/adaptive-icon.png',
