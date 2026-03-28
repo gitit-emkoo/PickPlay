@@ -12,6 +12,51 @@ import firestore from '@react-native-firebase/firestore';
 import * as FileSystem from 'expo-file-system';
 import { Asset } from 'expo-asset';
 
+/** Android 릴리즈에서 localUri가 스킴 없는 내부 문자열(예: assets_images_sheep)로 잡히는 경우가 있어, FileSystem이 읽을 수 있는 URI만 사용합니다. */
+function isExpoFileSystemReadableUri(uri: string): boolean {
+  return (
+    uri.startsWith('file://') ||
+    uri.startsWith('content://') ||
+    uri.startsWith('http://') ||
+    uri.startsWith('https://')
+  );
+}
+
+async function readBundledCharacterImageAsBase64(
+  imageModule: any,
+  charKey: string,
+  log: (message: string, data?: unknown) => void
+): Promise<string> {
+  const asset = Asset.fromModule(imageModule);
+  await asset.downloadAsync();
+  const resolved = RNImage.resolveAssetSource(imageModule);
+  const candidates = [asset.localUri, asset.uri, resolved?.uri].filter(
+    (u): u is string => typeof u === 'string' && u.length > 0
+  );
+  const uri = candidates.find(isExpoFileSystemReadableUri);
+  if (!uri) {
+    log('[Share] 이미지 URI 없음(읽기 가능한 스킴 없음)', { charKey, candidates });
+    return '';
+  }
+  try {
+    if (uri.startsWith('http://') || uri.startsWith('https://')) {
+      const dest = `${FileSystem.cacheDirectory ?? ''}animacode-share-${charKey}.png`;
+      const result = await FileSystem.downloadAsync(uri, dest);
+      const out = await FileSystem.readAsStringAsync(result.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      return out || '';
+    }
+    const out = await FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    return out || '';
+  } catch (e) {
+    log('[Share] 이미지 base64 읽기 실패', { charKey, uri, error: e });
+    return '';
+  }
+}
+
 export default function AnimaCodeScreen() {
   const [user, setUser] = useState<{ uid: string } | null>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
@@ -109,23 +154,16 @@ export default function AnimaCodeScreen() {
       const imageModule = characterImages[charKey];
       if (imageModule) {
         addDebugLog('[Share] 이미지 asset 다운로드 시작', { charKey });
-        const asset = Asset.fromModule(imageModule);
-        // static require 이미지라도 안전하게 download 호출(이미 로컬이면 빠르게 끝납니다)
-        await asset.downloadAsync();
-        const resolved = RNImage.resolveAssetSource(imageModule as any);
-        const resolvedUri = resolved?.uri;
-        const localUri = asset.localUri || asset.uri || resolvedUri;
-        if (localUri) {
-          const base64 = await FileSystem.readAsStringAsync(localUri, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
-          characterImageBase64 = base64 || '';
+        characterImageBase64 = await readBundledCharacterImageAsBase64(
+          imageModule,
+          charKey,
+          addDebugLog
+        );
+        if (characterImageBase64) {
           addDebugLog('[Share] 이미지 base64 변환 완료', {
             charKey,
             length: characterImageBase64.length,
           });
-        } else {
-          addDebugLog('[Share] 이미지 URI 없음', { charKey });
         }
       }
 
