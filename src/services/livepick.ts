@@ -1,7 +1,7 @@
 import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import { LivePickQuestion, LivePickParticipation, LivePickReward, LivePickReport } from '../types/livepick';
-import { currentWeekKeyKST } from '../utils/date';
+import { currentWeekKeyKST, getCurrentWeekMondayStartKST } from '../utils/date';
 import { ensureUser } from './store';
 import { ensureAnonymousAuth } from './firebase';
 import { recordPointHistory } from './pointHistory';
@@ -434,6 +434,46 @@ export async function getLivePickQuestions(
     console.error('❌ 에러 코드:', error?.code);
     console.error('❌ 에러 스택:', error?.stack);
     console.error('❌ 에러 전체:', JSON.stringify(error, null, 2));
+    throw error;
+  }
+}
+
+/**
+ * 지난 라이브픽 전용: 이번 주 KST 월요일 00:00 **이전**에 생성된 질문만 대상으로 `createdAt` 내림차순 최대 limit건.
+ * (전역 최신 N건을 가져온 뒤 weekKey로 거르는 방식이 아니라, 시각 기준으로 “이번 주 글”을 제외한다.)
+ */
+export async function getArchivedLivePickQuestions(
+  limit: number = 100,
+  startAfterDate?: Date
+): Promise<LivePickQuestion[]> {
+  try {
+    const thisWeekMondayStart = getCurrentWeekMondayStartKST();
+
+    let query: FirebaseFirestoreTypes.Query = firestore()
+      .collection(COLLECTIONS.QUESTIONS)
+      .where('createdAt', '<', thisWeekMondayStart)
+      .orderBy('createdAt', 'desc')
+      .limit(limit);
+
+    if (startAfterDate) {
+      query = query.startAfter(startAfterDate);
+    }
+
+    const snapshot = await query.get({ source: 'server' });
+
+    const questions: LivePickQuestion[] = [];
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      questions.push({
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt as any),
+      } as LivePickQuestion);
+    });
+
+    return questions;
+  } catch (error: any) {
+    console.error('❌ [LivePick] 지난 라이브픽 질문 조회 실패:', error);
     throw error;
   }
 }

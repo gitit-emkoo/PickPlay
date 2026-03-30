@@ -38,3 +38,12 @@ export const currentWeekKeyKST = (): string => {
   const now = new Date();
   return getKoreanWeekKeyFromDate(now);
 };
+
+/**
+ * 이번 라이브픽 주의 시작 시각(KST): 해당 주 월요일 00:00:00.
+ * `createdAt < 이 시각`이면 “저번 주 일요일 23:59까지”와 동일한 경계로, 지난 주·그 이전 질문만 골라낼 수 있다.
+ */
+export function getCurrentWeekMondayStartKST(): Date {
+  const weekKey = currentWeekKeyKST();
+  return new Date(`${weekKey}T00:00:00+09:00`);
+}

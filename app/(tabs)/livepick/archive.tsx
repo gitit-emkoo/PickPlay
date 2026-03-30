@@ -4,12 +4,25 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../../../src/styles/colors';
 import { LivePickQuestion } from '../../../src/types/livepick';
-import { getLivePickQuestions, getWeeklyWinner, getWeeklyWinners } from '../../../src/services/livepick';
+import { getArchivedLivePickQuestions, getWeeklyWinner, getWeeklyWinners } from '../../../src/services/livepick';
 import { currentWeekKeyKST, getKoreanWeekKeyFromDate } from '../../../src/utils/date';
+
 
 const CATEGORIES: Array<'일상' | '연애' | '가치관' | '엔터테인먼트' | '상상'> = ['일상', '연애', '가치관', '엔터테인먼트', '상상'];
 
-const PAGE_SIZE = 50;
+function toCreatedAtDate(value: unknown): Date {
+  if (value instanceof Date) return value;
+  if (value && typeof (value as { toDate?: () => Date }).toDate === 'function') {
+    return (value as { toDate: () => Date }).toDate();
+  }
+  return new Date(value as string | number);
+}
+
+/**
+ * 지난 라이브픽: 서버에서 `createdAt < 이번 주 KST 월요일 00:00` 인 질문만 대상으로 최신순 최대 N건(= 저번 주 일요일 23:59 이전과 동일 경계).
+ * 인기순은 같은 목록을 `participantCount`로만 재정렬(추가 읽기 없음).
+ */
+const ARCHIVE_BATCH_SIZE = 100;
 
 /** 지난 주 TOP이 없을 때(아직 한 주가 안 지났거나 해당 주 질문 없음) 보여줄 더미 카드용 데이터. 다음 주부터 실제 TOP으로 교체됨. */
 const DUMMY_WEEKLY_TOP: Pick<LivePickQuestion, 'title' | 'participantCount' | 'category'> = {
@@ -31,6 +44,10 @@ export default function LivePickArchiveScreen() {
   const searchModalAnim = useRef(new Animated.Value(0)).current;
   const [weeklyWinner, setWeeklyWinner] = useState<LivePickQuestion | null>(null);
   const [weeklyWinnerLoading, setWeeklyWinnerLoading] = useState(false);
+  /** 최신순 페이지네이션: 다음 페이지는 이 createdAt보다 더 오래된 문서부터 */
+  const latestCursorRef = useRef<Date | null>(null);
+  const [hasMoreArchive, setHasMoreArchive] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   // 지난 주 weekKey 계산 (KST 기준)
   const [lastWeekKey] = useState<string>(() => {
@@ -39,15 +56,25 @@ export default function LivePickArchiveScreen() {
     return getKoreanWeekKeyFromDate(lastWeek);
   });
 
+  const dedupeAppend = (prev: LivePickQuestion[], next: LivePickQuestion[]) => {
+    const ids = new Set(prev.map((q) => q.id));
+    return [...prev, ...next.filter((q) => !ids.has(q.id))];
+  };
+
+  /** 초기 로드·당겨서 새로고침 (정렬 전환 시에는 재요청하지 않음) */
   const loadArchivedQuestions = async (isRefresh: boolean = false) => {
     try {
       if (!isRefresh) {
         setLoading(true);
       }
-      const all = await getLivePickQuestions(PAGE_SIZE, undefined, sortBy);
-      const currentWeekKey = currentWeekKeyKST();
-      const archived = all.filter(q => q.weekKey !== currentWeekKey);
-      setQuestions(archived);
+      latestCursorRef.current = null;
+
+      const batch = await getArchivedLivePickQuestions(ARCHIVE_BATCH_SIZE, undefined);
+      setHasMoreArchive(batch.length === ARCHIVE_BATCH_SIZE);
+      if (batch.length > 0) {
+        latestCursorRef.current = toCreatedAtDate(batch[batch.length - 1].createdAt);
+      }
+      setQuestions(batch);
     } catch (error) {
       console.error('[LivePickArchive] 지난 질문 로드 실패:', error);
     } finally {
@@ -58,9 +85,28 @@ export default function LivePickArchiveScreen() {
     }
   };
 
+  /** 이전 시점(더 오래된) 질문 추가 로드 — 정렬과 무관하게 동일 데이터 소스 */
+  const loadMoreArchived = async () => {
+    if (loadingMore || !hasMoreArchive) return;
+    setLoadingMore(true);
+    try {
+      const after = latestCursorRef.current ?? undefined;
+      const batch = await getArchivedLivePickQuestions(ARCHIVE_BATCH_SIZE, after);
+      setHasMoreArchive(batch.length === ARCHIVE_BATCH_SIZE);
+      if (batch.length > 0) {
+        latestCursorRef.current = toCreatedAtDate(batch[batch.length - 1].createdAt);
+      }
+      setQuestions((prev) => dedupeAppend(prev, batch));
+    } catch (error) {
+      console.error('[LivePickArchive] 지난 질문 추가 로드 실패:', error);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   useEffect(() => {
     loadArchivedQuestions(false);
-  }, [sortBy]);
+  }, []);
 
   const loadWeeklyWinner = useCallback(async () => {
     try {
@@ -432,9 +478,42 @@ export default function LivePickArchiveScreen() {
             <Text style={styles.emptySubtext}>
               이번 주 라이브픽 질문이 종료되면 이곳에서 확인하실 수 있어요.
             </Text>
+            {hasMoreArchive && (
+              <TouchableOpacity
+                style={styles.loadMoreButton}
+                activeOpacity={0.7}
+                onPress={loadMoreArchived}
+                disabled={loadingMore}
+              >
+                {loadingMore ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Text style={styles.loadMoreText}>이전 질문 더보기</Text>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
         ) : (
-          filteredQuestions.map(renderCard)
+          <View>
+            {filteredQuestions.map(renderCard)}
+            {hasMoreArchive && (
+              <TouchableOpacity
+                style={styles.loadMoreButton}
+                activeOpacity={0.7}
+                onPress={loadMoreArchived}
+                disabled={loadingMore}
+              >
+                {loadingMore ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <>
+                    <Text style={styles.loadMoreText}>이전 질문 더보기</Text>
+                    <Ionicons name="chevron-down" size={16} color={colors.textSecondary} style={{ marginLeft: 4 }} />
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
         )}
       </ScrollView>
 
@@ -863,6 +942,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  loadMoreButton: {
+    marginTop: 16,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+  },
+  loadMoreText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontWeight: '600',
   },
   searchModalOverlay: {
     flex: 1,
