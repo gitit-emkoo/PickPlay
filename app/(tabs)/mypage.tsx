@@ -641,7 +641,8 @@ export default function MyPageScreen() {
                       'etc': '기타',
                     };
                     const reasonText = reasonMap[item.reason] || item.reason;
-                    const displayText = item.description || reasonText;
+                    const rawText = item.description || reasonText;
+                    const displayText = rawText.replace('(광고 미시청)', '(영상 미시청)');
                     
                     return (
                     <View key={item.id} style={styles.historyRow}>

@@ -7,7 +7,7 @@ interface ParticipateModalProps {
   visible: boolean;
   selectedOption: string; // 선택한 선택지 텍스트
   onReceive: () => void; // 5P 받기 선택
-  onWatchAd: () => void; // 광고 시청 후 게임 참여 선택
+  onWatchAd: () => void; // 영상 시청 후 게임 참여 선택
   onClose?: () => void; // 모달 닫기 (선택사항)
   todayParticipationCount?: number; // 오늘 참여 횟수 (선택사항)
 }
@@ -63,7 +63,7 @@ export default function ParticipateModal({
               </View>
             </TouchableOpacity>
 
-            {/* 광고 시청 후 게임 버튼 */}
+            {/* 영상 시청 후 게임 버튼 */}
             <TouchableOpacity
               style={[styles.button, styles.gameButton]}
               onPress={() => {
@@ -74,7 +74,7 @@ export default function ParticipateModal({
             >
               <Ionicons name="gift" size={24} color="white" />
               <View style={styles.buttonTextContainer}>
-                <Text style={styles.buttonText}>광고 후 사다리 게임 도전</Text>
+                <Text style={styles.buttonText}>영상 시청 후 사다리 게임 도전</Text>
                 <Text style={styles.buttonSubtext}>최소 10P ~ 최대 300P 획득 가능</Text>
               </View>
             </TouchableOpacity>

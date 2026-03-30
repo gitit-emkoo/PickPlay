@@ -218,7 +218,7 @@ service cloud.firestore {
         && request.resource.data.uid == getUid()
         && request.resource.data.question_id == getQuestionId()
         // 3. 데이터 스키마와 타입이 정확한가?
-        //    rewarded 필드를 신규로 허용 (광고 시청 후 보상 완료 플래그)
+        //    rewarded 필드를 신규로 허용 (영상 시청 후 보상 완료 플래그)
         && request.resource.data.keys().hasOnly(['uid', 'question_id', 'selected_option_index', 'selected_option_text', 'tags', 'answeredAt', 'rewarded'])
         && request.resource.data.uid is string
         && request.resource.data.question_id is string

@@ -123,7 +123,8 @@ export default function PointHistoryScreen() {
             history.length > 0 &&
             history.slice(0, visibleCount).map((item) => {
               const reasonText = reasonMap[item.reason] || item.reason;
-              const displayText = item.description || reasonText;
+              const rawText = item.description || reasonText;
+              const displayText = rawText.replace('(광고 미시청)', '(영상 미시청)');
               return (
                 <View key={item.id} style={styles.row}>
                   <View style={styles.rowLeft}>

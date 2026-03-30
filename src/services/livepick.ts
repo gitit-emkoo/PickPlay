@@ -647,7 +647,7 @@ export async function receiveBasicReward(uid: string, questionId: string): Promi
 
     // 포인트 내역 기록
     try {
-      await recordPointHistory(uid, 5, 'basic_reward', '라이브픽 기본 보상 (광고 미시청)');
+      await recordPointHistory(uid, 5, 'basic_reward', '라이브픽 기본 보상 (영상 미시청)');
     } catch (e) {
       console.warn('[LivePick] 포인트 내역 기록 실패(무시 가능):', (e as any)?.message || e);
     }

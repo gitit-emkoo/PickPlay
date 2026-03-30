@@ -185,7 +185,17 @@ export default function LivePickArchiveScreen() {
       {/* 헤더 */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>지난 라이브픽</Text>
+          <TouchableOpacity
+            style={styles.headerBackButton}
+            activeOpacity={0.7}
+            onPress={() => router.replace('/(tabs)/livepick')}
+            hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+          >
+            <Ionicons name="chevron-back" size={26} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            지난 라이브픽
+          </Text>
         </View>
         <View style={styles.headerActions}>
           {/* 검색 버튼 */}
@@ -197,31 +207,28 @@ export default function LivePickArchiveScreen() {
             <Ionicons name="search" size={20} color={colors.primary} />
           </TouchableOpacity>
 
-          {/* 정렬 버튼 */}
-          <View style={{ position: 'relative', zIndex: 10000 }}>
-          <TouchableOpacity
-            style={styles.sortButton}
-            activeOpacity={0.7}
-            onPress={() => setShowSortDropdown(!showSortDropdown)}
-          >
-            <Ionicons name="menu" size={20} color={colors.primary} />
-          </TouchableOpacity>
-
-          {/* 드롭다운은 화면 전체 오버레이로 별도 렌더링 */}
+          {/* 정렬: 최신순/인기순 드롭다운 트리거 */}
+          <View style={styles.archiveSortWrap}>
+            <TouchableOpacity
+              style={styles.archivePillButton}
+              activeOpacity={0.4}
+              onPress={() => setShowSortDropdown(!showSortDropdown)}
+            >
+              <Text style={styles.archivePillText}>
+                {sortBy === 'latest' ? '최신순' : '인기순'}
+              </Text>
+              <Ionicons
+                name="chevron-down"
+                size={16}
+                color={colors.primary}
+                style={{ marginLeft: 6 }}
+              />
+            </TouchableOpacity>
           </View>
-
-          {/* 닫기 버튼 */}
-          <TouchableOpacity
-            style={styles.closeButton}
-            activeOpacity={0.7}
-            onPress={() => router.push('/(tabs)/livepick')}
-          >
-            <Ionicons name="close" size={22} color={colors.text} />
-          </TouchableOpacity>
         </View>
       </View>
 
-      {/* 카테고리 필터: 상단 고정 */}
+      {/* 카테고리: 텍스트 탭 + 하단 디비전, 활성 = 파란 글씨 + 굵은 밑줄 */}
       <View style={styles.categoryFilter}>
         <ScrollView
           horizontal
@@ -229,43 +236,50 @@ export default function LivePickArchiveScreen() {
           contentContainerStyle={styles.categoryFilterContent}
         >
           <TouchableOpacity
-            style={[
-              styles.categoryButton,
-              selectedCategory === '전체' && styles.categoryButtonActive,
-            ]}
+            style={styles.categoryTab}
             onPress={() => setSelectedCategory('전체')}
             activeOpacity={0.7}
           >
             <Text
               style={[
-                styles.categoryButtonText,
-                selectedCategory === '전체' && styles.categoryButtonTextActive,
+                styles.categoryTabLabel,
+                selectedCategory === '전체' && styles.categoryTabLabelActive,
               ]}
             >
               전체
             </Text>
+            <View
+              style={[
+                styles.categoryTabUnderline,
+                selectedCategory === '전체' && styles.categoryTabUnderlineActive,
+              ]}
+            />
           </TouchableOpacity>
           {CATEGORIES.map((category) => (
             <TouchableOpacity
               key={category}
-              style={[
-                styles.categoryButton,
-                selectedCategory === category && styles.categoryButtonActive,
-              ]}
+              style={styles.categoryTab}
               onPress={() => setSelectedCategory(category)}
               activeOpacity={0.7}
             >
               <Text
                 style={[
-                  styles.categoryButtonText,
-                  selectedCategory === category && styles.categoryButtonTextActive,
+                  styles.categoryTabLabel,
+                  selectedCategory === category && styles.categoryTabLabelActive,
                 ]}
               >
                 {category}
               </Text>
+              <View
+                style={[
+                  styles.categoryTabUnderline,
+                  selectedCategory === category && styles.categoryTabUnderlineActive,
+                ]}
+              />
             </TouchableOpacity>
           ))}
         </ScrollView>
+        <View style={styles.categoryFilterDivider} />
       </View>
 
       {/* 정렬 드롭다운: 화면 전체 기준 오버레이 (항상 맨 위) */}
@@ -509,9 +523,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    paddingBottom: 22,
     backgroundColor: colors.background,
   },
   headerActions: {
@@ -519,20 +531,49 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  headerLeft: {
+  archiveSortWrap: {
+    position: 'relative',
+    zIndex: 10000,
+  },
+  archivePillButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.69)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  archivePillText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  headerLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minWidth: 0,
+    marginRight: 8,
+  },
+  headerBackButton: {
+    paddingVertical: 4,
+    paddingRight: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerTitle: {
+    flexShrink: 1,
     fontSize: 22,
     fontWeight: '700',
     color: colors.text,
-  },
-  closeButton: {
-    padding: 6,
-    borderRadius: 16,
-    backgroundColor: colors.surface,
   },
   searchButton: {
     width: 40,
@@ -544,19 +585,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  sortButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
   sortDropdown: {
     position: 'absolute',
-    top: 64,
+    top: 74,
     right: 16,
     backgroundColor: colors.surface,
     borderRadius: 12,
@@ -686,39 +717,41 @@ const styles = StyleSheet.create({
   },
   categoryFilter: {
     backgroundColor: colors.background,
-    paddingVertical: 12,
+    position: 'relative',
   },
   categoryFilterContent: {
-    paddingHorizontal: 20,
-    gap: 8,
-    paddingTop: 6,
-    paddingBottom: 6,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 0,
   },
-  categoryButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.8)',
+  categoryTab: {
+    paddingHorizontal: 12,
     marginRight: 8,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 2,
+    alignItems: 'center',
+    minWidth: 36,
   },
-  categoryButtonActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  categoryButtonText: {
-    fontSize: 14,
+  categoryTabLabel: {
+    fontSize: 15,
     fontWeight: '600',
+    color: '#94a3b8',
+    paddingBottom: 10,
+  },
+  categoryTabLabelActive: {
     color: colors.primary,
   },
-  categoryButtonTextActive: {
-    color: 'white',
+  categoryTabUnderline: {
+    height: 3,
+    alignSelf: 'stretch',
+    backgroundColor: 'transparent',
+  },
+  categoryTabUnderlineActive: {
+    backgroundColor: colors.primary,
+  },
+  categoryFilterDivider: {
+    height: 1,
+    backgroundColor: colors.border,
   },
   content: {
     flex: 1,

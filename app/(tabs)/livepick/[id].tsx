@@ -514,7 +514,7 @@ export default function QuestionDetailScreen() {
     }
   };
 
-  // 광고 시청 후 게임하기 선택
+  // 영상 시청 후 게임하기 선택
   const handleWatchAd = async () => {
     console.log('🟢 [LivePick] handleWatchAd 함수 호출됨');
     console.log('📊 [LivePick] rewardedAdRef.current:', rewardedAdRef.current ? '존재함' : 'null');
@@ -894,7 +894,7 @@ export default function QuestionDetailScreen() {
             <Text style={styles.infoText}>
               {user && question && question.createdBy === user.uid
                 ? '자신이 만든 질문에는 참여할 수 없습니다.'
-                : '선택지를 클릭하여 참여하세요.\n참여 후 5P를 받거나 광고 시청 후 추가 보상을 받을 수 있습니다.'}
+                : '선택지를 클릭하여 참여하세요.\n참여 후 5P를 받거나 영상 시청 후 추가 보상을 받을 수 있습니다.'}
             </Text>
           </View>
         )}

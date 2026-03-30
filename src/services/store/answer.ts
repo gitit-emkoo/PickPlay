@@ -281,9 +281,9 @@ export const saveAnswerAndProcessLogic = async (userData: UserData, question: Qu
     throw error;
   }
 
-  // --- 3. 포인트 보상은 광고 시청 후 별도로 지급 ---
+  // --- 3. 포인트 보상은 영상 시청 후 별도로 지급 ---
   // (포인트 지급을 지연하여 광고 시청 완료 후 rewardWithMajority를 호출하도록 변경)
-  console.log('[Points] 포인트 지급은 광고 시청 후 진행됩니다.');
+  console.log('[Points] 포인트 지급은 영상 시청 후 진행됩니다.');
 
   // --- 4. 누적 답변 수에 따라 로직 분기 ---
   console.log(`[Debug] 로직 분기 체크: totalSelections = ${updatedTotalSelections!}`);
