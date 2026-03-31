@@ -39,7 +39,7 @@ module.exports = {
     },
     android: {
       package: 'com.pickplay.kwcc',
-      versionCode: 127,
+      versionCode: 129,
       googleServicesFile: './google-services.json',
       adaptiveIcon: {
         foregroundImage: './assets/images/adaptive-icon.png',
@@ -71,7 +71,8 @@ module.exports = {
           android: {
             // enable16kbPages 등 API 35 매니페스트 속성은 compileSdk 35가 있어야 AAPT가 인식함
             compileSdkVersion: 35,
-            targetSdkVersion: 35
+            targetSdkVersion: 35,
+            newArchEnabled: false
           }
         }
       ],

@@ -36,7 +36,7 @@
   },
   "android": {
     "package": "com.pickplay.kwcc",
-    "versionCode": 127,
+    "versionCode": 129,
     "googleServicesFile": "./google-services.json",
     "adaptiveIcon": {
       "foregroundImage": "./assets/images/adaptive-icon.png",
@@ -87,7 +87,7 @@
   },
   "expo": {
     "android": {
-      "versionCode": 127
+      "versionCode": 129
     },
     "ios": {
       "buildNumber": "127"

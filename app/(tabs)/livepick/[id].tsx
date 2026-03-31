@@ -270,7 +270,7 @@ export default function QuestionDetailScreen() {
         earnedRewardRef.current = false; // 광고 새로 로드 시 플래그 초기화
 
         // 타임아웃 설정 (10초 내 로드되지 않으면 실패 처리)
-        let loadTimeoutRef: NodeJS.Timeout | null = null;
+        let loadTimeoutRef: ReturnType<typeof setTimeout> | null = null;
         const loadTimeout = setTimeout(() => {
           console.warn('⏰ [LivePick] 광고 로드 타임아웃 (10초)');
           loadTimeoutRef = null;
