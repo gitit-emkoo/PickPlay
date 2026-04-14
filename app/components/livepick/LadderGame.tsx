@@ -18,11 +18,11 @@ interface LadderGameProps {
 }
 
 const REWARD_PROBABILITIES = [
-  { points: 10, probability: 0.7 },
-  { points: 50, probability: 0.2 },
-  { points: 100, probability: 0.05 },
-  { points: 200, probability: 0.03 },
-  { points: 300, probability: 0.02 },
+  { points: 10, probability: 0.73 },
+  { points: 20, probability: 0.2 },
+  { points: 100, probability: 0.04 },
+  { points: 200, probability: 0.02 },
+  { points: 300, probability: 0.01 },
 ];
 
 const getRewardByProbability = (): number => {
@@ -122,7 +122,7 @@ export default function LadderGame({ visible, onResult }: LadderGameProps) {
           setWinningIndex(currentLadder);
           
           // 하단 포인트 표시 설정: 당첨된 인덱스는 실제 포인트, 나머지는 당첨 포인트를 제외한 다른 포인트들
-          const allRewards = [10, 50, 100, 200, 300];
+          const allRewards = [10, 20, 100, 200, 300];
           // 당첨된 포인트를 제외한 나머지 포인트들
           const remainingRewards = allRewards.filter(reward => reward !== finalReward);
           // 나머지 포인트들을 섞기

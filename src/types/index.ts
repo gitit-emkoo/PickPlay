@@ -28,7 +28,7 @@ export interface Answer {
   selected_option_text: string;
   tags: string[] | null;
   answeredAt: FirebaseFirestoreTypes.FieldValue | FirebaseFirestoreTypes.Timestamp | Date;
-  rewarded?: boolean; // 오늘 보상 수령 여부(광고 시청 후 true)
+  rewarded?: boolean; // 오늘 보상 수령 여부(영상 시청 후 true)
 }
 
 // 확장된 사용자 데이터 타입
@@ -40,6 +40,9 @@ export interface UserData {
   characterId: string | null; // 배정된 동물 ID (예: "fox")
   adjective1: string | null; // 현재 [형용사1]
   adjective2: string | null; // 현재 [형용사2]
+  /** 직전 형용사 갱신(Logic B) 이전의 조합 — 성향 변화 UI용 */
+  previousAdjective1?: string | null;
+  previousAdjective2?: string | null;
 
   // --- 기존 필드 ---
   points: number;
@@ -50,7 +53,13 @@ export interface UserData {
   // --- 기기 식별 필드 (앱 재설치 시 복구용) ---
   deviceUID?: string | null; // 기기 고유 ID (선택적, 이전 버전 사용자는 없을 수 있음)
 
+  // --- 전화번호 인증 필드 (보상 교환용) ---
+  phoneNumber?: string | null; // E.164 포맷 전화번호 (예: +821012345678)
+  phoneVerified?: boolean; // 전화번호 인증 완료 여부
+  phoneVerifiedAt?: FirebaseFirestoreTypes.Timestamp | Date; // 인증 완료 시각
+
   // --- 튜토리얼 필드 ---
+  tutorialChoice?: 'pending' | 'opt_in' | 'opt_out';
   tutorial?: {
     mainAnswered: boolean; // 메인 질문에 답변했는지
     livepickParticipated: boolean; // 라이브픽 질문에 참여했는지
@@ -79,10 +88,12 @@ export type PointHistoryReason =
   | 'ladder_reward'
   | 'creator_reward'
   | 'top_reward'
+  | 'weekly_top_reward' // 주간 TOP 질문 보상 (관리자 지급)
   | 'majority_reward'
   | 'ad_bonus'
   | 'livepick_question_creation'
   | 'tutorial_reward'
+  | 'reward_exchange' // 보상 교환 시 포인트 차감
   | 'manual'
   | 'etc';
 
@@ -93,6 +104,35 @@ export interface PointHistory {
   reason: PointHistoryReason;
   description?: string;
   createdAt: FirebaseFirestoreTypes.Timestamp | Date;
+}
+
+// 교환 가능한 보상 상품
+export interface RewardItem {
+  id: string;
+  title: string;
+  description: string;
+  requiredPoints: number;
+  isActive: boolean;
+  sortOrder: number;
+  imageUrl?: string;
+  type?: 'giftcard' | 'coupon' | 'etc';
+}
+
+// 교환 신청 내역
+export type ExchangeRequestStatus = 'requested' | 'pending' | 'completed' | 'cancelled';
+
+export interface ExchangeRequest {
+  id: string;
+  uid: string;
+  rewardItemId: string;
+  rewardTitle: string; // 당시 상품명 스냅샷
+  usedPoints: number;
+  status: ExchangeRequestStatus;
+  createdAt: FirebaseFirestoreTypes.Timestamp | Date;
+  updatedAt?: FirebaseFirestoreTypes.Timestamp | Date;
+  completedAt?: FirebaseFirestoreTypes.Timestamp | Date;
+  cancelledAt?: FirebaseFirestoreTypes.Timestamp | Date;
+  adminMemo?: string;
 }
 
 

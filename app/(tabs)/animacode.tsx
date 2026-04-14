@@ -1,16 +1,94 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  ActivityIndicator,
+  TouchableOpacity,
+  Share,
+  Clipboard,
+  Alert,
+  Image as RNImage,
+  Platform,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import colors from '../../src/styles/colors';
 import { watchAuth } from '../../src/services/firebase';
 import { ensureUser } from '../../src/services/store';
 import { UserData } from '../../src/types';
 import CharacterCard from '../components/CharacterCard';
+import { getDispositionDescription, getDispositionNumber } from '../../src/services/animaDispositionDescriptions';
+import firestore from '@react-native-firebase/firestore';
+import * as FileSystem from 'expo-file-system';
+import { Asset } from 'expo-asset';
+import { downloadAsync as downloadBundledAssetToCache } from 'expo-asset/build/ExpoAsset';
+
+/** expo-file-system readAsStringAsync가 읽을 수 있는 URI(스킴 포함) */
+function isExpoFileSystemReadableUri(uri: string): boolean {
+  return (
+    uri.startsWith('file://') ||
+    uri.startsWith('content://') ||
+    uri.startsWith('http://') ||
+    uri.startsWith('https://')
+  );
+}
+
+/**
+ * Android에서 번들 이미지 URI가 `assets_images_panda`처럼 콜론 없는 drawable 이름이면,
+ * expo-asset의 Asset은 Image 호환을 위해 downloaded=true로 두고 실제 파일 복사를 생략함(expo-asset Asset.js).
+ * 공유용 base64는 파일 경로가 필요하므로 ExpoAsset.downloadAsync로 캐시에 복사한 뒤 읽는다.
+ */
+async function readBundledCharacterImageAsBase64(imageModule: any, charKey: string): Promise<string> {
+  const asset = Asset.fromModule(imageModule);
+  await asset.downloadAsync();
+  const resolved = RNImage.resolveAssetSource(imageModule);
+  const candidates = [asset.localUri, asset.uri, resolved?.uri].filter(
+    (u): u is string => typeof u === 'string' && u.length > 0
+  );
+  let uri = candidates.find(isExpoFileSystemReadableUri);
+
+  if (!uri && Platform.OS === 'android') {
+    const rawUri = asset.uri || candidates[0];
+    if (rawUri && !rawUri.includes(':')) {
+      try {
+        uri = await downloadBundledAssetToCache(rawUri, asset.hash, asset.type);
+      } catch (e) {
+        console.warn('[AnimaCode][Share] Android drawable → 캐시 복사 실패', charKey, e);
+        return '';
+      }
+    }
+  }
+
+  if (!uri) {
+    console.warn('[AnimaCode][Share] 이미지 URI 없음', { charKey, candidates });
+    return '';
+  }
+  try {
+    if (uri.startsWith('http://') || uri.startsWith('https://')) {
+      const dest = `${FileSystem.cacheDirectory ?? ''}animacode-share-${charKey}.png`;
+      const result = await FileSystem.downloadAsync(uri, dest);
+      const out = await FileSystem.readAsStringAsync(result.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      return out || '';
+    }
+    const out = await FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    return out || '';
+  } catch (e) {
+    console.warn('[AnimaCode][Share] 이미지 base64 읽기 실패', charKey, uri, e);
+    return '';
+  }
+}
 
 export default function AnimaCodeScreen() {
   const [user, setUser] = useState<{ uid: string } | null>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isSharing, setIsSharing] = useState(false);
 
   // 사용자 인증 및 데이터 로드
   useEffect(() => {
@@ -30,6 +108,121 @@ export default function AnimaCodeScreen() {
   }, []);
 
   const remainingForAnima = userData ? Math.max(0, 30 - (userData.totalSelections || 0)) : 30;
+
+  const currentDispositionDescription = useMemo(() => {
+    if (!userData?.adjective1 || !userData?.adjective2) return '';
+    return getDispositionDescription(userData.adjective1, userData.adjective2);
+  }, [userData?.adjective1, userData?.adjective2]);
+
+  const currentDispositionNumber = useMemo(() => {
+    if (!userData?.adjective1 || !userData?.adjective2) return '';
+    return getDispositionNumber(userData.adjective1, userData.adjective2);
+  }, [userData?.adjective1, userData?.adjective2]);
+
+  const handleShareAnimaCode = async () => {
+    if (isSharing) return;
+    if (!userData?.characterId || !userData?.adjective1 || !userData?.adjective2) {
+      Alert.alert('공유할 수 없습니다.', '애니마코드 결과(동물/성향)가 아직 생성되지 않았습니다.');
+      return;
+    }
+
+    if (!currentDispositionDescription) {
+      Alert.alert('공유할 수 없습니다.', '성향 설명을 만들 수 없습니다.');
+      return;
+    }
+
+    const SHARE_BASE_URL =
+      'https://asia-northeast3-today-balance-fa0a5.cloudfunctions.net/animacodeSharePage';
+
+    setIsSharing(true);
+    try {
+      const characters = require('../../assets/data/characters_19.json');
+      const character = characters.find((c: any) => c.character_id === userData.characterId);
+      const characterName = character?.name ? String(character.name) : String(userData.characterId);
+
+      const characterImages: Record<string, any> = {
+        fox: require('../../assets/images/fox.png'),
+        lion: require('../../assets/images/lion.png'),
+        owl: require('../../assets/images/owl.png'),
+        dolphin: require('../../assets/images/dolphin.png'),
+        cat: require('../../assets/images/cat.png'),
+        dog: require('../../assets/images/dog.png'),
+        panda: require('../../assets/images/panda.png'),
+        giraffe: require('../../assets/images/giraffe.png'),
+        deer: require('../../assets/images/deer.png'),
+        polar_bear: require('../../assets/images/polar_bear.png'),
+        rabbit: require('../../assets/images/rabbit.png'),
+        horse: require('../../assets/images/horse.png'),
+        otter: require('../../assets/images/otter.png'),
+        leopard: require('../../assets/images/leopard.png'),
+        camel: require('../../assets/images/camel.png'),
+        meerkat: require('../../assets/images/meerkat.png'),
+        sheep: require('../../assets/images/sheep.png'),
+        tiger: require('../../assets/images/tiger.png'),
+      };
+
+      // 이미지 base64는 공유 순간 앱에서만 계산해서 저장합니다.
+      // 웹에서는 재계산하지 않고 snapshot에 저장된 base64만 렌더링합니다.
+      let characterImageBase64 = '';
+      const charKey = String(userData.characterId || '');
+      const imageModule = characterImages[charKey];
+      if (imageModule) {
+        characterImageBase64 = await readBundledCharacterImageAsBase64(imageModule, charKey);
+      }
+
+      // UID 등 민감 데이터는 저장하지 않고, 필요한 결과만 스냅샷으로 저장합니다.
+      const snapRef = firestore().collection('animacode_snapshots').doc();
+      await snapRef.set({
+        isPublic: true,
+        snapshotVersion: 1,
+        createdAt: firestore.FieldValue.serverTimestamp(),
+        characterId: String(userData.characterId),
+        characterName,
+        characterImageBase64,
+        adjective1: String(userData.adjective1),
+        adjective2: String(userData.adjective2),
+        previousAdjective1: userData.previousAdjective1 ? String(userData.previousAdjective1) : '',
+        previousAdjective2: userData.previousAdjective2 ? String(userData.previousAdjective2) : '',
+        dispositionDescription: String(currentDispositionDescription),
+        dispositionNumber: String(currentDispositionNumber || ''),
+      });
+
+      const snapshotId = snapRef.id;
+      const shareUrl = `${SHARE_BASE_URL}?snapshotId=${encodeURIComponent(snapshotId)}`;
+
+      // 클립보드 복사는 보조 기능이므로 실패해도 공유 자체는 계속 진행합니다.
+      try {
+        if (Clipboard && typeof Clipboard.setString === 'function') {
+          Clipboard.setString(shareUrl);
+        }
+      } catch (clipboardError) {
+        console.warn('[AnimaCode][Share] 클립보드 복사 실패:', clipboardError);
+      }
+
+      await Share.share({ message: shareUrl });
+
+      Alert.alert('공유 링크 생성 완료', '공유 페이지 링크가 복사되었습니다.');
+    } catch (e: any) {
+      console.error('[AnimaCode][Share] 스냅샷 저장/공유 실패:', e?.message || e);
+      Alert.alert('공유에 실패했습니다.', '잠시 후 다시 시도해주세요.');
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.uid) return;
+      (async () => {
+        try {
+          const data = await ensureUser(user.uid);
+          setUserData(data);
+        } catch (e) {
+          console.warn('[AnimaCode] 화면 포커스 시 사용자 데이터 갱신 실패:', e);
+        }
+      })();
+    }, [user?.uid])
+  );
 
   return (
     <View style={styles.container}>
@@ -70,10 +263,78 @@ export default function AnimaCodeScreen() {
                 <View style={styles.infoCard}>
                   <Ionicons name="information-circle" size={20} color={colors.primary} />
                   <Text style={styles.infoText}>
-                    AnimaCode 생성을 위한{' '}
+                  내 진짜 성향 애니마코드가 깨어나는 중{'\n'}
+                  애니마코드 탄생까지{' '}
                     <Text style={styles.highlight}>{remainingForAnima}번의 선택</Text>
-                    이 쌓이면, 너의 내면의 캐릭터가 탄생하고 진짜 이름과 여정이 시작돼!
+                    이 남았습니다.
                   </Text>
+                </View>
+              )}
+
+              {/* 성향 변화 / 성향 설명 — 캐릭터 카드( CharacterCard ) 아래에만 추가. 카드 컴포넌트는 변경 없음 */}
+              {userData.characterId && userData.adjective1 && userData.adjective2 && (
+                <>
+                  {userData.previousAdjective1 && userData.previousAdjective2 && (
+                    <View style={styles.dispositionSection}>
+                      <View style={styles.dispositionSectionHeader}>
+                        <View style={styles.dispositionIconBox}>
+                          <Ionicons name="sync" size={18} color="#fff" />
+                        </View>
+                        <Text style={styles.dispositionSectionTitle}>성향 변화</Text>
+                      </View>
+                      <View style={styles.dispositionCard}>
+                        <Text style={styles.dispositionCardLabel}>지난번 성향 → 현재 성향</Text>
+                        <View style={styles.dispositionChangeRow}>
+                          <Text style={styles.dispositionPrevText} numberOfLines={2}>
+                            {`${userData.previousAdjective1} ${userData.previousAdjective2}`}
+                          </Text>
+                          <Text style={styles.dispositionArrow}>→</Text>
+                          <Text style={styles.dispositionCurrText} numberOfLines={2}>
+                            {`${userData.adjective1} ${userData.adjective2}`}
+                          </Text>
+                        </View>
+                        <Text style={styles.dispositionFootnote}>
+                          캐릭터는 그대로, 성향은 선택에 따라 계속 변화해요!
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                  <View
+                    style={[
+                      styles.dispositionSection,
+                      userData.previousAdjective1 && userData.previousAdjective2
+                        ? { marginTop: 4 }
+                        : null,
+                    ]}
+                  >
+                    <View style={styles.dispositionSectionHeader}>
+                      <View style={[styles.dispositionIconBox, { backgroundColor: '#FF6699' }]}>
+                        <Ionicons name="chatbubble-ellipses" size={18} color="#fff" />
+                      </View>
+                      <Text style={styles.dispositionSectionTitle}>요즘 나의 성향</Text>
+                    </View>
+                    <View style={styles.dispositionCard}>
+                      <Text style={styles.dispositionCardLabel}>요즘 나의 내면은 이런 모습이에요</Text>
+                      <Text style={styles.dispositionDescriptionText}>{currentDispositionDescription}</Text>
+                    </View>
+                  </View>
+                </>
+              )}
+
+              {/* 공유 버튼: 결과 스냅샷을 저장하고, 공유 페이지 링크를 생성합니다. */}
+              {userData.characterId && userData.adjective1 && userData.adjective2 && (
+                <View style={styles.shareRow}>
+                  <TouchableOpacity
+                    style={[styles.shareButton, isSharing ? { opacity: 0.7 } : null]}
+                    onPress={handleShareAnimaCode}
+                    disabled={isSharing}
+                    activeOpacity={0.9}
+                  >
+                    <Ionicons name="share-social" size={18} color="#fff" />
+                    <Text style={styles.shareButtonText}>{isSharing ? '공유 생성 중...' : '공유하기'}</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.shareSubText}>나를 잘 아는 친구도 이 애니마코드에 공감할까요?</Text>
                 </View>
               )}
             </>
@@ -93,9 +354,10 @@ export default function AnimaCodeScreen() {
             <Text style={styles.sectionTitle}>애니마코드란?</Text>
           </View>
           <Text style={styles.description}>
-            애니마코드는 나의 선택을 통해 탄생하는 내면의 캐릭터입니다.{'\n'}
-            매일의 질문에 답하며 자신을 알아가고,{'\n'}
-            당신만의 캐릭터와 형용사 태그를 얻어보세요!
+            애니마코드는{'\n'}
+            내 선택으로 완성되는 내면 성향 캐릭터예요.{'\n'}
+            매일 나의 선택을 분석해 나만의 캐릭터로 완성돼요.{'\n'}
+            고정된 결과가 아니라 선택을 더할수록 선명해지는 나의 기록이에요.
           </Text>
         </View>
 
@@ -134,7 +396,7 @@ export default function AnimaCodeScreen() {
             <View style={styles.stepContent}>
               <Text style={styles.stepTitle}>애니마코드 확인</Text>
               <Text style={styles.stepDescription}>
-                캐릭터 카드와 형용사 태그를 확인하세요
+              캐릭터 카드와 성향 키워드를 확인하세요
               </Text>
             </View>
           </View>
@@ -144,13 +406,12 @@ export default function AnimaCodeScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Ionicons name="sync" size={24} color={colors.primary} />
-            <Text style={styles.sectionTitle}>형용사 갱신</Text>
+            <Text style={styles.sectionTitle}>성향 키워드 변화</Text>
           </View>
           <Text style={styles.description}>
-            캐릭터를 획득한 후에도 계속해서 질문에 답하면{'\n'}
-            <Text style={styles.highlight}>30번마다 형용사 태그가 갱신</Text>됩니다.{'\n\n'}
-            예시: 60번, 90번, 120번...{'\n\n'}
-            새로운 선택을 통해 당신의 성향이 진화하는 모습을 확인해보세요!
+          30번의 선택마다 나를 보여주는 성향 키워드가 바뀌어요.{'\n'}
+            <Text style={styles.highlight}>처음 완성된 캐릭터를 바탕으로 </Text>
+             나의 성향이 어떻게 달라지는지도 확인해보세요.
           </Text>
         </View>
 
@@ -174,9 +435,9 @@ export default function AnimaCodeScreen() {
           <View style={styles.featureCard}>
             <Ionicons name="pricetags" size={20} color={colors.primary} />
             <View style={styles.featureContent}>
-              <Text style={styles.featureTitle}>형용사 태그</Text>
+              <Text style={styles.featureTitle}>성향 키워드</Text>
               <Text style={styles.featureDescription}>
-                나의 선택 패턴을 분석한 형용사 태그 2개가 표시됩니다
+                나의 선택 패턴을 분석한 성향 키워드 2개가 표시됩니다
               </Text>
             </View>
           </View>
@@ -186,7 +447,7 @@ export default function AnimaCodeScreen() {
             <View style={styles.featureContent}>
               <Text style={styles.featureTitle}>진화 시스템</Text>
               <Text style={styles.featureDescription}>
-                계속해서 답변하면 형용사가 업데이트되어 성장하는 모습을 볼 수 있습니다
+                계속해서 답변하면 성향 키워드가 업데이트되어 성장하는 모습을 볼 수 있습니다
               </Text>
             </View>
           </View>
@@ -200,10 +461,9 @@ export default function AnimaCodeScreen() {
           </View>
           <View style={styles.tipCard}>
             <Text style={styles.tipText}>
-              • 매일 꾸준히 답변하면 더 빠르게 캐릭터를 획득할 수 있어요{'\n\n'}
-              • 자신의 진짜 생각을 선택하는 것이 중요합니다{'\n\n'}
-              • 형용사는 나의 선택 패턴에 따라 달라질 수 있어요{'\n\n'}
-              • 캐릭터 카드를 홈 화면에서도 확인할 수 있습니다
+              • 매일 꾸준히 답할수록 더 빠르게 애니마코드를 만날 수 있어요{'\n\n'}
+              • 억지로 고르기보다 진짜 내 생각대로 선택하는 게 중요해요{'\n\n'}
+              • 캐릭터는 나를 보여주는 시작점이고, 성향 키워드는 계속 달라질 수 있어요
             </Text>
           </View>
         </View>
@@ -216,23 +476,25 @@ export default function AnimaCodeScreen() {
           </View>
           
           <View style={styles.faqItem}>
-            <Text style={styles.faqQuestion}>Q. 캐릭터는 몇 개나 있나요?</Text>
+            <Text style={styles.faqQuestion}>Q. 캐릭터는 몇 가지인가요?</Text>
             <Text style={styles.faqAnswer}>
-              A. 다양한 캐릭터가 준비되어 있습니다. 나의 선택 패턴에 따라 다른 캐릭터가 배정됩니다.
+              A. 다양한 애니마코드가 준비되어 있어요.
+              내가 어떤 선택을 자주 하는지에 따라 다른 캐릭터가 완성돼요.
             </Text>
           </View>
 
           <View style={styles.faqItem}>
-            <Text style={styles.faqQuestion}>Q. 형용사 태그는 어떻게 결정되나요?</Text>
+            <Text style={styles.faqQuestion}>Q. 성향 키워드는 어떻게 바뀌나요?</Text>
             <Text style={styles.faqAnswer}>
-              A. AI가 나의 선택 패턴을 분석하여 가장 적합한 형용사를 추천합니다.
+              A. 30번의 선택마다 나를 더 잘 표현하는 키워드로 업데이트돼요.
             </Text>
           </View>
 
           <View style={styles.faqItem}>
-            <Text style={styles.faqQuestion}>Q. 이미 획득한 캐릭터를 바꿀 수 있나요?</Text>
+            <Text style={styles.faqQuestion}>Q. 캐릭터는 바뀌나요?</Text>
             <Text style={styles.faqAnswer}>
-              A. 캐릭터는 처음 배정된 것을 유지하지만, 형용사 태그는 계속해서 갱신됩니다.
+              A. 처음 완성된 캐릭터는 유지되고,
+              그 이후에는 성향 키워드가 달라지며 변화하는 나를 보여줘요.
             </Text>
           </View>
         </View>
@@ -418,5 +680,104 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: colors.border,
     marginVertical: 8,
+  },
+  dispositionSection: {
+    width: '100%',
+    marginBottom: 16,
+  },
+  dispositionSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 10,
+  },
+  dispositionIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dispositionSectionTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  dispositionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  dispositionCardLabel: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginBottom: 10,
+    fontWeight: '600',
+  },
+  dispositionChangeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dispositionPrevText: {
+    fontSize: 15,
+    color: colors.textSecondary,
+    textDecorationLine: 'line-through',
+    flexShrink: 1,
+  },
+  dispositionArrow: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  dispositionCurrText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.text,
+    flexShrink: 1,
+  },
+  dispositionFootnote: {
+    marginTop: 12,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.textLight,
+  },
+  dispositionDescriptionText: {
+    fontSize: 15,
+    lineHeight: 24,
+    color: colors.text,
+  },
+  shareRow: {
+    marginTop: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shareButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: colors.primary,
+    borderRadius: 999,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+  },
+  shareButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  shareSubText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#94a3b8',
+    width: '100%',
+    paddingHorizontal: 16,
+    lineHeight: 20,
+    textAlign: 'center',
   },
 });

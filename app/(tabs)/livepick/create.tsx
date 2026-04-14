@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, Modal, BackHandler, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, Modal, BackHandler, Platform, KeyboardAvoidingView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../../../src/styles/colors';
 import { watchAuth } from '../../../src/services/firebase';
 import { createLivePickQuestion } from '../../../src/services/livepick';
 import { getTutorialStatus } from '../../../src/services/tutorial';
+import LottieView from 'lottie-react-native';
+import confettiLottie from '../../../assets/lottie/tutorial-confetti.json';
 
 export default function CreateQuestionScreen() {
   const router = useRouter();
+  const scrollViewRef = React.useRef<ScrollView>(null);
   const [user, setUser] = useState<{ uid: string } | null>(null);
   const [title, setTitle] = useState('');
   const [option1, setOption1] = useState('');
@@ -17,6 +20,7 @@ export default function CreateQuestionScreen() {
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showTutorialCompleteModal, setShowTutorialCompleteModal] = useState(false);
+  const [confettiPlayCount, setConfettiPlayCount] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createdQuestionId, setCreatedQuestionId] = useState<string | null>(null);
   const [tutorialStatus, setTutorialStatus] = useState<{
@@ -24,6 +28,7 @@ export default function CreateQuestionScreen() {
     livepickParticipated: boolean;
     livepickCreated: boolean;
     rewardGiven500: boolean;
+    tutorialChoice: 'pending' | 'opt_in' | 'opt_out';
     allCompleted: boolean;
   } | null>(null);
 
@@ -31,6 +36,14 @@ export default function CreateQuestionScreen() {
   
   const MAX_TITLE_LENGTH = 40;
   const MAX_OPTION_LENGTH = 20;
+
+  const handleOption2Focus = () => {
+    // 키보드가 올라오면 ScrollView가 자동으로 이동하지 않는 경우가 있어,
+    // 선택지 2 입력 시점에 한 번 아래로 스크롤되게 처리합니다.
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 60);
+  };
 
   // 사용자 인증 확인
   useEffect(() => {
@@ -128,15 +141,15 @@ export default function CreateQuestionScreen() {
         setShowTutorialCompleteModal(true);
       } else {
         // 일반 성공 메시지
-      Alert.alert('성공', '질문이 등록되었습니다!', [
-        {
-          text: '확인',
-          onPress: () => {
-            // 질문 상세 화면으로 이동
+        Alert.alert('알림', '질문이 등록되었습니다!', [
+          {
+            text: '확인',
+            onPress: () => {
+              // 질문 상세 화면으로 이동
               router.replace(`/(tabs)/livepick/${result.questionId}`);
+            },
           },
-        },
-      ]);
+        ]);
       }
     } catch (error: any) {
       console.error('❌ 질문 등록 실패:', error);
@@ -155,11 +168,11 @@ export default function CreateQuestionScreen() {
 
   return (
     <View style={styles.container}>
-      {/* 헤더 */}
-      <View style={styles.header}>
+      {/* 헤더 — iOS에서만 KeyboardAvoidingView 위로 스크롤 콘텐츠가 겹치지 않도록 최상단 zIndex */}
+      <View style={[styles.header, Platform.OS === 'ios' && styles.headerIosOnTop]}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={() => router.replace('/(tabs)/livepick')}
           activeOpacity={0.7}
         >
           <Ionicons name="arrow-back" size={24} color={colors.text} />
@@ -168,7 +181,23 @@ export default function CreateQuestionScreen() {
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+      <KeyboardAvoidingView
+        style={[styles.content, Platform.OS === 'ios' && styles.contentBelowHeaderIos]}
+        // iOS는 behavior="padding" 조합에서 과도한 상단 여백이 생기는 경우가 있어
+        // "position"으로 이동(여백이 덜 생김)하도록 조정합니다.
+        behavior={Platform.OS === 'ios' ? 'position' : 'height'}
+        keyboardVerticalOffset={0}
+      >
+        <ScrollView
+          ref={scrollViewRef}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[
+            styles.contentContainer,
+            // KeyboardAvoidingView가 이미 키보드 높이를 반영하므로
+            // iOS에서 과도한 paddingBottom을 주지 않도록 합니다.
+            { paddingBottom: 48 },
+          ]}
+        >
         {/* 상단 안내 문구 */}
         <View style={styles.infoBanner}>
           <Text style={styles.infoBannerText}>
@@ -247,6 +276,7 @@ export default function CreateQuestionScreen() {
             placeholderTextColor={colors.textLight}
             value={option2}
             onChangeText={setOption2}
+            onFocus={handleOption2Focus}
             maxLength={MAX_OPTION_LENGTH}
           />
           <Text style={[
@@ -257,12 +287,17 @@ export default function CreateQuestionScreen() {
           </Text>
         </View>
 
-        {/* 포인트 소멸 안내 */}
+        {/* 포인트 소멸 및 생성 제한 안내 */}
         <View style={styles.warningBox}>
           <Ionicons name="warning" size={20} color={colors.warning} />
-          <Text style={styles.warningText}>
-            질문을 등록하면 <Text style={styles.warningHighlight}>10P가 소멸</Text>됩니다.
-          </Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.warningText}>
+              • 질문을 등록하면 <Text style={styles.warningHighlight}>10P가 소멸</Text>됩니다.
+            </Text>
+            <Text style={styles.warningText}>
+            • 하루에 생성할 수 있는 라이브픽 질문은 <Text style={styles.warningHighlight}>최대 2개</Text>입니다.
+            </Text>
+          </View>
         </View>
 
         {/* 업로드 버튼 */}
@@ -283,7 +318,8 @@ export default function CreateQuestionScreen() {
             {isSubmitting ? '등록 중...' : '질문 업로드하기'}
           </Text>
         </TouchableOpacity>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* 카테고리 선택 모달 */}
       <Modal
@@ -383,14 +419,49 @@ export default function CreateQuestionScreen() {
         }}
       >
         <View style={styles.modalOverlay}>
+          {/* 폭죽/꽃가루 로티: 모달보다 크게, 최상단 */}
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              justifyContent: 'center',
+              alignItems: 'center',
+              zIndex: 9999,
+              elevation: 9999,
+            }}
+          >
+            <LottieView
+              source={confettiLottie}
+              autoPlay
+              loop={false}
+              key={`confetti-big-${confettiPlayCount}`}
+              onAnimationFinish={() => {
+                // 3번 재생: 0 -> 1 -> 2 (총 3회)
+                setConfettiPlayCount((prev) => (prev < 2 ? prev + 1 : prev));
+              }}
+              style={{ width: 420, height: 420 }}
+            />
+          </View>
           <View style={styles.modalContent}>
             <View style={styles.modalIcon}>
-              <Ionicons name="trophy" size={48} color={colors.primary} />
+              <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="trophy" size={48} color={colors.primary} />
+                <LottieView
+                  source={confettiLottie}
+                  autoPlay
+                  loop={false}
+                  key={`confetti-icon-${confettiPlayCount}`}
+                  style={{ width: 70, height: 70, marginTop: -10 }}
+                />
+              </View>
             </View>
             <Text style={styles.modalTitle}>축하합니다! 🎉</Text>
             <Text style={styles.modalMessage}>
-              튜토리얼 완료로 <Text style={styles.modalHighlight}>500P</Text>가 지급되었습니다!{'\n\n'}
-              이제 애니마 코드도 깨워보고 라이브픽으로 보상을 더 받아보세요!
+              <Text style={styles.modalHighlight}>500P</Text>가 지급되었습니다!
             </Text>
             <TouchableOpacity
               style={{
@@ -404,6 +475,7 @@ export default function CreateQuestionScreen() {
               }}
               onPress={() => {
                 setShowTutorialCompleteModal(false);
+                setConfettiPlayCount(0);
                 if (createdQuestionId) {
                   // 질문 상세 화면으로 이동
                   router.replace(`/(tabs)/livepick/${createdQuestionId}`);
@@ -439,6 +511,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  /** iOS: 키보드 회피 시 본문이 위로 밀릴 때 헤더가 항상 위에 보이도록 */
+  headerIosOnTop: {
+    zIndex: 10000,
+    elevation: 10000,
+  },
   backButton: {
     padding: 4,
   },
@@ -452,6 +529,9 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  contentBelowHeaderIos: {
+    zIndex: 0,
   },
   contentContainer: {
     padding: 20,

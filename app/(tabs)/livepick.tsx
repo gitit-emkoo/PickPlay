@@ -5,10 +5,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../../src/styles/colors';
 import { LivePickQuestion } from '../../src/types/livepick';
-import { getLivePickQuestions, getTodayParticipationCount } from '../../src/services/livepick';
+import { getLivePickQuestions, getTodayParticipationCount, getTodayLivePickQuestionCount } from '../../src/services/livepick';
+import { currentWeekKeyKST } from '../../src/utils/date';
 import { watchAuth } from '../../src/services/firebase';
 import { getTutorialStatus } from '../../src/services/tutorial';
-import TutorialTooltip from '../components/TutorialTooltip';
+// 튜토리얼은 말풍선 대신 모달로만 안내합니다.
+import BannerAdComponent from '../components/BannerAdComponent';
 
 const CATEGORIES: Array<'일상' | '연애' | '가치관' | '엔터테인먼트' | '상상'> = ['일상', '연애', '가치관', '엔터테인먼트', '상상'];
 
@@ -29,14 +31,13 @@ export default function LivePickScreen() {
     livepickParticipated: boolean;
     livepickCreated: boolean;
     rewardGiven500: boolean;
+    tutorialChoice: 'pending' | 'opt_in' | 'opt_out';
     allCompleted: boolean;
   } | null>(null);
   
-  // 튜토리얼 말풍선 표시 여부 (한 번만 표시) - useRef로 관리하여 리렌더링 시에도 유지
-  const hasSeenLivepickTooltipRef = useRef(false);
-  const hasSeenCreateTooltipRef = useRef(false);
-  const [hasSeenLivepickTooltip, setHasSeenLivepickTooltip] = useState(false);
-  const [hasSeenCreateTooltip, setHasSeenCreateTooltip] = useState(false);
+  // (말풍선 제거) hasSeen*Tooltip 상태/플래그는 더 이상 사용하지 않습니다.
+  const [showCreateWarningModal, setShowCreateWarningModal] = useState(false);
+  const [isCheckingCreateLimit, setIsCheckingCreateLimit] = useState(false);
 
   // 검색 및 정렬 상태
   const [showSearchModal, setShowSearchModal] = useState(false);
@@ -48,6 +49,9 @@ export default function LivePickScreen() {
   // 전체 질문 목록 (검색 및 정렬용)
   const [allQuestions, setAllQuestions] = useState<LivePickQuestion[]>([]);
   const [isLoadingAllQuestions, setIsLoadingAllQuestions] = useState(false);
+  const [currentWeekKey] = useState<string>(currentWeekKeyKST());
+  /** 인기순: 전체 주간 목록을 participant 기준으로 정렬한 뒤, 더보기로만 노출 개수 확장 (첫 페이지만 기준으로 인기순 하지 않음) */
+  const [popularVisibleCount, setPopularVisibleCount] = useState(PAGE_SIZE);
 
   // 오늘 참여 횟수 확인 (먼저 정의)
   const checkTodayParticipationCount = React.useCallback(async (uid: string) => {
@@ -80,21 +84,12 @@ export default function LivePickScreen() {
               livepickParticipated: false,
               livepickCreated: false,
               rewardGiven500: false,
+              tutorialChoice: 'pending',
               allCompleted: false,
             });
           }
           
-          // 튜토리얼 말풍선 표시 여부 확인 (한 번만 로드하여 리렌더링 시에도 유지)
-          const [hasSeenLivepick, hasSeenCreate] = await Promise.all([
-            AsyncStorage.getItem('hasSeenLivepickTutorialTooltip'),
-            AsyncStorage.getItem('hasSeenCreateTutorialTooltip'),
-          ]);
-          const seenLivepick = hasSeenLivepick === 'true';
-          const seenCreate = hasSeenCreate === 'true';
-          hasSeenLivepickTooltipRef.current = seenLivepick;
-          hasSeenCreateTooltipRef.current = seenCreate;
-          setHasSeenLivepickTooltip(seenLivepick);
-          setHasSeenCreateTooltip(seenCreate);
+          // 말풍선 제거로 인해 관련 AsyncStorage 플래그는 더 이상 로드하지 않습니다.
         } catch (e) {
           console.warn('[Tutorial] 튜토리얼 상태 로드 실패:', e);
           // 에러 발생 시 기본값 설정
@@ -103,6 +98,7 @@ export default function LivePickScreen() {
             livepickParticipated: false,
             livepickCreated: false,
             rewardGiven500: false,
+            tutorialChoice: 'pending',
             allCompleted: false,
           });
         }
@@ -120,6 +116,7 @@ export default function LivePickScreen() {
     try {
       // 정렬 기준에 따라 모든 질문 가져오기 (큰 limit 사용)
       const allList = await getLivePickQuestions(1000, undefined, sortBy);
+      // 검색/필터용 전체 목록은 그대로 유지 (weekKey 필터는 화면 단에서 적용)
       setAllQuestions(allList);
       console.log(`[LivePick] 전체 질문 로드 완료: ${allList.length}개`);
     } catch (error: any) {
@@ -151,10 +148,13 @@ export default function LivePickScreen() {
       }
       // 검색을 위해 전체 질문을 백그라운드에서 로드
       loadAllQuestions().catch(e => console.warn('[LivePick] 전체 질문 로드 실패:', e));
-      // 페이지네이션용으로 첫 20개만 표시 (Firestore 쿼리 레벨에서 정렬)
-      const list = await getLivePickQuestions(PAGE_SIZE, undefined, sortBy);
-      setQuestions(list);
+      // Firestore에서는 항상 최신순으로만 가져오고, 화면에서 sortBy로 재정렬
+      const list = await getLivePickQuestions(PAGE_SIZE, undefined, 'latest');
+      // 이번 주 질문만 진행중으로 사용
+      const activeThisWeek = list.filter(q => q.weekKey === currentWeekKey);
+      setQuestions(activeThisWeek);
       setHasMore(list.length === PAGE_SIZE);
+      setPopularVisibleCount(PAGE_SIZE);
     } catch (error: any) {
       console.error('❌ [LivePick] 질문 목록 초기 로드 실패:', error);
       console.error('❌ 에러 타입:', typeof error);
@@ -166,7 +166,8 @@ export default function LivePickScreen() {
       if (error?.code === 'failed-precondition' && sortBy === 'popular') {
         try {
           const list = await getLivePickQuestions(PAGE_SIZE, undefined, 'latest');
-          setQuestions(list);
+          const activeThisWeek = list.filter(q => q.weekKey === currentWeekKey);
+          setQuestions(activeThisWeek);
           setHasMore(list.length === PAGE_SIZE);
         } catch (e) {
           console.error('❌ [LivePick] 최신순 로드 실패:', e);
@@ -211,9 +212,12 @@ export default function LivePickScreen() {
                 console.warn('[LivePick] 참여 횟수 갱신 실패:', e)
               );
             }
-            const list = await getLivePickQuestions(PAGE_SIZE, undefined, sortBy);
-            setQuestions(list);
-            setHasMore(list.length === PAGE_SIZE);
+            // Firestore에서는 항상 최신순으로만 가져오고, 화면에서 sortBy로 재정렬
+            const list = await getLivePickQuestions(PAGE_SIZE, undefined, 'latest');
+            const activeThisWeek = list.filter(q => q.weekKey === currentWeekKey);
+            setQuestions(activeThisWeek);
+            setHasMore(activeThisWeek.length === PAGE_SIZE);
+            setPopularVisibleCount(PAGE_SIZE);
             // 전체 질문은 백그라운드에서만 로드 (검색용, 이미 로드된 경우 제외)
             if (allQuestions.length === 0 && !loadAllQuestionsRef.current) {
               loadAllQuestions().catch(e => console.warn('[LivePick] 전체 질문 로드 실패:', e));
@@ -226,7 +230,8 @@ export default function LivePickScreen() {
               setSortBy('latest'); // sortBy 상태를 최신순으로 변경
               try {
                 const list = await getLivePickQuestions(PAGE_SIZE, undefined, 'latest');
-                setQuestions(list);
+                const activeThisWeek = list.filter(q => q.weekKey === currentWeekKey);
+                setQuestions(activeThisWeek);
                 setHasMore(list.length === PAGE_SIZE);
               } catch (err) {
                 console.error('❌ [LivePick] 최신순 로드 실패:', err);
@@ -243,38 +248,52 @@ export default function LivePickScreen() {
 
   // 추가 로드 (페이지네이션)
   const loadMoreQuestions = async () => {
-    if (loadingMore || !hasMore || questions.length === 0) return;
-    
+    if (loadingMore) return;
+
+    // 인기순(비검색): 이미 fullFilteredQuestions가 전체 기준이므로 노출 개수만 늘림
+    if (sortBy === 'popular' && !searchQuery.trim()) {
+      if (popularVisibleCount >= fullFilteredQuestions.length) {
+        return;
+      }
+      setLoadingMore(true);
+      try {
+        setPopularVisibleCount((c) => c + PAGE_SIZE);
+      } finally {
+        setLoadingMore(false);
+      }
+      return;
+    }
+
+    if (!hasMore || questions.length === 0) return;
+
     // 검색 중이면 필터링된 결과의 다음 페이지를 가져옴
     if (searchQuery.trim()) {
       const currentLength = questions.length;
-      const nextPage = filteredQuestions.slice(currentLength, currentLength + PAGE_SIZE);
-      
+      const nextPage = fullFilteredQuestions.slice(currentLength, currentLength + PAGE_SIZE);
+
       if (nextPage.length === 0) {
         setHasMore(false);
         return;
       }
-      
-      setQuestions(prev => [...prev, ...nextPage]);
-      setHasMore(currentLength + nextPage.length < filteredQuestions.length);
+
+      setQuestions((prev) => [...prev, ...nextPage]);
+      setHasMore(currentLength + nextPage.length < fullFilteredQuestions.length);
       return;
     }
-    
-    // 검색이 없으면 Firestore에서 다음 페이지 가져오기 (정렬은 Firestore 쿼리 레벨에서)
+
+    // 검색이 없으면 Firestore에서 다음 페이지 가져오기 (최신순만)
     try {
       setLoadingMore(true);
       const last = questions[questions.length - 1];
       let more: LivePickQuestion[];
-      if (sortBy === 'popular') {
-        more = await getLivePickQuestions(PAGE_SIZE, undefined, sortBy, last.participantCount);
-      } else {
-        more = await getLivePickQuestions(PAGE_SIZE, last.createdAt as Date, sortBy);
-      }
-      if (more.length === 0) {
+      // Firestore에서는 항상 최신순(createdAt 기준)으로 페이지네이션
+      more = await getLivePickQuestions(PAGE_SIZE, last.createdAt as Date, 'latest');
+      const moreThisWeek = more.filter(q => q.weekKey === currentWeekKey);
+      if (moreThisWeek.length === 0) {
         setHasMore(false);
         return;
       }
-      setQuestions(prev => [...prev, ...more]);
+      setQuestions(prev => [...prev, ...moreThisWeek]);
       setHasMore(more.length === PAGE_SIZE);
     } catch (error: any) {
       console.error('❌ [LivePick] 추가 질문 로드 실패:', error);
@@ -283,11 +302,12 @@ export default function LivePickScreen() {
         try {
           const last = questions[questions.length - 1];
           const more = await getLivePickQuestions(PAGE_SIZE, last.createdAt as Date, 'latest');
-          if (more.length === 0) {
+          const moreThisWeek = more.filter(q => q.weekKey === currentWeekKey);
+          if (moreThisWeek.length === 0) {
             setHasMore(false);
             return;
           }
-          setQuestions(prev => [...prev, ...more]);
+          setQuestions(prev => [...prev, ...moreThisWeek]);
           setHasMore(more.length === PAGE_SIZE);
         } catch (e) {
           console.error('❌ [LivePick] 최신순 로드 실패:', e);
@@ -298,45 +318,18 @@ export default function LivePickScreen() {
     }
   };
 
-  // 정렬 변경 핸들러
-  const handleSortChange = async (newSort: 'latest' | 'popular') => {
+  const handleSortChange = (newSort: 'latest' | 'popular') => {
     setSortBy(newSort);
     setShowSortDropdown(false);
-    // 정렬 변경 시 Firestore 쿼리 레벨에서 정렬된 첫 20개만 로드 (성능 최적화)
-    setLoading(true);
-    try {
-      // Firestore 쿼리 레벨에서 정렬된 결과의 첫 20개만 가져오기 (전체 질문을 로드하지 않음)
-      const list = await getLivePickQuestions(PAGE_SIZE, undefined, newSort);
-      setQuestions(list);
-      setHasMore(list.length === PAGE_SIZE);
-      // 전체 질문도 백그라운드에서 업데이트 (검색용, 정렬은 Firestore에서 처리)
-      loadAllQuestions().catch(e => console.warn('[LivePick] 전체 질문 로드 실패:', e));
-    } catch (error: any) {
-      console.error('❌ [LivePick] 정렬 변경 후 질문 목록 로드 실패:', error);
-      // 인덱스가 아직 생성되지 않은 경우 최신순으로 폴백
-      if (error?.code === 'failed-precondition' && newSort === 'popular') {
-        Alert.alert(
-          '인기순 정렬 준비 중',
-          '인기순 정렬 기능이 준비 중입니다. 잠시 후 다시 시도해주세요.',
-          [{ text: '확인', onPress: () => {
-            setSortBy('latest');
-            // 최신순으로 다시 로드
-            getLivePickQuestions(PAGE_SIZE, undefined, 'latest').then(list => {
-              setQuestions(list);
-              setHasMore(list.length === PAGE_SIZE);
-              setLoading(false);
-            }).catch(e => {
-              console.error('❌ [LivePick] 최신순 로드 실패:', e);
-              setLoading(false);
-            });
-          }}]
-        );
-        return;
-      }
-    } finally {
-      setLoading(false);
+    if (newSort === 'popular') {
+      setPopularVisibleCount(PAGE_SIZE);
+      loadAllQuestions().catch((e) => console.warn('[LivePick] 인기순 전체 목록 로드 실패:', e));
     }
   };
+
+  useEffect(() => {
+    setPopularVisibleCount(PAGE_SIZE);
+  }, [selectedCategory]);
 
   // 검색 모달 애니메이션 및 전체 질문 로드
   useEffect(() => {
@@ -362,29 +355,60 @@ export default function LivePickScreen() {
   }, [showSearchModal, searchModalAnim, allQuestions.length, isLoadingAllQuestions, loadAllQuestions]);
   
 
-  // 검색 필터링된 질문 목록 (전체 질문 기준)
-  const filteredQuestions = React.useMemo(() => {
-    // 검색어가 있으면 전체 질문에서 검색, 없으면 현재 페이지네이션된 질문 사용
-    const sourceQuestions = searchQuery.trim() ? allQuestions : questions;
-    let filtered = sourceQuestions;
-    
-    // 카테고리 필터
-    if (selectedCategory !== '전체') {
-      filtered = filtered.filter((q) => q.category === selectedCategory);
+  /** 카테고리·검색·정렬이 반영된 전체 목록 (인기순은 이번 주 + 전체 질문 기준) */
+  const fullFilteredQuestions = React.useMemo(() => {
+    let sourceQuestions: LivePickQuestion[];
+    if (searchQuery.trim()) {
+      sourceQuestions = allQuestions;
+    } else if (sortBy === 'popular') {
+      // 노출된 N개(questions)가 아니라, 이번 주 전체(allQuestions) 기준으로 인기순
+      sourceQuestions =
+        allQuestions.length > 0
+          ? allQuestions.filter((q) => q.weekKey === currentWeekKey)
+          : questions;
+    } else {
+      sourceQuestions = questions;
     }
-    
-    // 검색어 필터 (전체 질문에서 검색)
+
+    let list = sourceQuestions;
+
+    if (selectedCategory !== '전체') {
+      list = list.filter((q) => q.category === selectedCategory);
+    }
+
     if (searchQuery.trim()) {
       const query = searchQuery.trim().toLowerCase();
-      filtered = filtered.filter((q) => 
-        q.title.toLowerCase().includes(query) ||
-        q.option1.toLowerCase().includes(query) ||
-        q.option2.toLowerCase().includes(query)
+      list = list.filter(
+        (q) =>
+          q.title.toLowerCase().includes(query) ||
+          q.option1.toLowerCase().includes(query) ||
+          q.option2.toLowerCase().includes(query)
       );
     }
-    
-    return filtered;
-  }, [questions, allQuestions, selectedCategory, searchQuery]);
+
+    if (sortBy === 'popular') {
+      return [...list].sort((a, b) => (b.participantCount || 0) - (a.participantCount || 0));
+    }
+    const sorted = [...list].sort((a, b) => {
+      const aDate = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt as any);
+      const bDate = b.createdAt instanceof Date ? b.createdAt : new Date(b.createdAt as any);
+      return bDate.getTime() - aDate.getTime();
+    });
+    return sorted;
+  }, [questions, allQuestions, selectedCategory, searchQuery, sortBy, currentWeekKey]);
+
+  /** 리스트에 실제로 그릴 목록 (인기순·비검색 시 더보기로만 개수 확장) */
+  const filteredQuestions = React.useMemo(() => {
+    if (sortBy === 'popular' && !searchQuery.trim()) {
+      return fullFilteredQuestions.slice(0, popularVisibleCount);
+    }
+    return fullFilteredQuestions;
+  }, [sortBy, searchQuery, fullFilteredQuestions, popularVisibleCount]);
+
+  const hasMorePopular = React.useMemo(
+    () => sortBy === 'popular' && !searchQuery.trim() && popularVisibleCount < fullFilteredQuestions.length,
+    [sortBy, searchQuery, popularVisibleCount, fullFilteredQuestions.length]
+  );
 
   // Pull to refresh
   const onRefresh = async () => {
@@ -489,7 +513,7 @@ export default function LivePickScreen() {
       {/* 헤더 */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>라이브픽</Text>
+          <Text style={styles.headerTitle}>LivePick</Text>
           {/* 일일 참여 제한 표시 */}
           {user && (
             <View style={styles.participationBadge}>
@@ -512,83 +536,44 @@ export default function LivePickScreen() {
           >
             <Ionicons name="search" size={20} color={colors.primary} />
           </TouchableOpacity>
-          
-          {/* 정렬 버튼 */}
-          <View style={{ position: 'relative', zIndex: 1000 }}>
-            <TouchableOpacity
-              style={styles.sortButton}
-              activeOpacity={0.7}
-              onPress={() => setShowSortDropdown(!showSortDropdown)}
-            >
-              <Ionicons name="menu" size={20} color={colors.primary} />
-            </TouchableOpacity>
-            
-            {/* 정렬 드롭다운 */}
-            {showSortDropdown && (
-              <>
-                <TouchableOpacity
-                  style={StyleSheet.absoluteFill}
-                  activeOpacity={1}
-                  onPress={() => setShowSortDropdown(false)}
-                />
-                <View style={styles.sortDropdown}>
-                  <TouchableOpacity
-                    style={[styles.sortOption, sortBy === 'latest' && styles.sortOptionActive]}
-                    onPress={() => handleSortChange('latest')}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.sortOptionText, sortBy === 'latest' && styles.sortOptionTextActive]}>
-                      최신순
-                    </Text>
-                    {sortBy === 'latest' && <Ionicons name="checkmark" size={16} color="white" />}
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.sortOption, sortBy === 'popular' && styles.sortOptionActive]}
-                    onPress={() => handleSortChange('popular')}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.sortOptionText, sortBy === 'popular' && styles.sortOptionTextActive]}>
-                      인기순
-                    </Text>
-                    {sortBy === 'popular' && <Ionicons name="checkmark" size={16} color="white" />}
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-          </View>
-          
+
           {/* 질문 만들기 버튼 */}
           <View style={{ position: 'relative' }}>
             <TouchableOpacity
               style={styles.createButton}
               activeOpacity={0.7}
-              onPress={() => router.push('/(tabs)/livepick/create')}
+              onPress={async () => {
+                if (!user || isCheckingCreateLimit) {
+                  return;
+                }
+                try {
+                  setIsCheckingCreateLimit(true);
+                  const count = await getTodayLivePickQuestionCount(user.uid);
+                  if (count >= 2) {
+                    Alert.alert(
+                      '알림',
+                      '하루에 생성할 수 있는 라이브픽 질문은 2개까지입니다.\n내일 다시 시도해주세요.',
+                    );
+                    return;
+                  }
+                  setShowCreateWarningModal(true);
+                } catch (error: any) {
+                  console.warn('[LivePick] 질문 생성 가능 여부 확인 실패:', error?.message || error);
+                  // 실패 시에도 기존 UX대로 진행 (서버 쪽에서 최종 검증)
+                  setShowCreateWarningModal(true);
+                } finally {
+                  setIsCheckingCreateLimit(false);
+                }
+              }}
             >
               <Ionicons name="add-circle" size={24} color={colors.primary} />
               <Text style={styles.createButtonText}>질문 만들기</Text>
             </TouchableOpacity>
-            
-            {/* 튜토리얼 말풍선 (질문 만들기 안내) - 라이브픽 참여 후 한 번만 표시 */}
-            {tutorialStatus && tutorialStatus.livepickParticipated && !tutorialStatus.livepickCreated && !hasSeenCreateTooltipRef.current && !hasSeenCreateTooltip && (
-              <TutorialTooltip
-                message="나만의 라이브픽 질문을 만들어보세요"
-                position="right"
-                style={{ position: 'absolute', top: -10, right: '100%', marginRight: 8 }}
-                width={200}
-                color="#FF5722"
-                blink={true}
-                onDismiss={async () => {
-                  await AsyncStorage.setItem('hasSeenCreateTutorialTooltip', 'true');
-                  hasSeenCreateTooltipRef.current = true;
-                  setHasSeenCreateTooltip(true);
-                }}
-              />
-            )}
           </View>
         </View>
       </View>
 
-      {/* 카테고리 필터 */}
+      {/* 카테고리: 텍스트 탭 + 하단 디비전, 활성 = 파란 글씨 + 굵은 밑줄 */}
       <View style={styles.categoryFilter}>
         <ScrollView
           horizontal
@@ -596,44 +581,93 @@ export default function LivePickScreen() {
           contentContainerStyle={styles.categoryFilterContent}
         >
           <TouchableOpacity
-            style={[
-              styles.categoryButton,
-              selectedCategory === '전체' && styles.categoryButtonActive,
-            ]}
+            style={styles.categoryTab}
             onPress={() => setSelectedCategory('전체')}
             activeOpacity={0.7}
           >
             <Text
               style={[
-                styles.categoryButtonText,
-                selectedCategory === '전체' && styles.categoryButtonTextActive,
+                styles.categoryTabLabel,
+                selectedCategory === '전체' && styles.categoryTabLabelActive,
               ]}
             >
               전체
             </Text>
+            <View
+              style={[
+                styles.categoryTabUnderline,
+                selectedCategory === '전체' && styles.categoryTabUnderlineActive,
+              ]}
+            />
           </TouchableOpacity>
           {CATEGORIES.map((category) => (
             <TouchableOpacity
               key={category}
-              style={[
-                styles.categoryButton,
-                selectedCategory === category && styles.categoryButtonActive,
-              ]}
+              style={styles.categoryTab}
               onPress={() => setSelectedCategory(category)}
               activeOpacity={0.7}
             >
               <Text
                 style={[
-                  styles.categoryButtonText,
-                  selectedCategory === category && styles.categoryButtonTextActive,
+                  styles.categoryTabLabel,
+                  selectedCategory === category && styles.categoryTabLabelActive,
                 ]}
               >
                 {category}
               </Text>
+              <View
+                style={[
+                  styles.categoryTabUnderline,
+                  selectedCategory === category && styles.categoryTabUnderlineActive,
+                ]}
+              />
             </TouchableOpacity>
           ))}
         </ScrollView>
+        <View style={styles.categoryFilterDivider} />
       </View>
+
+      {/* 질문 생성 가이드 모달 */}
+      <Modal
+        visible={showCreateWarningModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCreateWarningModal(false)}
+      >
+        <View style={styles.createWarningOverlay}>
+          <View style={styles.createWarningModal}>
+            <Text style={styles.createWarningTitle}>질문 등록 전 꼭 확인해주세요!</Text>
+            <Text style={styles.createWarningBody}>
+              다른 이용자에게 불쾌감이나 피해를 줄 수 있는 질문,{'\n'}
+              명예훼손·모욕·허위사실·혐오표현·성적 표현·개인정보 노출이 포함된 질문은 등록할 수 없습니다.
+            </Text>
+            <Text style={styles.createWarningBody}>
+              이 기준을 위반하는 질문은 사전 차단 또는 삭제될 수 있으며,{'\n'}
+              반복 위반 시 질문 작성 제한, 서비스 이용 제한이 적용될 수 있습니다.{'\n'}
+              관련 법령 위반 시 민형사상 책임이 발생할 수 있습니다.
+            </Text>
+            <View style={styles.createWarningButtons}>
+              <TouchableOpacity
+                style={[styles.createWarningButton, styles.createWarningCancelButton]}
+                onPress={() => setShowCreateWarningModal(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.createWarningCancelText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.createWarningButton, styles.createWarningConfirmButton]}
+                onPress={() => {
+                  setShowCreateWarningModal(false);
+                  router.push('/(tabs)/livepick/create');
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.createWarningConfirmText}>동의하고 계속</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* 질문 리스트 */}
       <ScrollView 
@@ -648,6 +682,69 @@ export default function LivePickScreen() {
           />
         }
       >
+        {/* 지난 라이브픽(왼쪽) · 정렬(오른쪽) — 카드보다 위에 드롭다운이 오도록 레이어 분리 */}
+        <View style={styles.archiveRowLayer}>
+          <View style={styles.archiveLinkContainer}>
+            <TouchableOpacity
+              onPress={() => router.push('/(tabs)/livepick/archive')}
+              activeOpacity={0.4}
+              style={styles.archivePillButton}
+            >
+              <Ionicons name="time-outline" size={16} color={colors.primary} style={{ marginRight: 6 }} />
+              <Text style={styles.archivePillText}>지난 라이브픽</Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+            </TouchableOpacity>
+            <View style={styles.archiveSortWrap}>
+              <TouchableOpacity
+                style={styles.archivePillButton}
+                activeOpacity={0.4}
+                onPress={() => setShowSortDropdown(!showSortDropdown)}
+              >
+                <Text style={styles.archivePillText}>
+                  {sortBy === 'latest' ? '최신순' : '인기순'}
+                </Text>
+                <Ionicons
+                  name="chevron-down"
+                  size={16}
+                  color={colors.primary}
+                  style={{ marginLeft: 6 }}
+                />
+              </TouchableOpacity>
+              {showSortDropdown && (
+                <>
+                  <TouchableOpacity
+                    style={StyleSheet.absoluteFill}
+                    activeOpacity={1}
+                    onPress={() => setShowSortDropdown(false)}
+                  />
+                  <View style={styles.sortDropdown}>
+                    <TouchableOpacity
+                      style={[styles.sortOption, sortBy === 'latest' && styles.sortOptionActive]}
+                      onPress={() => handleSortChange('latest')}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.sortOptionText, sortBy === 'latest' && styles.sortOptionTextActive]}>
+                        최신순
+                      </Text>
+                      {sortBy === 'latest' && <Ionicons name="checkmark" size={16} color="white" />}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.sortOption, sortBy === 'popular' && styles.sortOptionActive]}
+                      onPress={() => handleSortChange('popular')}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.sortOptionText, sortBy === 'popular' && styles.sortOptionTextActive]}>
+                        인기순
+                      </Text>
+                      {sortBy === 'popular' && <Ionicons name="checkmark" size={16} color="white" />}
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </View>
+          </View>
+        </View>
+
         {loading && !refreshing ? (
           <View style={styles.emptyState}>
             <ActivityIndicator size="large" color={colors.primary} />
@@ -671,12 +768,26 @@ export default function LivePickScreen() {
             );
           }
 
+          // 질문 5개마다 배너 1개 끼우기
+          const listItems: Array<{ type: 'question'; question: LivePickQuestion } | { type: 'banner'; key: string }> = [];
+          displayQuestions.forEach((question, i) => {
+            listItems.push({ type: 'question', question });
+            if ((i + 1) % 5 === 0) listItems.push({ type: 'banner', key: `banner-${i}` });
+          });
+
           return (
             <>
-              {displayQuestions.map((question) => (
-                <QuestionCard key={question.id} question={question} />
-              ))}
-              {hasMore && !loadingMore && (
+              {listItems.map((item) =>
+                item.type === 'question' ? (
+                  <QuestionCard key={item.question.id} question={item.question} />
+                ) : (
+                  <View key={item.key} style={{ width: '100%', marginVertical: 12, alignItems: 'center' }}>
+                    <BannerAdComponent />
+                  </View>
+                )
+              )}
+              {(sortBy === 'popular' && !searchQuery.trim() ? hasMorePopular : hasMore) &&
+                !loadingMore && (
                 <TouchableOpacity
                   style={{ marginTop: 8, alignSelf: 'center', flexDirection: 'row', alignItems: 'center' }}
                   activeOpacity={0.7}
@@ -697,34 +808,6 @@ export default function LivePickScreen() {
           );
         })()}
       </ScrollView>
-
-      {/* 라이브픽 튜토리얼 말풍선 - 화면 최상단 오버레이로 표시 (한 번만 표시) */}
-      {tutorialStatus && !tutorialStatus.livepickParticipated && !hasSeenLivepickTooltipRef.current && !hasSeenLivepickTooltip && (
-        <View
-          pointerEvents="box-none"
-          style={{
-            position: 'absolute',
-            top: 140, // 헤더 + 카테고리 바로 아래 정도
-            left: 0,
-            right: 0,
-            zIndex: 1000,
-            alignItems: 'center',
-          }}
-        >
-          <TutorialTooltip
-            message="라이브픽 질문에 한 번 참여해보세요"
-            position="bottom"
-            style={{}}
-            color="#FF5722"
-            blink={true}
-            onDismiss={async () => {
-              await AsyncStorage.setItem('hasSeenLivepickTutorialTooltip', 'true');
-              hasSeenLivepickTooltipRef.current = true;
-              setHasSeenLivepickTooltip(true);
-            }}
-          />
-        </View>
-      )}
 
       {/* 검색 모달 */}
       <Modal
@@ -805,8 +888,6 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     paddingHorizontal: 20,
     backgroundColor: colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -846,24 +927,95 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: colors.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: 'rgba(245, 249, 255, 0.83)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2,
   },
   createButtonText: {
     fontSize: 14,
     fontWeight: '600',
     color: colors.primary,
   },
+  createWarningOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  createWarningModal: {
+    width: '100%',
+    borderRadius: 20,
+    backgroundColor: colors.background,
+    paddingHorizontal: 20,
+    paddingTop: 22,
+    paddingBottom: 16,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  createWarningTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.primary,
+    marginBottom: 12,
+  },
+  createWarningBody: {
+    fontSize: 14,
+    color: colors.text,
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  createWarningButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 12,
+  },
+  createWarningButton: {
+    minWidth: 90,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  createWarningCancelButton: {
+    backgroundColor: '#f0f0f5',
+  },
+  createWarningConfirmButton: {
+    backgroundColor: colors.primary,
+  },
+  createWarningCancelText: {
+    fontSize: 14,
+    color: colors.text,
+    fontWeight: '500',
+  },
+  createWarningConfirmText: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: '600',
+  },
   content: {
     flex: 1,
+    zIndex: 0,
   },
   contentContainer: {
     padding: 20,
     gap: 16,
   },
   questionCard: {
+    zIndex: 0,
     backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 20,
@@ -959,46 +1111,88 @@ const styles = StyleSheet.create({
   },
   categoryFilter: {
     backgroundColor: colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    paddingVertical: 12,
+    position: 'relative',
+    zIndex: 100,
+    elevation: 12,
   },
-  categoryFilterContent: {
-    paddingHorizontal: 20,
-    gap: 8,
+  /** 스크롤 내 첫 행: 질문 카드(elevation)보다 위에 드롭다운이 그려지도록 */
+  archiveRowLayer: {
+    position: 'relative',
+    zIndex: 999999,
+    elevation: 9999,
   },
-  categoryButton: {
+  archiveLinkContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 10,
+    paddingTop: 2,
+    paddingBottom: 8,
+    backgroundColor: 'transparent',
+  },
+  archiveSortWrap: {
+    position: 'relative',
+    zIndex: 999999,
+    elevation: 9999,
+  },
+  archivePillButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: colors.surface,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.69)',
     borderWidth: 1,
-    borderColor: colors.border,
-    marginRight: 8,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 6,
   },
-  categoryButtonActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  categoryButtonText: {
+  archivePillText: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.text,
+    color: colors.primary,
   },
-  categoryButtonTextActive: {
-    color: 'white',
+  categoryFilterContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 0,
+  },
+  categoryTab: {
+    paddingHorizontal: 12,
+    marginRight: 8,
+    alignItems: 'center',
+    minWidth: 36,
+  },
+  categoryTabLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#94a3b8',
+    paddingBottom: 10,
+  },
+  categoryTabLabelActive: {
+    color: colors.primary,
+  },
+  /** 비활성도 높이 맞춤(투명 3px), 활성만 primary — 하단 얇은 디비전 위에 굵은 선 */
+  categoryTabUnderline: {
+    height: 3,
+    alignSelf: 'stretch',
+    backgroundColor: 'transparent',
+  },
+  categoryTabUnderlineActive: {
+    backgroundColor: colors.primary,
+  },
+  /** 전체 가로 하단 디비전 라인 */
+  categoryFilterDivider: {
+    height: 1,
+    backgroundColor: colors.border,
   },
   searchButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  sortButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -1020,8 +1214,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
-    elevation: 8,
-    zIndex: 1000,
+    elevation: 10000,
+    zIndex: 9999999,
     borderWidth: 1,
     borderColor: colors.border,
   },

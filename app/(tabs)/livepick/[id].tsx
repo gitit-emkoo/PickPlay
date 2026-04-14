@@ -20,7 +20,8 @@ import {
   reportLivePickQuestion,
   hasReportedLivePickQuestion,
 } from '../../../src/services/livepick';
-import { updateTutorialProgress } from '../../../src/services/tutorial';
+import { getTutorialStatus, updateTutorialProgress } from '../../../src/services/tutorial';
+import { currentWeekKeyKST } from '../../../src/utils/date';
 
 // 임시 더미 데이터 (나중에 백엔드 연동)
 const getDummyQuestion = (id: string): LivePickQuestion | null => {
@@ -63,7 +64,8 @@ const getDummyQuestion = (id: string): LivePickQuestion | null => {
 
 export default function QuestionDetailScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id: string; from?: string }>();
+  const id = params.id as string;
   const [user, setUser] = useState<{ uid: string } | null>(null);
   const [question, setQuestion] = useState<LivePickQuestion | null>(null);
   const [loading, setLoading] = useState(true);
@@ -75,9 +77,19 @@ export default function QuestionDetailScreen() {
   const [showParticipateModal, setShowParticipateModal] = useState(false);
   const [showLadderGame, setShowLadderGame] = useState(false);
   const [showRewardModal, setShowRewardModal] = useState(false);
-  const [showCongratulationModal, setShowCongratulationModal] = useState(false);
+  /** 사다리 → 보상 모달 전환 시 iOS에서 인스턴스 재사용으로 모달이 안 뜨는 경우 완화 */
+  const [rewardModalInstanceKey, setRewardModalInstanceKey] = useState(0);
+  const [showFinalMissionModal, setShowFinalMissionModal] = useState(false);
   const [rewardPoints, setRewardPoints] = useState(0);
   const [isLadderReward, setIsLadderReward] = useState(false);
+  const [tutorialStatus, setTutorialStatus] = useState<{
+    mainAnswered: boolean;
+    livepickParticipated: boolean;
+    livepickCreated: boolean;
+    rewardGiven500: boolean;
+    tutorialChoice: 'pending' | 'opt_in' | 'opt_out';
+    allCompleted: boolean;
+  } | null>(null);
   
   // 광고 관련 상태
   const [adLoaded, setAdLoaded] = useState(false);
@@ -91,6 +103,7 @@ export default function QuestionDetailScreen() {
   const [reportDescription, setReportDescription] = useState('');
   const [isReporting, setIsReporting] = useState(false);
   const [hasReported, setHasReported] = useState(false);
+  const [isArchivedQuestion, setIsArchivedQuestion] = useState(false);
 
   // 참여 기록 확인 함수
   const checkParticipation = async (uid: string, questionId?: string) => {
@@ -140,6 +153,10 @@ export default function QuestionDetailScreen() {
         hasReportedLivePickQuestion(user.uid, id)
           .then(setHasReported)
           .catch(() => setHasReported(false));
+        // 튜토리얼 상태 로드 (모달 진행 제어용)
+        getTutorialStatus(user.uid)
+          .then(setTutorialStatus)
+          .catch(() => setTutorialStatus(null));
       }
     });
     return unsubscribe;
@@ -159,12 +176,28 @@ export default function QuestionDetailScreen() {
     
     // 초기 데이터 로드
     getLivePickQuestion(id).then((data) => {
+      if (data) {
+        try {
+          const currentWeekKey = currentWeekKeyKST();
+          setIsArchivedQuestion(data.weekKey !== currentWeekKey);
+        } catch {
+          setIsArchivedQuestion(false);
+        }
+      }
       setQuestion(data);
       setLoading(false);
     });
 
     // 실시간 구독
     const unsubscribe = subscribeLivePickQuestion(id, (updatedQuestion) => {
+      if (updatedQuestion) {
+        try {
+          const currentWeekKey = currentWeekKeyKST();
+          setIsArchivedQuestion(updatedQuestion.weekKey !== currentWeekKey);
+        } catch {
+          setIsArchivedQuestion(false);
+        }
+      }
       setQuestion(updatedQuestion);
       setLoading(false);
     });
@@ -192,8 +225,12 @@ export default function QuestionDetailScreen() {
   useEffect(() => {
     if (Platform.OS === 'android') {
       const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-        // 목록 화면으로 이동
-        router.push('/(tabs)/livepick');
+        // 진입 경로에 따라 적절한 화면으로 이동
+        if (params.from === 'my_created') {
+          router.push('/my-created-questions');
+        } else {
+          router.push('/(tabs)/livepick');
+        }
         return true; // 기본 동작 방지
       });
 
@@ -233,7 +270,7 @@ export default function QuestionDetailScreen() {
         earnedRewardRef.current = false; // 광고 새로 로드 시 플래그 초기화
 
         // 타임아웃 설정 (10초 내 로드되지 않으면 실패 처리)
-        let loadTimeoutRef: NodeJS.Timeout | null = null;
+        let loadTimeoutRef: ReturnType<typeof setTimeout> | null = null;
         const loadTimeout = setTimeout(() => {
           console.warn('⏰ [LivePick] 광고 로드 타임아웃 (10초)');
           loadTimeoutRef = null;
@@ -425,7 +462,7 @@ export default function QuestionDetailScreen() {
     setShowParticipateModal(true);
   };
 
-  // 10P 받기 선택 (명령문: 즉시 보상 10P)
+  // 5P 받기 선택 (즉시 보상 5P)
   const handleReceiveBasicReward = async () => {
     if (!user || !question || selectedOption === null) return;
 
@@ -435,7 +472,7 @@ export default function QuestionDetailScreen() {
       // 1. 참여 기록 생성
       await participateInLivePick(user.uid, question.id, selectedOption);
       
-      // 2. 기본 보상(10P) 지급
+      // 2. 기본 보상(5P) 지급
       await receiveBasicReward(user.uid, question.id);
 
       // 3. 참여 상태 업데이트
@@ -446,29 +483,24 @@ export default function QuestionDetailScreen() {
       setTodayParticipationCount(newCount);
       
       // 5. 보상 모달 표시
-      setRewardPoints(10);
+      setRewardPoints(5);
       setIsLadderReward(false);
-      setShowRewardModal(true);
+      // ParticipateModal이 fade out 되는 타이밍과 충돌해서 간헐적으로 화면이 멈추는 현상이 있어
+      // 보상 모달은 약간 지연 후 열어 모달 스택을 안정화한다.
+      setTimeout(() => {
+        setShowRewardModal(true);
+      }, 300);
 
       // 튜토리얼 상태 업데이트 (라이브픽 참여)
       try {
-        const result = await updateTutorialProgress(user.uid, 'livepickParticipated');
-        // 참여 완료 시 축하 팝업 표시 (단, livepickCreated는 아직 안 됨)
-        // 실제로 업데이트가 수행되었을 때만 축하 팝업 표시 (첫 번째 참여만)
-        if (result?.wasUpdated && 
-            result.userData?.tutorial?.mainAnswered && 
-            result.userData?.tutorial?.livepickParticipated &&
-            !result.userData?.tutorial?.livepickCreated) {
-          // 보상 모달이 닫힌 후 축하 팝업 표시
-          setTimeout(() => {
-            setShowCongratulationModal(true);
-          }, 500);
-        }
+        await updateTutorialProgress(user.uid, 'livepickParticipated');
+        const next = await getTutorialStatus(user.uid);
+        setTutorialStatus(next);
       } catch (e) {
         console.warn('[Tutorial] 라이브픽 참여 튜토리얼 업데이트 실패:', e);
       }
 
-      console.log('✅ 기본 보상 지급 완료 (10P)');
+      console.log('✅ 기본 보상 지급 완료 (5P)');
     } catch (error: any) {
       console.error('❌ 보상 지급 실패:', error);
       const errorMessage = error?.message || '보상 지급에 실패했습니다.';
@@ -482,7 +514,7 @@ export default function QuestionDetailScreen() {
     }
   };
 
-  // 광고 시청 후 게임하기 선택
+  // 영상 시청 후 게임하기 선택
   const handleWatchAd = async () => {
     console.log('🟢 [LivePick] handleWatchAd 함수 호출됨');
     console.log('📊 [LivePick] rewardedAdRef.current:', rewardedAdRef.current ? '존재함' : 'null');
@@ -585,20 +617,27 @@ export default function QuestionDetailScreen() {
       // 튜토리얼 상태 업데이트 (라이브픽 참여)
       try {
         await updateTutorialProgress(user.uid, 'livepickParticipated');
+        const next = await getTutorialStatus(user.uid);
+        setTutorialStatus(next);
       } catch (e) {
         console.warn('[Tutorial] 라이브픽 참여 튜토리얼 업데이트 실패:', e);
       }
       console.log('✅ [LivePick] 사다리 게임 보상 지급 완료:', points, 'P');
       
       // 사다리 게임 모달 닫기 (1초 후)
+      // iOS: 광고 전체화면 + RN Modal 연속 전환 시 스택이 꼬이기 쉬움 →
+      // 사다리 dismiss 애니메이션 후 InteractionManager + 충분한 지연 뒤 보상 Modal 표시
       setTimeout(() => {
         setShowLadderGame(false);
-        // 보상 모달 표시 (모달 닫힌 후 300ms)
-        setTimeout(() => {
-          setRewardPoints(points);
-          setIsLadderReward(true);
-          setShowRewardModal(true);
-        }, 300);
+        const afterLadderCloseMs = Platform.OS === 'ios' ? 700 : 280;
+        InteractionManager.runAfterInteractions(() => {
+          setTimeout(() => {
+            setRewardPoints(points);
+            setIsLadderReward(true);
+            setRewardModalInstanceKey((k) => k + 1);
+            setShowRewardModal(true);
+          }, afterLadderCloseMs);
+        });
       }, 1000);
     } catch (error: any) {
       console.error('❌ [LivePick] 보상 지급 실패:', error);
@@ -616,12 +655,67 @@ export default function QuestionDetailScreen() {
   };
 
   // 보상 모달 닫기
-  const handleRewardModalClose = () => {
+  // 중요: tutorialStatus state는 비동기 업데이트 타이밍 때문에 최신이 아닐 수 있어서,
+  // 모달 닫을 때마다 서버에서 최신 tutorial status를 다시 조회해 조건을 확정한다.
+  const handleRewardModalCloseAndNext = async () => {
+    // 먼저 현재 모달을 확실히 닫고(애니메이션/dismiss 완료 시간 확보),
+    // 그 다음 다음 단계 모달을 띄워 모달 스택 충돌을 방지합니다.
     setShowRewardModal(false);
-    // 기본 보상 (10P)을 받았고, 사다리 보상이 아닌 경우에만 축하 팝업 표시
-    // (사다리 게임은 광고 시청 후이므로 제외)
-    if (!isLadderReward && rewardPoints === 10) {
-      // 잠시 후 축하 팝업 표시 체크는 이미 기본 보상 함수에서 처리됨
+    // iOS에서는 전체화면 모달 + 다음 모달 전환 타이밍이 조금만 꼬여도
+    // "보이지 않는 투명 오버레이"처럼 UI가 멈춘 상태가 될 수 있어,
+    // 안전하게 다른 모달 상태도 함께 정리하고 더 여유 있게 대기합니다.
+    setShowLadderGame(false);
+    setShowParticipateModal(false);
+
+    const waitMs = Platform.OS === 'ios' ? 650 : 350;
+    await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
+
+    if (!user) {
+      router.push('/(tabs)/livepick');
+      return;
+    }
+
+    try {
+      const latest = await getTutorialStatus(user.uid);
+
+      if (__DEV__) {
+        console.log('[Tutorial][LivePick] RewardModal close → latest tutorial status', {
+          latest,
+          currentState: tutorialStatus,
+        });
+      }
+
+      const shouldShowFinal =
+        latest?.tutorialChoice === 'opt_in' &&
+        latest?.mainAnswered &&
+        latest?.livepickParticipated &&
+        !latest?.livepickCreated;
+
+      if (shouldShowFinal) {
+        // RewardModal dismiss 직후 바로 모달을 띄우면 iOS에서 스택이 꼬일 수 있음.
+        InteractionManager.runAfterInteractions(() => {
+          setShowFinalMissionModal(true);
+        });
+      } else {
+        setShowFinalMissionModal(false);
+        InteractionManager.runAfterInteractions(() => {
+          router.push('/(tabs)/livepick');
+        });
+      }
+    } catch (e) {
+      // 조회 실패 시 fallback: 기존 state 기준으로 처리
+      console.warn('[Tutorial][LivePick] latest tutorial status 조회 실패:', e);
+      const shouldShowFinal =
+        tutorialStatus?.tutorialChoice === 'opt_in' &&
+        tutorialStatus?.mainAnswered &&
+        tutorialStatus?.livepickParticipated &&
+        !tutorialStatus?.livepickCreated;
+
+      if (shouldShowFinal) {
+        InteractionManager.runAfterInteractions(() => setShowFinalMissionModal(true));
+      } else {
+        InteractionManager.runAfterInteractions(() => router.push('/(tabs)/livepick'));
+      }
     }
   };
 
@@ -690,8 +784,12 @@ export default function QuestionDetailScreen() {
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => {
-            // 목록 화면으로 이동 (목록 화면이 다시 마운트되면 자동으로 갱신됨)
-            router.push('/(tabs)/livepick');
+            // 진입 경로에 따라 적절한 화면으로 이동
+            if (params.from === 'my_created') {
+              router.push('/my-created-questions');
+            } else {
+              router.push('/(tabs)/livepick');
+            }
           }}
           activeOpacity={0.7}
         >
@@ -714,30 +812,22 @@ export default function QuestionDetailScreen() {
           <Text style={styles.participantText}>{question.participantCount}명 참여 중</Text>
         </View>
 
-        {/* 일일 참여 제한 표시 */}
+        {/* 일일 참여 제한 표시 (메인 LivePick 헤더 배지와 동일) */}
         {user && (
-          <View style={[
-            styles.dailyLimitInfo,
-            todayParticipationCount >= 4 && styles.dailyLimitInfoWarning
-          ]}>
-            <View style={styles.dailyLimitContent}>
-              <Ionicons 
-                name={todayParticipationCount >= 4 ? "alert-circle" : "time"} 
-                size={18} 
-                color={todayParticipationCount >= 4 ? colors.warning : colors.textSecondary} 
-              />
-              <Text style={[
+          <View style={styles.dailyLimitInfo}>
+            <Ionicons
+              name="time"
+              size={14}
+              color={todayParticipationCount >= 4 ? colors.warning : colors.primary}
+            />
+            <Text
+              style={[
                 styles.dailyLimitText,
-                todayParticipationCount >= 4 && styles.dailyLimitTextWarning
-              ]}>
-                오늘 남은 참여: {Math.max(0, 4 - todayParticipationCount)}/4회
-              </Text>
-            </View>
-            {todayParticipationCount >= 4 && (
-              <Text style={styles.dailyLimitWarning}>
-                내일 다시 참여하실 수 있습니다
-              </Text>
-            )}
+                todayParticipationCount >= 4 && styles.dailyLimitTextWarning,
+              ]}
+            >
+              오늘 {todayParticipationCount}/4회
+            </Text>
           </View>
         )}
 
@@ -748,10 +838,10 @@ export default function QuestionDetailScreen() {
             style={[
               styles.optionCard,
               selectedOption === 1 && styles.optionCardSelected,
-              hasParticipated && styles.optionCardDisabled,
+              (hasParticipated || isArchivedQuestion) && styles.optionCardDisabled,
             ]}
             onPress={() => handleOptionSelect(1)}
-            disabled={hasParticipated}
+            disabled={hasParticipated || isArchivedQuestion}
             activeOpacity={0.7}
           >
             <Text style={[
@@ -770,10 +860,10 @@ export default function QuestionDetailScreen() {
             style={[
               styles.optionCard,
               selectedOption === 2 && styles.optionCardSelected,
-              (hasParticipated || (user && question && question.createdBy === user.uid)) && styles.optionCardDisabled,
+              (hasParticipated || isArchivedQuestion) && styles.optionCardDisabled,
             ]}
             onPress={() => handleOptionSelect(2)}
-            disabled={!!(hasParticipated || (user && question && question.createdBy === user.uid))}
+            disabled={hasParticipated || isArchivedQuestion}
             activeOpacity={0.7}
           >
             <Text style={[
@@ -798,13 +888,13 @@ export default function QuestionDetailScreen() {
         )}
 
         {/* 참여 안내 */}
-        {!hasParticipated && !selectedOption && (
+        {!hasParticipated && !selectedOption && !isArchivedQuestion && (
           <View style={styles.infoBox}>
             <Ionicons name="information-circle" size={20} color={colors.primary} />
             <Text style={styles.infoText}>
               {user && question && question.createdBy === user.uid
                 ? '자신이 만든 질문에는 참여할 수 없습니다.'
-                : '선택지를 클릭하여 참여하세요.\n참여 후 10P를 받거나 광고 시청 후 추가 보상을 받을 수 있습니다.'}
+                : '선택지를 클릭하여 참여하세요.\n참여 후 5P를 받거나 영상 시청 후 추가 보상을 받을 수 있습니다.'}
             </Text>
           </View>
         )}
@@ -815,6 +905,16 @@ export default function QuestionDetailScreen() {
             <Ionicons name="checkmark-circle" size={20} color={colors.success} />
             <Text style={styles.infoText}>
               참여가 완료되었습니다!
+            </Text>
+          </View>
+        )}
+
+        {/* 종료된 질문 안내 */}
+        {isArchivedQuestion && (
+          <View style={styles.infoBox}>
+            <Ionicons name="information-circle" size={20} color={colors.primary} />
+            <Text style={styles.infoText}>
+              지난 질문은 결과만 확인할 수 있고, 새로 참여하거나 보상을 받을 수 없습니다.
             </Text>
           </View>
         )}
@@ -871,6 +971,7 @@ export default function QuestionDetailScreen() {
         visible={showLadderGame}
         transparent
         animationType="slide"
+        presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
         onRequestClose={() => {
           console.log('🔙 [LivePick] 사다리 게임 모달 닫기 요청');
           setShowLadderGame(false);
@@ -888,60 +989,47 @@ export default function QuestionDetailScreen() {
 
       {/* 보상 모달 */}
       <RewardModal
+        key={`reward-modal-${rewardModalInstanceKey}`}
         visible={showRewardModal}
         points={rewardPoints}
         isLadderReward={isLadderReward}
         onClose={() => {
-          setShowRewardModal(false);
-          // 목록 화면으로 돌아가서 투표 결과가 반영되도록
-          router.push('/(tabs)/livepick');
+          // 비동기 처리: 버튼 탭 즉시 닫고, 최신 tutorial 상태 기반으로 다음 화면/모달 결정
+          void handleRewardModalCloseAndNext();
         }}
       />
 
-      {/* 축하 팝업 (라이브픽 참여 완료) */}
-      {showCongratulationModal && (
-        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center', zIndex: 1100 }}>
-          <View style={{ backgroundColor: 'white', borderRadius: 20, padding: 28, alignItems: 'center', shadowColor: colors.shadow, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 16, elevation: 8, marginHorizontal: 40 }}>
-            <View style={{ width: 60, height: 60, backgroundColor: '#E3F2FD', borderRadius: 30, justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
-              <Ionicons name="trophy" size={32} color={colors.primary} />
-            </View>
-            <Text style={{ fontSize: 20, fontWeight: '700', color: colors.primary, textAlign: 'center', marginBottom: 12 }}>첫 번째 참여와 보상을{'\n'}축하합니다! 🎉</Text>
-            <Text style={{ fontSize: 16, color: colors.text, textAlign: 'center', lineHeight: 24, marginBottom: 24 }}>이제 질문을 생성해 볼까요?</Text>
-            <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
-              <TouchableOpacity 
-                onPress={() => setShowCongratulationModal(false)} 
-                style={{ 
-                  flex: 1,
-                  backgroundColor: colors.surface, 
-                  borderRadius: 12, 
-                  paddingVertical: 14, 
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  alignItems: 'center'
-                }}
-              >
-                <Text style={{ fontSize: 16, color: colors.text, fontWeight: '600' }}>아니요</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
+      {/* 4. 마지막 미션 모달 */}
+      <Modal
+        visible={showFinalMissionModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowFinalMissionModal(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }}>
+          <View style={{ width: '100%', borderRadius: 20, backgroundColor: colors.background, paddingHorizontal: 20, paddingTop: 22, paddingBottom: 16 }}>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: colors.primary, marginBottom: 10 }}>
+              마지막 미션
+            </Text>
+            <Text style={{ fontSize: 14, color: colors.text, lineHeight: 20, marginBottom: 16 }}>
+              라이브픽 질문을 만들면 미션 클리어{'\n'}
+              추가 500P 가 즉시 지급돼요.
+            </Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+              <TouchableOpacity
+                activeOpacity={0.7}
                 onPress={() => {
-                  setShowCongratulationModal(false);
-                  // 라이브픽 메인 페이지로 이동 (질문 생성 버튼이 있는 곳)
-                  router.push('/(tabs)/livepick');
-                }} 
-                style={{ 
-                  flex: 1,
-                  backgroundColor: colors.primary, 
-                  borderRadius: 12, 
-                  paddingVertical: 14,
-                  alignItems: 'center'
+                  setShowFinalMissionModal(false);
+                  router.push('/(tabs)/livepick/create');
                 }}
+                style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 999, backgroundColor: colors.primary }}
               >
-                <Text style={{ fontSize: 16, color: 'white', fontWeight: '600' }}>예</Text>
+                <Text style={{ fontSize: 14, color: 'white', fontWeight: '800' }}>질문 만들기</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
-      )}
+      </Modal>
 
       {/* 신고 모달 */}
       <Modal
@@ -1134,20 +1222,22 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   dailyLimitInfo: {
-    flexDirection: 'column',
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 4,
+    alignSelf: 'flex-end',
     marginBottom: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
     backgroundColor: colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
   },
   dailyLimitInfoWarning: {
-    backgroundColor: '#FFF4E6',
-    borderColor: colors.warning,
+    // 더 이상 배경을 바꾸지 않고, 텍스트/아이콘 색으로만 경고를 표현합니다.
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
   },
   dailyLimitContent: {
     flexDirection: 'row',
@@ -1156,14 +1246,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   dailyLimitText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
-    color: colors.textSecondary,
-    flexShrink: 1,
+    color: colors.primary,
   },
   dailyLimitTextWarning: {
     color: colors.warning,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   dailyLimitWarning: {
     fontSize: 12,

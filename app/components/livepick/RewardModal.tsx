@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Platform } from 'react-native';
 import LottieView from 'lottie-react-native';
 import colors from '../../../src/styles/colors';
 
@@ -22,6 +22,8 @@ export default function RewardModal({
       transparent
       animationType="fade"
       onRequestClose={onClose}
+      // iOS: 광고/다른 Modal 직후에 보상 Modal이 안 보이거나 터치가 막히는 경우 완화
+      presentationStyle={Platform.OS === 'ios' ? 'overFullScreen' : undefined}
     >
       <View style={styles.overlay}>
         <View style={styles.container}>
@@ -73,15 +75,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
   },
   container: {
     backgroundColor: colors.surface,
     borderRadius: 24,
-    padding: 32,
-    width: '100%',
-    maxWidth: 400,
+    paddingVertical: 32,
+    paddingHorizontal: 24,
+    width: '88%',
+    maxWidth: 420,
     alignItems: 'center',
+    alignSelf: 'center',
     shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,

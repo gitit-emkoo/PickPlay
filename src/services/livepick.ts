@@ -1,6 +1,7 @@
 import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import { LivePickQuestion, LivePickParticipation, LivePickReward, LivePickReport } from '../types/livepick';
+import { currentWeekKeyKST, getCurrentWeekMondayStartKST } from '../utils/date';
 import { ensureUser } from './store';
 import { ensureAnonymousAuth } from './firebase';
 import { recordPointHistory } from './pointHistory';
@@ -14,6 +15,7 @@ const COLLECTIONS = {
   PARTICIPATIONS: 'livepick_participations',
   REWARDS: 'livepick_rewards',
   REPORTS: 'livepick_reports',
+  WEEKLY_WINNERS: 'livepick_weekly_winners',
 } as const;
 
 const ensureAuthenticatedUser = async (expectedUid?: string): Promise<string> => {
@@ -56,14 +58,39 @@ export async function createLivePickQuestion(
     const authedUid = await ensureAuthenticatedUser(uid);
     console.log('[LivePick][Create] 인증 확인 완료', { uid, authedUid });
 
-    // 1. 사용자 포인트 확인 (10P 차감 필요)
+    // 1. 오늘 생성한 질문 개수 제한 (하루 최대 2개)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTimestamp = firestore.Timestamp.fromDate(today);
+
+    const todayQuestionsSnapshot = await firestore()
+      .collection(COLLECTIONS.QUESTIONS)
+      .where('createdBy', '==', uid)
+      .where('createdAt', '>=', todayTimestamp)
+      .get();
+
+    const todayQuestionCount = todayQuestionsSnapshot.size;
+    console.log('[LivePick][Create] 오늘 생성한 질문 수', {
+      uid,
+      today: today.toISOString(),
+      todayQuestionCount,
+    });
+
+    if (todayQuestionCount >= 2) {
+      throw new Error('하루에 생성할 수 있는 라이브픽 질문은 2개까지입니다.');
+    }
+
+    // 2. 사용자 포인트 확인 (10P 차감 필요)
     const userData = await ensureUser(uid);
     console.log('[LivePick][Create] 사용자 포인트 확인', { uid, points: userData.points });
     if (userData.points < 10) {
       throw new Error('포인트가 부족합니다. 10P 이상 필요합니다.');
     }
 
-    // 2. 질문 생성 (명령문: 카테고리는 tags 필드로 저장)
+    // 한국시간 기준 현재 주의 weekKey 계산
+    const weekKey = currentWeekKeyKST();
+
+    // 3. 질문 생성 (명령문: 카테고리는 tags 필드로 저장)
     const questionRef = firestore().collection(COLLECTIONS.QUESTIONS).doc();
     const questionData: Omit<LivePickQuestion, 'id'> = {
       createdBy: uid,
@@ -78,6 +105,7 @@ export async function createLivePickQuestion(
       pointDeducted: 10,
       rewardGiven: false,
       createdAt: firestore.FieldValue.serverTimestamp() as any,
+      weekKey,
       status: 'active',
     };
 
@@ -158,6 +186,183 @@ export async function createLivePickQuestion(
 }
 
 /**
+ * 오늘 해당 사용자가 생성한 라이브픽 질문 개수를 조회합니다. (KST 기준, 클라이언트 UX용)
+ * - 서버의 createLivePickQuestion 제한 로직과 동일한 조건으로 계산
+ * - 단, 실제 제한은 항상 서버에서 최종 검증하므로 이 함수는 "사전 안내"용입니다.
+ */
+export async function getTodayLivePickQuestionCount(uid: string): Promise<number> {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayTimestamp = firestore.Timestamp.fromDate(today);
+
+  const snapshot = await firestore()
+    .collection(COLLECTIONS.QUESTIONS)
+    .where('createdBy', '==', uid)
+    .where('createdAt', '>=', todayTimestamp)
+    .get();
+
+  return snapshot.size;
+}
+
+/**
+ * 해당 주 질문 목록에서 Weekly TOP 1건을 계산합니다.
+ * - participantCount 내림차순 → createdAt 오름차순 → id 오름차순
+ */
+function computeWeeklyWinnerFromQuestions(questions: LivePickQuestion[]): LivePickQuestion | null {
+  if (questions.length === 0) return null;
+  const sorted = [...questions].sort((a, b) => {
+    const aCount = a.participantCount || 0;
+    const bCount = b.participantCount || 0;
+    if (bCount !== aCount) return bCount - aCount;
+    const aCreated =
+      a.createdAt instanceof Date
+        ? a.createdAt
+        : (a.createdAt as FirebaseFirestoreTypes.Timestamp).toDate();
+    const bCreated =
+      b.createdAt instanceof Date
+        ? b.createdAt
+        : (b.createdAt as FirebaseFirestoreTypes.Timestamp).toDate();
+    const diff = aCreated.getTime() - bCreated.getTime();
+    if (diff !== 0) return diff;
+    if (a.id < b.id) return -1;
+    if (a.id > b.id) return 1;
+    return 0;
+  });
+  return sorted[0] || null;
+}
+
+/**
+ * 저장된 Weekly TOP 문서를 LivePickQuestion 형태로 변환합니다.
+ */
+function weeklyWinnerDocToQuestion(
+  weekKey: string,
+  data: FirebaseFirestoreTypes.DocumentData
+): LivePickQuestion {
+  const createdAt = data.createdAt?.toDate
+    ? data.createdAt.toDate()
+    : new Date((data.createdAt as FirebaseFirestoreTypes.Timestamp)?.toMillis?.() ?? 0);
+  return {
+    id: data.id ?? '',
+    createdBy: data.createdBy ?? '',
+    title: data.title ?? '',
+    option1: data.option1 ?? '',
+    option2: data.option2 ?? '',
+    category: data.category ?? '일상',
+    tags: data.tags ?? [],
+    participantCount: data.participantCount ?? 0,
+    option1Count: data.option1Count ?? 0,
+    option2Count: data.option2Count ?? 0,
+    pointDeducted: data.pointDeducted ?? 0,
+    rewardGiven: data.rewardGiven ?? false,
+    createdAt,
+    weekKey: data.weekKey ?? weekKey,
+    status: data.status ?? 'active',
+  } as LivePickQuestion;
+}
+
+/**
+ * 저장된 모든 주간 TOP 질문을 weekKey 내림차순으로 반환합니다.
+ * (지난주, 지지난주, 지지지난주 … 전부 표시용)
+ */
+export async function getWeeklyWinners(): Promise<LivePickQuestion[]> {
+  const snapshot = await firestore().collection(COLLECTIONS.WEEKLY_WINNERS).get();
+  const list: LivePickQuestion[] = [];
+  snapshot.forEach((doc) => {
+    const data = doc.data();
+    list.push(weeklyWinnerDocToQuestion(doc.id, data));
+  });
+  list.sort((a, b) => (b.weekKey ?? '').localeCompare(a.weekKey ?? ''));
+  return list;
+}
+
+/**
+ * 특정 주(weekKey)의 Weekly TOP 질문을 반환합니다.
+ * - 이미 저장된 값이 있으면 조회만 하고 반환 (한 번 계산 후 재사용).
+ * - 지난 주인데 저장이 없으면 한 번 계산해서 저장한 뒤 반환.
+ * - 현재 주는 저장하지 않고 매번 계산만 반환.
+ * @param weekKey 'YYYY-MM-DD' 형식의 주 키 (그 주 월요일, KST 기준)
+ * @returns 해당 주의 TOP 질문 1개 (없으면 null)
+ */
+export async function getWeeklyWinner(weekKey: string): Promise<LivePickQuestion | null> {
+  try {
+    const currentWeek = currentWeekKeyKST();
+    const winnerRef = firestore()
+      .collection(COLLECTIONS.WEEKLY_WINNERS)
+      .doc(weekKey);
+
+    // 1. 저장된 값이 있으면 그대로 반환
+    const cached = await winnerRef.get();
+    if (cached.exists && cached.data()) {
+      const data = cached.data()!;
+      return weeklyWinnerDocToQuestion(weekKey, data);
+    }
+
+    // 2. 해당 주 질문 조회 후 계산
+    const snapshot = await firestore()
+      .collection(COLLECTIONS.QUESTIONS)
+      .where('weekKey', '==', weekKey)
+      .get();
+
+    if (snapshot.empty) {
+      return null;
+    }
+
+    const questions: LivePickQuestion[] = [];
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      questions.push({
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt as any),
+      } as LivePickQuestion);
+    });
+
+    const winner = computeWeeklyWinnerFromQuestions(questions);
+    if (!winner) return null;
+
+    // 3. 지난 주인 경우에만 한 번 저장 (현재 주는 참여가 계속 변하므로 저장하지 않음)
+    if (weekKey < currentWeek) {
+      try {
+        const payload: Record<string, unknown> = {
+          id: winner.id,
+          createdBy: winner.createdBy,
+          title: winner.title,
+          option1: winner.option1,
+          option2: winner.option2,
+          category: winner.category,
+          tags: winner.tags ?? [],
+          participantCount: winner.participantCount ?? 0,
+          option1Count: winner.option1Count ?? 0,
+          option2Count: winner.option2Count ?? 0,
+          pointDeducted: winner.pointDeducted ?? 0,
+          rewardGiven: winner.rewardGiven ?? false,
+          weekKey: winner.weekKey ?? weekKey,
+          status: winner.status ?? 'active',
+        };
+        payload.createdAt =
+          winner.createdAt instanceof Date
+            ? firestore.Timestamp.fromDate(winner.createdAt)
+            : winner.createdAt;
+        await winnerRef.set(payload);
+        console.log('[LivePick] getWeeklyWinner 저장 완료:', weekKey, winner.id);
+      } catch (writeError: any) {
+        console.warn('[LivePick] getWeeklyWinner 저장 실패(계산값은 반환):', writeError?.message);
+      }
+    }
+
+    return winner;
+  } catch (error: any) {
+    console.error('[LivePick] getWeeklyWinner 실패:', {
+      weekKey,
+      code: error?.code,
+      message: error?.message,
+      stack: error?.stack,
+    });
+    throw error;
+  }
+}
+
+/**
  * 활성 상태의 LivePick 질문 목록을 조회합니다.
  * @param limit 최대 조회 개수 (기본값: 20)
  * @param startAfterDate 이 날짜(createdAt) 이후의 문서부터 조회 (페이지네이션용, 선택사항)
@@ -172,9 +377,9 @@ export async function getLivePickQuestions(
   startAfterValue?: any
 ): Promise<LivePickQuestion[]> {
   try {
-    let query = firestore()
-      .collection(COLLECTIONS.QUESTIONS)
-      .where('status', '==', 'active');
+    // CollectionReference는 Query를 상속하므로, 공통된 Query 타입으로 취급한다.
+    let query: FirebaseFirestoreTypes.Query = firestore()
+      .collection(COLLECTIONS.QUESTIONS);
 
     // 정렬 기준에 따라 다른 orderBy 사용
     let snapshot;
@@ -229,6 +434,76 @@ export async function getLivePickQuestions(
     console.error('❌ 에러 코드:', error?.code);
     console.error('❌ 에러 스택:', error?.stack);
     console.error('❌ 에러 전체:', JSON.stringify(error, null, 2));
+    throw error;
+  }
+}
+
+/**
+ * 지난 라이브픽 전용: 이번 주 KST 월요일 00:00 **이전**에 생성된 질문만 대상으로 `createdAt` 내림차순 최대 limit건.
+ * (전역 최신 N건을 가져온 뒤 weekKey로 거르는 방식이 아니라, 시각 기준으로 “이번 주 글”을 제외한다.)
+ */
+export async function getArchivedLivePickQuestions(
+  limit: number = 100,
+  startAfterDate?: Date
+): Promise<LivePickQuestion[]> {
+  try {
+    const thisWeekMondayStart = getCurrentWeekMondayStartKST();
+
+    let query: FirebaseFirestoreTypes.Query = firestore()
+      .collection(COLLECTIONS.QUESTIONS)
+      .where('createdAt', '<', thisWeekMondayStart)
+      .orderBy('createdAt', 'desc')
+      .limit(limit);
+
+    if (startAfterDate) {
+      query = query.startAfter(startAfterDate);
+    }
+
+    const snapshot = await query.get({ source: 'server' });
+
+    const questions: LivePickQuestion[] = [];
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      questions.push({
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt as any),
+      } as LivePickQuestion);
+    });
+
+    return questions;
+  } catch (error: any) {
+    console.error('❌ [LivePick] 지난 라이브픽 질문 조회 실패:', error);
+    throw error;
+  }
+}
+
+/**
+ * 내가 생성한 LivePick 질문 목록을 조회합니다.
+ * @param uid 사용자 UID (생성자)
+ * @param limit 최대 개수 (기본 50)
+ */
+export async function getMyLivePickQuestions(uid: string, limit: number = 50): Promise<LivePickQuestion[]> {
+  try {
+    const snapshot = await firestore()
+      .collection(COLLECTIONS.QUESTIONS)
+      .where('createdBy', '==', uid)
+      .orderBy('createdAt', 'desc')
+      .limit(limit)
+      .get({ source: 'server' });
+
+    const questions: LivePickQuestion[] = [];
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      questions.push({
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt as any),
+      } as LivePickQuestion);
+    });
+    return questions;
+  } catch (error: any) {
+    console.error('❌ [LivePick] 내 질문 목록 조회 실패:', error);
     throw error;
   }
 }
@@ -373,7 +648,7 @@ export async function participateInLivePick(
 }
 
 /**
- * 기본 보상(10P)을 지급합니다.
+ * 기본 보상(5P)을 지급합니다.
  * @param uid 사용자 UID
  * @param questionId 질문 ID
  */
@@ -403,16 +678,16 @@ export async function receiveBasicReward(uid: string, questionId: string): Promi
         basicRewardReceived: true,
       });
 
-      // 사용자 포인트 증가 (명령문: 즉시 보상 10P)
+      // 사용자 포인트 증가 (즉시 보상 5P)
       const userRef = firestore().collection('users').doc(uid);
       transaction.update(userRef, {
-        points: firestore.FieldValue.increment(10),
+        points: firestore.FieldValue.increment(5),
       });
     });
 
     // 포인트 내역 기록
     try {
-      await recordPointHistory(uid, 10, 'basic_reward', '라이브픽 기본 보상 (광고 미시청)');
+      await recordPointHistory(uid, 5, 'basic_reward', '라이브픽 기본 보상 (영상 미시청)');
     } catch (e) {
       console.warn('[LivePick] 포인트 내역 기록 실패(무시 가능):', (e as any)?.message || e);
     }
@@ -428,7 +703,7 @@ export async function receiveBasicReward(uid: string, questionId: string): Promi
  * 사다리 게임 보상을 지급합니다.
  * @param uid 사용자 UID
  * @param questionId 질문 ID
- * @param rewardPoints 지급할 포인트 (5P ~ 300P)
+ * @param rewardPoints 지급할 포인트 (10P / 20P / 100P / 200P / 300P 중 하나)
  */
 export async function receiveLadderReward(
   uid: string,
@@ -437,6 +712,11 @@ export async function receiveLadderReward(
 ): Promise<void> {
   try {
     await ensureAuthenticatedUser(uid);
+
+    const allowedRewards = [10, 20, 100, 200, 300];
+    if (!allowedRewards.includes(rewardPoints)) {
+      throw new Error('유효하지 않은 사다리 보상 금액입니다.');
+    }
 
     const participationId = `${uid}_${questionId}`;
     const participationRef = firestore()

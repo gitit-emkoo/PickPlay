@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, TextInput, Alert, Clipboard } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, TextInput, Alert, Clipboard, Switch } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
@@ -39,6 +39,9 @@ export default function MyPageScreen() {
   const transferWatchUnsubscribeRef = useRef<(() => void) | null>(null); // ref로 관리하여 불필요한 cleanup 방지
   const [isWaitingForTransfer, setIsWaitingForTransfer] = useState(false); // 연동 대기 중 상태
 
+  // 푸시 알림 설정
+  const [notificationEnabled, setNotificationEnabled] = useState<boolean | null>(null);
+
   // 사용자 인증 및 데이터 로드
   useEffect(() => {
     const unsubscribe = watchAuth(async (user) => {
@@ -47,6 +50,12 @@ export default function MyPageScreen() {
         try {
           const data = await ensureUser(user.uid);
           setUserData(data);
+          // 알림 설정 초기값 (기본 true)
+          const enabled =
+            typeof (data as any).notificationEnabled === 'boolean'
+              ? (data as any).notificationEnabled
+              : true;
+          setNotificationEnabled(enabled);
         } catch (error) {
           console.error('사용자 데이터 로드 실패:', error);
         }
@@ -86,6 +95,11 @@ export default function MyPageScreen() {
               streakCount: data.streakCount,
               totalSelections: data.totalSelections,
             });
+            const enabled =
+              typeof (data as any).notificationEnabled === 'boolean'
+                ? (data as any).notificationEnabled
+                : true;
+            setNotificationEnabled(enabled);
           }
         },
         (error) => {
@@ -151,6 +165,22 @@ export default function MyPageScreen() {
     // 항상 최신 데이터를 가져오도록 수정 (history.length === 0 조건 제거)
     if (next && !historyLoading) {
       await loadHistory(user.uid);
+    }
+  };
+
+  const handleToggleNotification = async (value: boolean) => {
+    if (!user) return;
+    const prev = notificationEnabled;
+    setNotificationEnabled(value);
+    try {
+      await firestore().collection('users').doc(user.uid).update({
+        notificationEnabled: value,
+      });
+      showToast(value ? '푸시 알림이 켜졌습니다.' : '푸시 알림이 꺼졌습니다.');
+    } catch (error) {
+      console.error('[MyPage] 알림 설정 변경 실패:', error);
+      setNotificationEnabled(prev);
+      Alert.alert('알림', '알림 설정을 변경하지 못했습니다. 다시 시도해주세요.');
     }
   };
 
@@ -507,7 +537,11 @@ export default function MyPageScreen() {
             
             {/* 포인트 및 연속 참여 */}
             <View style={styles.statsRow}>
-              <View style={styles.statCard}>
+              <TouchableOpacity
+                style={styles.statCard}
+                activeOpacity={0.7}
+                onPress={() => router.push('/(tabs)/point-exchange')}
+              >
                 <View style={styles.statIcon}>
                   <LottieView
                     source={{ uri: "https://lottie.host/c691c7ab-e2e2-4a77-a50e-cef6c130dce1/GjbXQZOTda.lottie" }}
@@ -517,8 +551,11 @@ export default function MyPageScreen() {
                   />
                 </View>
                 <Text style={styles.statValue}>{userData.points}P</Text>
-                <Text style={styles.statLabel}>포인트</Text>
-              </View>
+                <View style={styles.statLabelRow}>
+                  <Text style={styles.statLabelClickable}>포인트</Text>
+                  <Ionicons name="bag-handle-outline" size={14} color={colors.primary} />
+                </View>
+              </TouchableOpacity>
               
               <View style={styles.statCard}>
                 <View style={styles.statIcon}>
@@ -534,18 +571,24 @@ export default function MyPageScreen() {
               </View>
               
               <View style={styles.statCard}>
-                <Ionicons name="checkmark-circle" size={32} color={colors.primary} />
+                <Ionicons name="checkmark-circle" size={32} color={colors.primary} style={{ marginTop: 10, marginBottom: 4 }} />
                 <Text style={styles.statValue}>{userData.totalSelections || 0}</Text>
                 <Text style={styles.statLabel}>총 선택</Text>
               </View>
             </View>
 
-            {/* 포인트 안내 */}
-            <View style={styles.infoBox}>
-              <Ionicons name="information-circle" size={16} color={colors.primary} />
-              <Text style={styles.infoText}>
-                2,000P부터 자유롭게 사용할 수 있고, 연속 달성과 다양한 이벤트를 통해 더 많은 포인트를 획득할 수 있어요!
-              </Text>
+            {/* 푸시 알림 설정 */}
+            <View style={styles.notificationRow}>
+              <View style={styles.notificationTextContainer}>
+                <Text style={styles.notificationTitle}>푸시 알림 받기</Text>
+                <Text style={styles.notificationSubtitle}>
+                  오늘의 질문과 리마인드 알림을 켜고 끌 수 있어요.
+                </Text>
+              </View>
+              <Switch
+                value={notificationEnabled ?? true}
+                onValueChange={handleToggleNotification}
+              />
             </View>
           </View>
         )}
@@ -598,7 +641,8 @@ export default function MyPageScreen() {
                       'etc': '기타',
                     };
                     const reasonText = reasonMap[item.reason] || item.reason;
-                    const displayText = item.description || reasonText;
+                    const rawText = item.description || reasonText;
+                    const displayText = rawText.replace('(광고 미시청)', '(영상 미시청)');
                     
                     return (
                     <View key={item.id} style={styles.historyRow}>
@@ -626,6 +670,18 @@ export default function MyPageScreen() {
               )}
             </View>
           )}
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => router.push('/my-created-questions')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.menuLeft}>
+              <Ionicons name="create-outline" size={24} color={colors.primary} />
+              <Text style={styles.menuText}>내가 생성한 질문</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.textLight} />
+          </TouchableOpacity>
 
           <TouchableOpacity 
             style={styles.menuItem}
@@ -712,7 +768,7 @@ export default function MyPageScreen() {
         <View style={styles.footer}>
           <View style={styles.footerBorder} />
           <Text style={styles.footerText}>
-            © 2025 PickPlay{`\n`}KWCC Co., Ltd. | Emkoo{`\n`}907, Dongtan-daero 646-2{`\n`}Hwaseong-si, Gyeonggi-do, Republic of Korea{`\n`}e-mail: cokwcc@gmail.com{`\n`}tel: +82-10-4857-4876{`\n`}version: {Constants.expoConfig?.version || '2.1.1'}
+            © 2025 PickPlay{`\n`}KWCC Co., Ltd.{`\n`}907, Dongtan-daero 646-2{`\n`}Hwaseong-si, Gyeonggi-do, Republic of Korea{`\n`}e-mail: cokwcc@gmail.com{`\n`}version: {Constants.expoConfig?.version || '2.1.2'}
           </Text>
         </View>
       </ScrollView>
@@ -982,6 +1038,12 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  statLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
   statIcon: {
     width: 40,
     height: 40,
@@ -1002,6 +1064,11 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 12,
     color: colors.textSecondary,
+  },
+  statLabelClickable: {
+    fontSize: 12,
+    color: colors.primary,
+    textDecorationLine: 'underline',
   },
   infoBox: {
     flexDirection: 'row',
@@ -1323,6 +1390,35 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: colors.text,
     textAlign: 'center',
+  },
+  notificationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginTop: 8,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  notificationTextContainer: {
+    flex: 1,
+    marginRight: 12,
+  },
+  notificationTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 2,
+  },
+  notificationSubtitle: {
+    fontSize: 12,
+    color: colors.textSecondary,
   },
   transferInputContainer: {
     marginBottom: 24,

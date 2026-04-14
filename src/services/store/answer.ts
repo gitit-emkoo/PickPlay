@@ -4,6 +4,7 @@ import { ensureAnonymousAuth, getFunctions } from '../firebase';
 import { currentDateKey } from '../../utils/date';
 import { scheduleStreakNotification } from '../notifications';
 import { isLegacyUser, assignCharacter_LogicA, updateAdjectives_LogicB } from './character';
+import { TEST_UIDS } from '../../constants/testUids';
 
 /**
  * [V2] Firebase Cloud Function을 호출하여 AI 태그를 생성합니다.
@@ -77,7 +78,6 @@ export const saveAnswerQuick = async (userData: UserData, question: Question, se
   const todayKey = currentDateKey();
   
   // 테스트 유저는 하루 한 번 제한 없음
-  const TEST_UIDS = ['vUlyeAhYmneB5Ii6oPNR8OFCQZg1', 'C1iSsR85GoTnvVRSY2nIn9y6ZFz1'];
   if (!TEST_UIDS.includes(userData.uid) && userData.lastAnswerDate === todayKey) {
     console.warn(`[Vote] User ${userData.uid} has already voted today. Aborting.`);
     throw new Error("오늘 이미 답변했습니다.");
@@ -123,7 +123,6 @@ export const saveAnswerAndProcessLogic = async (userData: UserData, question: Qu
   const todayKey = currentDateKey();
   
   // 테스트 유저는 하루 한 번 제한 없음
-  const TEST_UIDS = ['vUlyeAhYmneB5Ii6oPNR8OFCQZg1', 'C1iSsR85GoTnvVRSY2nIn9y6ZFz1'];
   if (!TEST_UIDS.includes(userData.uid) && userData.lastAnswerDate === todayKey) {
     console.warn(`[Vote] User ${userData.uid} has already voted today. Aborting.`);
     throw new Error("오늘 이미 답변했습니다.");
@@ -182,12 +181,27 @@ export const saveAnswerAndProcessLogic = async (userData: UserData, question: Qu
       }
       const currentUserData = userDoc.data() as UserData;
 
+      // Firestore rules에서 숫자 연산/비교가 안전하게 통과하도록 타입을 정규화
+      // (레거시 데이터에서 totalSelections/streakCount/lastAnswerDate가 string일 수 있음)
+      const normalizeNumber = (v: any, fallback = 0) => {
+        if (typeof v === 'number' && Number.isFinite(v)) return v;
+        if (typeof v === 'string') {
+          const n = parseInt(v.replace(/-/g, ''), 10);
+          return Number.isFinite(n) ? n : fallback;
+        }
+        return fallback;
+      };
+      const currentTotalSelections = normalizeNumber((currentUserData as any).totalSelections, 0);
+      const currentStreakCount = normalizeNumber((currentUserData as any).streakCount, 0);
+      // lastAnswerDate는 아래에서 이미 string/number를 처리하지만, 우선 숫자화된 값도 준비
+      const currentLastAnswerDateNum = normalizeNumber((currentUserData as any).lastAnswerDate, 0);
+
       // 테스트 유저는 연속 참여일수 계산 단순화
       let newStreakCount = 1;
       if (TEST_UIDS.includes(uid)) {
         // 테스트 유저는 항상 연속 참여로 처리
-        newStreakCount = (currentUserData.streakCount || 0) + 1;
-        console.log(`[Streak] 테스트 유저 연속 참여: ${currentUserData.streakCount} → ${newStreakCount}`);
+        newStreakCount = currentStreakCount + 1;
+        console.log(`[Streak] 테스트 유저 연속 참여: ${currentStreakCount} → ${newStreakCount}`);
       } else {
         // 일반 유저는 기존 로직 유지
         const kstNow = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
@@ -199,20 +213,16 @@ export const saveAnswerAndProcessLogic = async (userData: UserData, question: Qu
         const yesterdayKey = parseInt(`${year}${month}${day}`, 10);
 
         // lastAnswerDate를 숫자로 변환 (문자열일 수 있음)
-        const lastAnswerDateRaw: unknown = currentUserData.lastAnswerDate;
-        let lastAnswerDateNum = 0;
-        if (typeof lastAnswerDateRaw === 'string') {
-          lastAnswerDateNum = parseInt(lastAnswerDateRaw.replace(/-/g, ''), 10);
-        } else if (typeof lastAnswerDateRaw === 'number') {
-          lastAnswerDateNum = lastAnswerDateRaw;
-        }
+        const lastAnswerDateRaw: unknown = (currentUserData as any).lastAnswerDate;
+        let lastAnswerDateNum = currentLastAnswerDateNum;
+        if (typeof lastAnswerDateRaw === 'number') lastAnswerDateNum = lastAnswerDateRaw;
 
         console.log(`[Streak] 연속 참여일수 계산:`, {
           todayKey: todayKey,
           yesterdayKey: yesterdayKey,
-          lastAnswerDate: currentUserData.lastAnswerDate,
+          lastAnswerDate: (currentUserData as any).lastAnswerDate,
           lastAnswerDateNum: lastAnswerDateNum,
-          currentStreakCount: currentUserData.streakCount,
+          currentStreakCount: currentStreakCount,
           isYesterdayAnswered: lastAnswerDateNum === yesterdayKey,
           isTodayAnswered: lastAnswerDateNum === todayKey
         });
@@ -220,12 +230,12 @@ export const saveAnswerAndProcessLogic = async (userData: UserData, question: Qu
         // 오늘 이미 투표했는지 확인 (중복 방지)
         if (lastAnswerDateNum === todayKey) {
           // 오늘 이미 투표했으면 현재 streakCount 유지
-          newStreakCount = currentUserData.streakCount || 1;
+          newStreakCount = currentStreakCount || 1;
           console.log(`[Streak] 오늘 이미 투표함. 현재 streakCount 유지: ${newStreakCount}`);
         } else if (lastAnswerDateNum === yesterdayKey) {
           // 어제 투표했으면 연속 참여
-          newStreakCount = (currentUserData.streakCount || 0) + 1;
-          console.log(`[Streak] 연속 참여 감지: ${currentUserData.streakCount} → ${newStreakCount}`);
+          newStreakCount = currentStreakCount + 1;
+          console.log(`[Streak] 연속 참여 감지: ${currentStreakCount} → ${newStreakCount}`);
         } else if (lastAnswerDateNum === 0 || !currentUserData.lastAnswerDate) {
           // 첫 투표이거나 lastAnswerDate가 없으면 1일
           newStreakCount = 1;
@@ -238,14 +248,14 @@ export const saveAnswerAndProcessLogic = async (userData: UserData, question: Qu
       }
       
       // 트랜잭션 업데이트 (FieldValue.increment 대신 실제 값 사용 - Firestore 규칙 검증을 위해)
-      const newTotalSelections = (currentUserData.totalSelections || 0) + 1;
+      const newTotalSelections = currentTotalSelections + 1;
       transaction.update(userRef, {
         totalSelections: newTotalSelections,
         streakCount: newStreakCount,
         lastAnswerDate: todayKey,
       });
 
-      updatedTotalSelections = (currentUserData.totalSelections || 0) + 1;
+      updatedTotalSelections = newTotalSelections;
       updatedUserData = { 
         ...currentUserData, 
         totalSelections: updatedTotalSelections,
@@ -271,9 +281,9 @@ export const saveAnswerAndProcessLogic = async (userData: UserData, question: Qu
     throw error;
   }
 
-  // --- 3. 포인트 보상은 광고 시청 후 별도로 지급 ---
+  // --- 3. 포인트 보상은 영상 시청 후 별도로 지급 ---
   // (포인트 지급을 지연하여 광고 시청 완료 후 rewardWithMajority를 호출하도록 변경)
-  console.log('[Points] 포인트 지급은 광고 시청 후 진행됩니다.');
+  console.log('[Points] 포인트 지급은 영상 시청 후 진행됩니다.');
 
   // --- 4. 누적 답변 수에 따라 로직 분기 ---
   console.log(`[Debug] 로직 분기 체크: totalSelections = ${updatedTotalSelections!}`);

@@ -22,6 +22,13 @@ export async function updateTutorialProgress(
     }
 
     const userData = userDoc.data() as UserData;
+    const choice = userData.tutorialChoice || 'pending';
+    // opt-in 유저만 튜토리얼 진행/보상 가능
+    if (choice !== 'opt_in') {
+      console.log('[Tutorial] opt-in이 아닌 유저, 튜토리얼 진행 스킵:', { uid, choice, updateType });
+      return { userData: userData as UserData, wasUpdated: false };
+    }
+
     const currentTutorial = userData.tutorial || {
       mainAnswered: false,
       livepickParticipated: false,
@@ -114,6 +121,7 @@ export async function getTutorialStatus(uid: string): Promise<{
   livepickParticipated: boolean;
   livepickCreated: boolean;
   rewardGiven500: boolean;
+  tutorialChoice: 'pending' | 'opt_in' | 'opt_out';
   allCompleted: boolean;
 } | null> {
   try {
@@ -124,33 +132,33 @@ export async function getTutorialStatus(uid: string): Promise<{
     }
 
     const userData = userDoc.data() as UserData;
+    // 기존 유저 호환:
+    // - tutorialChoice가 없을 때, 이미 미션을 진행·완료한 유저만 opt_in으로 간주 (선택 모달 생략)
+    // - tutorial만 있고 4개가 전부 false인 신규/미선택 유저는 pending (첫 접속 선택 모달 표시)
+    const tutorialChoice =
+      userData.tutorialChoice ??
+      (() => {
+        const t = userData.tutorial;
+        if (!t) return 'pending';
+        const hasAnyProgress =
+          !!t.mainAnswered ||
+          !!t.livepickParticipated ||
+          !!t.livepickCreated ||
+          !!t.rewardGiven500;
+        return hasAnyProgress ? 'opt_in' : 'pending';
+      })();
     
-    // tutorial 필드가 없으면 자동으로 생성 (모든 유저를 신규로 취급하여 튜토리얼 진행 가능하도록)
-    if (!userData.tutorial) {
-      const initialTutorial = {
-        mainAnswered: false,
-        livepickParticipated: false,
-        livepickCreated: false,
-        rewardGiven500: false,
-      };
-      
-      // Firestore에 tutorial 필드 생성
-      await userRef.update({
-        tutorial: initialTutorial,
-      });
-      
-      console.log('[Tutorial] tutorial 필드 자동 생성 (모든 유저 신규 취급):', initialTutorial);
-      
-      return {
-        ...initialTutorial,
-        allCompleted: false,
-      };
-    }
+    // opt-in이 아닌 유저는 tutorial이 없어도 그대로 반환 (자동 생성하지 않음)
+    const tutorial = userData.tutorial || {
+      mainAnswered: false,
+      livepickParticipated: false,
+      livepickCreated: false,
+      rewardGiven500: false,
+    };
     
-    const tutorial = userData.tutorial;
-
     return {
       ...tutorial,
+      tutorialChoice,
       allCompleted:
         tutorial.mainAnswered &&
         tutorial.livepickParticipated &&
@@ -160,5 +168,31 @@ export async function getTutorialStatus(uid: string): Promise<{
     console.error('[Tutorial] 튜토리얼 상태 조회 실패:', error);
     return null;
   }
+}
+
+/**
+ * 유저의 튜토리얼 선택 상태를 저장합니다.
+ * - opt_in: 튜토리얼 진행/보상 대상
+ * - opt_out: 영구 제외
+ */
+export async function setTutorialChoice(
+  uid: string,
+  choice: 'opt_in' | 'opt_out'
+): Promise<void> {
+  const userRef = firestore().collection('users').doc(uid);
+  await userRef.update({
+    tutorialChoice: choice,
+    ...(choice === 'opt_in'
+      ? {
+          // opt-in 시 tutorial 필드가 없으면 기본 구조를 만들어 둠
+          tutorial: {
+            mainAnswered: false,
+            livepickParticipated: false,
+            livepickCreated: false,
+            rewardGiven500: false,
+          },
+        }
+      : {}),
+  } as any);
 }
 

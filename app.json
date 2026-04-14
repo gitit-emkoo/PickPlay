@@ -1,8 +1,8 @@
 {
   "name": "pickplay",
   "slug": "today-balance",
-  "version": "2.1.1",
-  "runtimeVersion": "2.1.1",
+  "version": "2.1.4",
+  "runtimeVersion": "2.1.4",
   "extra": {
     "eas": {
       "projectId": "14d1ecb2-a3c0-4425-ac97-0ec33b289905"
@@ -26,16 +26,17 @@
   "ios": {
     "supportsTablet": true,
     "bundleIdentifier": "com.pickplay.kwcc",
-    "buildNumber": "20",
+    "buildNumber": "127",
     "googleServicesFile": "./GoogleService-Info.plist",
     "infoPlist": {
       "GADApplicationIdentifier": "ca-app-pub-2555567440328829~5483134579",
-      "NSUserTrackingUsageDescription": "이 정보를 사용하여 더 관련성 높은 맞춤형 광고를 제공합니다."
+      "NSUserTrackingUsageDescription": "이 정보를 사용하여 더 관련성 높은 맞춤형 광고를 제공합니다.",
+      "ITSAppUsesNonExemptEncryption": false
     }
   },
   "android": {
     "package": "com.pickplay.kwcc",
-    "versionCode": 30,
+    "versionCode": 129,
     "googleServicesFile": "./google-services.json",
     "adaptiveIcon": {
       "foregroundImage": "./assets/images/adaptive-icon.png",
@@ -64,6 +65,7 @@
           }
         },
         "android": {
+          "compileSdkVersion": 35,
           "targetSdkVersion": 35,
           "kotlinVersion": "1.9.22",
           "newArchEnabled": false
@@ -77,11 +79,18 @@
       }
     ],
     "./plugins/with-google-services-file",
-    "./plugins/with-admob-test-device",
-    "./plugins/with-16kb-pages"
+    "./plugins/with-admob-test-device"
   ],
   "react-native-google-mobile-ads": {
     "ios_app_id": "ca-app-pub-2555567440328829~5483134579",
     "android_app_id": "ca-app-pub-2555567440328829~4208779024"
+  },
+  "expo": {
+    "android": {
+      "versionCode": 130
+    },
+    "ios": {
+      "buildNumber": "128"
+    }
   }
 }

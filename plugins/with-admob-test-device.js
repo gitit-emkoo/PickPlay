@@ -6,6 +6,10 @@ const { withAppDelegate } = require('@expo/config-plugins');
  */
 const withAdMobTestDevice = (config) => {
   console.log('[PickPlay Plugin] withAdMobTestDevice 플러그인 시작');
+  // SDK 53+ uses Swift AppDelegate by default.
+  // This plugin injects Objective-C snippets, so skip iOS patching to avoid compile failures.
+  console.log('[PickPlay Plugin] iOS AppDelegate patch disabled for Swift-based AppDelegate.');
+  return config;
   return withAppDelegate(config, (config) => {
     const appDelegate = config.modResults;
 

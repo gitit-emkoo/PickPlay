@@ -1,8 +1,7 @@
-﻿import * as functions from 'firebase-functions';
+import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import OpenAI from 'openai';
 import { Expo } from 'expo-server-sdk';
-
 // Firebase Admin 초기화
 admin.initializeApp();
 
@@ -40,7 +39,34 @@ async function sendUserPushNotification(
       data,
     };
 
-    await expo.sendPushNotificationsAsync([message]);
+    const tickets = await expo.sendPushNotificationsAsync([message]);
+
+    // Expo 응답에서 토큰 만료/비유효 에러를 감지하여 user_push_tokens 정리
+    for (const ticket of tickets) {
+      if (ticket.status === 'error') {
+        const errorCode = (ticket as any).details?.error;
+        console.warn('[sendUserPushNotification] Expo 푸시 전송 에러', {
+          uid,
+          error: ticket.message,
+          errorCode,
+        });
+
+        // 더 이상 사용 불가능한 토큰이면 삭제
+        const HARD_FAILURE_ERRORS = ['DeviceNotRegistered', 'InvalidCredentials'];
+        if (errorCode && HARD_FAILURE_ERRORS.includes(errorCode)) {
+          try {
+            await admin.firestore().collection('user_push_tokens').doc(uid).delete();
+            console.log('[sendUserPushNotification] 만료/비유효 토큰 문서 삭제 완료', { uid, errorCode });
+          } catch (cleanupError: any) {
+            console.warn(
+              '[sendUserPushNotification] 토큰 정리 중 오류(무시 가능):',
+              cleanupError?.message || cleanupError,
+            );
+          }
+        }
+      }
+    }
+
     console.log('[sendUserPushNotification] 푸시 전송 완료', { uid });
   } catch (error: any) {
     console.error('[sendUserPushNotification] 푸시 전송 실패:', error?.message || error);
@@ -624,7 +650,7 @@ export const dailyLivePickRewardScheduler = functions
 
 /**
  * 모든 user_notifications 생성 시, 해당 유저에게 Expo 푸시까지 함께 전송하는 트리거.
- * - title/body/data 필드를 그대로 사용하여 푸시를 보냅니다.
+ * - title/body/type/data 필드를 푸시 payload로 전달합니다.
  */
 export const onUserNotificationCreated = functions
   .region('asia-northeast3')
@@ -646,7 +672,24 @@ export const onUserNotificationCreated = functions
         return null;
       }
 
-      await sendUserPushNotification(uid, title, body, data?.data || {});
+      // 사용자의 알림 수신 여부 확인 (notificationEnabled === false면 푸시 생략)
+      try {
+        const userSnap = await admin.firestore().collection('users').doc(uid).get();
+        const userData = userSnap.data() as any | undefined;
+        if (userData && userData.notificationEnabled === false) {
+          console.log('[onUserNotificationCreated] 알림 비활성 유저, 푸시 생략:', uid);
+          return null;
+        }
+      } catch (userCheckError: any) {
+        console.warn('[onUserNotificationCreated] 사용자 알림 설정 조회 실패(무시):', userCheckError?.message || userCheckError);
+      }
+
+      const payloadData = {
+        type: data?.type,
+        ...(data?.data || {}),
+      };
+
+      await sendUserPushNotification(uid, title, body, payloadData);
       console.log('[onUserNotificationCreated] 푸시 전송 완료', { uid, notificationId: context.params.notificationId });
       return null;
     } catch (error: any) {
@@ -666,7 +709,7 @@ export const onUserNotificationCreated = functions
 export const sendInactiveUserNotifications = functions
   .region('asia-northeast3')
   .pubsub
-  .schedule('0 4 * * *') // 매일 새벽 4시 (KST)
+  .schedule('0 14 * * *') // 매일 새벽 4시 (KST)
   .timeZone('Asia/Seoul')
   .onRun(async () => {
     try {
@@ -688,7 +731,7 @@ export const sendInactiveUserNotifications = functions
 
       console.log('[sendInactiveUserNotifications] todayKey(KST):', todayKey);
 
-      const stages = [
+      const defaultStages = [
         {
           days: 3,
           code: 'inactive_3',
@@ -708,6 +751,44 @@ export const sendInactiveUserNotifications = functions
           body: '다시 시작해도 괜찮아요. 오늘 질문부터 천천히 이어가봐요.',
         },
       ];
+
+      let stages = defaultStages;
+      try {
+        const templateDoc = await admin.firestore().collection('config').doc('notificationTemplates').get();
+        if (templateDoc.exists) {
+          const t = templateDoc.data() as {
+            inactive3Title?: string;
+            inactive3Body?: string;
+            inactive5Title?: string;
+            inactive5Body?: string;
+            inactive10Title?: string;
+            inactive10Body?: string;
+          };
+          stages = [
+            {
+              days: 3,
+              code: 'inactive_3',
+              title: t.inactive3Title?.trim() || defaultStages[0].title,
+              body: t.inactive3Body?.trim() || defaultStages[0].body,
+            },
+            {
+              days: 5,
+              code: 'inactive_5',
+              title: t.inactive5Title?.trim() || defaultStages[1].title,
+              body: t.inactive5Body?.trim() || defaultStages[1].body,
+            },
+            {
+              days: 10,
+              code: 'inactive_10',
+              title: t.inactive10Title?.trim() || defaultStages[2].title,
+              body: t.inactive10Body?.trim() || defaultStages[2].body,
+            },
+          ];
+          console.log('[sendInactiveUserNotifications] notificationTemplates 적용 완료');
+        }
+      } catch (templateError: any) {
+        console.warn('[sendInactiveUserNotifications] notificationTemplates 로드 실패, 기본 문구 사용:', templateError?.message || templateError);
+      }
 
       const usersSnapshot = await admin.firestore().collection('users').get();
       console.log('[sendInactiveUserNotifications] users count:', usersSnapshot.size);
@@ -1904,6 +1985,313 @@ export const migrateUserData = functions
         'internal',
         `마이그레이션 중 오류가 발생했습니다: ${error.message}`
       );
+    }
+  });
+
+// ========== 전화번호 인증 (솔라피 SMS) ==========
+// 환경 변수: SOLAPI_API_KEY, SOLAPI_API_SECRET, SOLAPI_SENDER_NUMBER(발신번호 예: 01012345678)
+// Firebase 콘솔 > Functions > 환경 구성 에서 설정하거나, firebase functions:config:set solapi.api_key="..." 등
+
+const PHONE_VERIFICATION_COLLECTION = 'phone_verification_pending';
+const CODE_EXPIRY_MINUTES = 5;
+const CODE_LENGTH = 6;
+
+function sanitizePhoneForDocId(phoneNumber: string): string {
+  return phoneNumber.replace(/\D/g, '');
+}
+
+function e164ToKoreanPhone(e164: string): string {
+  const digits = e164.replace(/\D/g, '');
+  if (digits.startsWith('82') && digits.length >= 10) {
+    return '0' + digits.slice(2);
+  }
+  return digits.slice(-11);
+}
+
+function generateVerificationCode(): string {
+  const digits = '0123456789';
+  let code = '';
+  for (let i = 0; i < CODE_LENGTH; i++) {
+    code += digits[Math.floor(Math.random() * 10)];
+  }
+  return code;
+}
+
+/**
+ * 인증번호 발송 (솔라피 SMS)
+ * - 6자리 코드 생성 후 Firestore에 저장, SMS 발송
+ */
+export const sendPhoneVerificationCode = functions
+  .region('asia-northeast3')
+  .runWith({ timeoutSeconds: 30, memory: '256MB' })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', '로그인이 필요합니다.');
+    }
+    const phoneNumber = data?.phoneNumber as string;
+    if (!phoneNumber || typeof phoneNumber !== 'string' || phoneNumber.replace(/\D/g, '').length < 10) {
+      throw new functions.https.HttpsError('invalid-argument', '올바른 전화번호를 입력해주세요.');
+    }
+
+    const docId = sanitizePhoneForDocId(phoneNumber);
+    const code = generateVerificationCode();
+    const db = admin.firestore();
+
+    try {
+      await db.collection(PHONE_VERIFICATION_COLLECTION).doc(docId).set({
+        code,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      const apiKey = process.env.SOLAPI_API_KEY || (functions.config().solapi as any)?.api_key;
+      const apiSecret = process.env.SOLAPI_API_SECRET || (functions.config().solapi as any)?.api_secret;
+      const senderNumber = process.env.SOLAPI_SENDER_NUMBER || (functions.config().solapi as any)?.sender_number;
+
+      if (apiKey && apiSecret && senderNumber) {
+        const { SolapiMessageService } = require('solapi');
+        const messageService = new SolapiMessageService(apiKey, apiSecret);
+        const toNumber = e164ToKoreanPhone(phoneNumber);
+        await messageService.sendOne({
+          to: toNumber,
+          from: senderNumber,
+          text: `[PickPlay] 인증번호: ${code}\n${CODE_EXPIRY_MINUTES}분 내에 입력해주세요.`,
+        });
+      } else {
+        console.log('[sendPhoneVerificationCode] Solapi 미설정, 코드만 저장 (개발용):', { docId, code });
+      }
+
+      return { success: true, message: '인증번호가 발송되었습니다.' };
+    } catch (error: any) {
+      console.error('[sendPhoneVerificationCode] 실패:', error);
+      await db.collection(PHONE_VERIFICATION_COLLECTION).doc(docId).delete().catch(() => {});
+      throw new functions.https.HttpsError(
+        'internal',
+        error.message || '인증번호 발송에 실패했습니다. 다시 시도해주세요.'
+      );
+    }
+  });
+
+/**
+ * 인증번호 검증 + users/{uid}에 전화번호·인증 완료 저장
+ */
+export const verifyPhoneCode = functions
+  .region('asia-northeast3')
+  .runWith({ timeoutSeconds: 20, memory: '256MB' })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', '로그인이 필요합니다.');
+    }
+    const uid = context.auth.uid;
+    const phoneNumber = data?.phoneNumber as string;
+    const code = data?.code as string;
+    if (!phoneNumber || !code || code.length < 4) {
+      throw new functions.https.HttpsError('invalid-argument', '전화번호와 인증번호를 입력해주세요.');
+    }
+
+    const docId = sanitizePhoneForDocId(phoneNumber);
+    const db = admin.firestore();
+    const pendingRef = db.collection(PHONE_VERIFICATION_COLLECTION).doc(docId);
+
+    try {
+      const pendingSnap = await pendingRef.get();
+      if (!pendingSnap.exists) {
+        throw new functions.https.HttpsError('failed-precondition', '인증번호가 만료되었거나 존재하지 않습니다. 다시 발송해주세요.');
+      }
+      const pendingData = pendingSnap.data()!;
+      const storedCode = pendingData.code;
+      const createdAt = (pendingData.createdAt as admin.firestore.Timestamp)?.toMillis?.() || 0;
+      const expiryMs = CODE_EXPIRY_MINUTES * 60 * 1000;
+      if (Date.now() - createdAt > expiryMs) {
+        await pendingRef.delete();
+        throw new functions.https.HttpsError('failed-precondition', '인증번호가 만료되었습니다. 다시 발송해주세요.');
+      }
+      if (storedCode !== code.trim()) {
+        throw new functions.https.HttpsError('invalid-argument', '인증번호가 일치하지 않습니다.');
+      }
+
+      await pendingRef.delete();
+
+      const e164Phone = phoneNumber.startsWith('+') ? phoneNumber : `+82${phoneNumber.replace(/^0/, '')}`;
+      const userRef = db.collection('users').doc(uid);
+      const userSnap = await userRef.get();
+      if (!userSnap.exists) {
+        throw new functions.https.HttpsError('not-found', '사용자 정보를 찾을 수 없습니다.');
+      }
+
+      const existingWithPhone = await db.collection('users').where('phoneNumber', '==', e164Phone).limit(1).get();
+      if (!existingWithPhone.empty && existingWithPhone.docs[0].id !== uid) {
+        throw new functions.https.HttpsError('already-exists', '이미 다른 계정에 등록된 전화번호입니다.');
+      }
+
+      await userRef.update({
+        phoneNumber: e164Phone,
+        phoneVerified: true,
+        phoneVerifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      return { success: true, message: '인증이 완료되었습니다.' };
+    } catch (error: any) {
+      if (error instanceof functions.https.HttpsError) throw error;
+      console.error('[verifyPhoneCode] 실패:', error);
+      throw new functions.https.HttpsError(
+        'internal',
+        error.message || '인증 처리에 실패했습니다. 다시 시도해주세요.'
+      );
+    }
+  });
+
+/**
+ * 애니마코드 공유 페이지 (스냅샷 렌더링용)
+ * - 쿼리 파라미터: snapshotId
+ * - Firestore: animacode_snapshots/{snapshotId} (isPublic=true 문서만)
+ * - 성향/문구는 "저장된 문자열"만 렌더링 (재계산 없음)
+ */
+export const animacodeSharePage = functions
+  .region('asia-northeast3')
+  .https.onRequest(async (req, res) => {
+    try {
+      const snapshotId =
+        (typeof req.query.snapshotId === 'string' ? req.query.snapshotId : null) ||
+        (typeof req.query.id === 'string' ? req.query.id : null);
+
+      if (!snapshotId) {
+        res.status(400).send('snapshotId is required');
+        return;
+      }
+
+      const docSnap = await admin
+        .firestore()
+        .collection('animacode_snapshots')
+        .doc(snapshotId)
+        .get();
+
+      if (!docSnap.exists) {
+        res.status(404).send('not found');
+        return;
+      }
+
+      const data = docSnap.data() || {};
+      if (data.isPublic !== true) {
+        res.status(404).send('not found');
+        return;
+      }
+
+      const escapeHtml = (v: unknown) =>
+        String(v ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+
+      const characterName = escapeHtml(data.characterName);
+      const characterImageBase64 =
+        typeof data.characterImageBase64 === 'string' ? data.characterImageBase64.trim() : '';
+      const adjective1 = escapeHtml(data.adjective1);
+      const adjective2 = escapeHtml(data.adjective2);
+      const dispositionNumber =
+        typeof data.dispositionNumber === 'string' ? escapeHtml(data.dispositionNumber.trim()) : '';
+      const previousAdjective1 = escapeHtml(data.previousAdjective1);
+      const previousAdjective2 = escapeHtml(data.previousAdjective2);
+      const dispositionDescription = escapeHtml(data.dispositionDescription);
+
+      const hasDispositionChange =
+        String(data.previousAdjective1 ?? '').trim() !== '' &&
+        String(data.previousAdjective2 ?? '').trim() !== '';
+
+      const meaningTitle = '애니마코드란?';
+      const meaningText = [
+        '애니마코드는',
+        '내 선택으로 완성되는 내면 성향 캐릭터예요.',
+        '매일 나의 선택을 분석해 나만의 캐릭터로 완성돼요.',
+        '고정된 결과가 아니라 선택을 더할수록 선명해지는 나의 기록이에요.',
+      ].map(escapeHtml);
+
+      const dispositionChangeHtml = hasDispositionChange
+        ? `
+          <h2>성향 변화</h2>
+          <div class="card">
+            <div class="row">
+              <div class="disposition-box">
+                <div class="disposition-label">지난 성향</div>
+                <div class="pill">${previousAdjective1} ${previousAdjective2}</div>
+              </div>
+              
+              <div class="disposition-box">
+                <div class="disposition-label current">현재 성향</div>
+                <div class="pill strong">${adjective1} ${adjective2}</div>
+              </div>
+            </div>
+            <div class="foot">캐릭터는 그대로, 성향은 선택에 따라 계속 변화해요!</div>
+          </div>
+        `
+        : '';
+
+      const html = `<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>애니마코드 공유</title>
+    <style>
+      body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; background: #f6f8fc; color: #0f172a; }
+      .wrap { max-width: 720px; margin: 0 auto; padding: 20px; }
+      h1 { font-size: 22px; margin: 0 0 12px; }
+      h2 { font-size: 16px; margin: 18px 0 10px; }
+      .card { background: white; border: 1px solid #e5e7eb; border-radius: 16px; padding: 14px 16px; }
+      .row { display: flex; align-items: center; justify-content: center; gap: 10px; }
+      .disposition-box { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1; }
+      .disposition-label { font-size: 11px; color: #64748b; font-weight: 600; }
+      .disposition-label.current { color: #0060CD; }
+      .pill { background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 14px; font-weight: 700; font-size: 14px; text-align: center; width: 100%; box-sizing: border-box; }
+      .pill.strong { background: #e0f2fe; border-color: #bae6fd; }
+      .arrow { font-weight: 900; color: #334155; font-size: 18px; flex-shrink: 0; }
+      .desc { font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
+      .foot { font-size: 12px; color: #64748b; margin-top: 10px; }
+      .ctaWrap { margin-top: 18px; padding: 12px 0 26px; }
+      .cta { display: block; box-sizing: border-box; width: 100%; text-align: center; text-decoration: none; background: #0060CD; color: white; font-weight: 800; padding: 14px 16px; border-radius: 14px; }
+      .mean { font-size: 14px; line-height: 1.7; white-space: pre-wrap; }
+      .animalImage { width: 78px; height: 78px; object-fit: contain; display: block; margin: 0 auto 10px; }
+      .animalName { font-size: 20px; font-weight: 900; text-align: center; margin-bottom: 6px; }
+      .animalKeyword { font-size: 14px; color: #0f172a; text-align: center; font-weight: 700; }
+      .animalCode { margin-top: 6px; font-size: 12px; color: #0060CD; text-align: center; font-weight: 700; letter-spacing: 0.3px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>친구가 지금 성향을 공유했어요!</h1>
+
+      <div class="card">
+        ${characterImageBase64 ? `<img class="animalImage" src="data:image/png;base64,${characterImageBase64}" alt="${characterName}"/>` : ''}
+        <div class="animalName">${characterName}</div>
+        <div class="animalKeyword">${adjective1} ${adjective2}</div>
+        ${dispositionNumber ? `<div class="animalCode">${dispositionNumber}</div>` : ''}
+      </div>
+
+      ${dispositionChangeHtml}
+
+      <h2>요즘 나의 성향</h2>
+      <div class="card">
+        <div class="desc">${dispositionDescription}</div>
+      </div>
+
+      <h2>${escapeHtml(meaningTitle)}</h2>
+      <div class="card">
+        <div class="mean">${meaningText.join('<br/>')}</div>
+      </div>
+
+      <div class="ctaWrap">
+        <a class="cta" href="https://pickplay.waveon.me/">나의 애니마코드 만들기</a>
+      </div>
+    </div>
+  </body>
+</html>`;
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.status(200).send(html);
+    } catch (e: any) {
+      console.error('[animacodeSharePage] 실패:', e?.message || e);
+      res.status(500).send('internal error');
     }
   });
 

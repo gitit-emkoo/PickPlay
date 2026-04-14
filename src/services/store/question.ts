@@ -2,6 +2,7 @@ import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { Answer, Question, UserData } from '../../types';
 import firestore from '@react-native-firebase/firestore';
 import { getQuestions } from './dataLoader';
+import { TEST_UIDS } from '../../constants/testUids';
 
 /**
  * [신규] 사용자의 앱 최초 실행일(createdAt)을 기준으로 오늘에 해당하는 순차 질문을 반환합니다.
@@ -11,7 +12,6 @@ import { getQuestions } from './dataLoader';
 export const getTodayQuestionForUser = (userData: UserData): Question | null => {
   const questions = getQuestions();
   // 테스트 유저는 totalSelections 기반으로 연속 질문 배정
-  const TEST_UIDS = ['vUlyeAhYmneB5Ii6oPNR8OFCQZg1', 'C1iSsR85GoTnvVRSY2nIn9y6ZFz1'];
   if (TEST_UIDS.includes(userData.uid)) {
     const totalSelections = userData.totalSelections || 0;
     // 테스트 유저도 신규 유저라면 1번 질문부터 시작

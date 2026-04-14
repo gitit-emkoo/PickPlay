@@ -6,8 +6,8 @@ import colors from '../../../src/styles/colors';
 interface ParticipateModalProps {
   visible: boolean;
   selectedOption: string; // 선택한 선택지 텍스트
-  onReceive: () => void; // 10P 받기 선택
-  onWatchAd: () => void; // 광고 시청 후 게임 참여 선택
+  onReceive: () => void; // 5P 받기 선택
+  onWatchAd: () => void; // 영상 시청 후 게임 참여 선택
   onClose?: () => void; // 모달 닫기 (선택사항)
   todayParticipationCount?: number; // 오늘 참여 횟수 (선택사항)
 }
@@ -45,7 +45,7 @@ export default function ParticipateModal({
           {/* 보상 안내 */}
           <View style={styles.rewardInfo}>
             <Text style={styles.rewardLabel}>기본 보상</Text>
-            <Text style={styles.rewardAmount}>10P</Text>
+            <Text style={styles.rewardAmount}>5P</Text>
           </View>
 
           {/* 선택 버튼 */}
@@ -58,12 +58,12 @@ export default function ParticipateModal({
             >
               <Ionicons name="cash" size={24} color="white" />
               <View style={styles.buttonTextContainer}>
-                <Text style={styles.buttonText}>즉시 받기</Text>
-                <Text style={styles.buttonSubtext}>10P 즉시 지급</Text>
+                <Text style={styles.buttonText}>바로 받기</Text>
+                <Text style={styles.buttonSubtext}>5P 즉시 적립</Text>
               </View>
             </TouchableOpacity>
 
-            {/* 광고 시청 후 게임 버튼 */}
+            {/* 영상 시청 후 게임 버튼 */}
             <TouchableOpacity
               style={[styles.button, styles.gameButton]}
               onPress={() => {
@@ -74,8 +74,8 @@ export default function ParticipateModal({
             >
               <Ionicons name="gift" size={24} color="white" />
               <View style={styles.buttonTextContainer}>
-                <Text style={styles.buttonText}>광고 보고 더 받기</Text>
-                <Text style={styles.buttonSubtext}>10P ~ 300P 획득 가능</Text>
+                <Text style={styles.buttonText}>영상 시청 후 사다리 게임 도전</Text>
+                <Text style={styles.buttonSubtext}>최소 10P ~ 최대 300P 획득 가능</Text>
               </View>
             </TouchableOpacity>
           </View>
@@ -106,7 +106,7 @@ export default function ParticipateModal({
 
           {/* 안내 텍스트 */}
           <Text style={styles.infoText}>
-            💡 광고를 시청하면 사다리 게임을 통해 더 많은 포인트를 획득할 수 있어요!
+            💡 사다리 게임 참여 시 기본 보상 2배부터 시작{'\n'}10P ~ 300P 까지 획득할 수 있어요
           </Text>
 
           {/* 닫기 버튼 (선택사항) */}

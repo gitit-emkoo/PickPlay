@@ -21,11 +21,11 @@ const withGoogleServicesFile = (config) => {
     // 1단계: Expo 기본 유틸 사용 (파일 복사 및 기본 등록)
     config = IOSConfig.Google.withGoogleServicesFile(config);
     
-    // 2단계: AppDelegate에 Firebase 초기화 코드 추가
-    console.log('[Config Plugin] 🔧 AppDelegate 수정 시작...');
-    console.log('[Config Plugin] 💡 참고: AppDelegate 수정은 네이티브 프로젝트가 생성될 때만 적용됩니다.');
-    console.log('[Config Plugin] 💡 참고: expo start는 네이티브 프로젝트를 생성하지 않으므로 AppDelegate가 수정되지 않을 수 있습니다.');
-    config = withAppDelegate(config, (config) => {
+    // 2단계: AppDelegate 수동 패치는 비활성화
+    // SDK 53+ 기본 AppDelegate.swift와 Objective-C 주입 코드가 충돌할 수 있어
+    // Expo 기본 GoogleServices 처리만 사용한다.
+    console.log('[Config Plugin] ℹ️ AppDelegate Firebase 수동 패치는 비활성화되었습니다 (Swift AppDelegate 호환).');
+    /* config = withAppDelegate(config, (config) => {
       const appDelegate = config.modResults;
       
       console.log('[Config Plugin] 🔍 withAppDelegate 콜백 실행됨');
@@ -142,7 +142,7 @@ const withGoogleServicesFile = (config) => {
       }
       
       return config;
-    });
+    }); */
     
     // 파일 경로 확인 (config.modRequest가 없을 수도 있으므로 안전하게 처리)
     const projectRoot = config.modRequest?.projectRoot || config._internal?.projectRoot || process.cwd();

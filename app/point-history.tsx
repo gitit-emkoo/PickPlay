@@ -83,6 +83,7 @@ export default function PointHistoryScreen() {
     ladder_reward: '라이브픽 사다리 게임',
     creator_reward: '라이브픽 질문자 보상',
     top_reward: '라이브픽 TOP 질문 보상',
+    weekly_top_reward: '주간 TOP 질문 보상',
     majority_reward: '메인 질문 보상',
     ad_bonus: '광고 보너스',
     livepick_question_creation: '라이브픽 질문 생성',
@@ -122,7 +123,8 @@ export default function PointHistoryScreen() {
             history.length > 0 &&
             history.slice(0, visibleCount).map((item) => {
               const reasonText = reasonMap[item.reason] || item.reason;
-              const displayText = item.description || reasonText;
+              const rawText = item.description || reasonText;
+              const displayText = rawText.replace('(광고 미시청)', '(영상 미시청)');
               return (
                 <View key={item.id} style={styles.row}>
                   <View style={styles.rowLeft}>
