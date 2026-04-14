@@ -24,8 +24,12 @@ async function initPushScheduler() {
     await schedulerRef.set({
       isEnabled: true,
       scheduleTime: '20:15',
+      timeZone: 'Asia/Seoul',
+      schedulerAudience: 'all',
+      schedulerTargetUids: '',
       title: '오늘의 질문이 기다리고 있어요! 🎯',
       body: '지금 참여하고 보상 받기!',
+      lastSentDate: null,
       lastModified: new Date().toISOString()
     });
     

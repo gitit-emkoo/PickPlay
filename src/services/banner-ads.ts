@@ -1,9 +1,16 @@
 import { Platform } from 'react-native';
 import * as TrackingTransparency from 'expo-tracking-transparency';
 
+// 배너 광고 단위 ID (실서비스용)
 const BANNER_AD_UNIT_IDS = {
   android: 'ca-app-pub-2555567440328829/6607319419',
   ios: 'ca-app-pub-2555567440328829/7449627792'
+};
+
+// 테스트 배너 광고 ID (AdMob 공식 테스트 ID) - 개발/디버깅용
+const TEST_BANNER_AD_UNIT_IDS = {
+  android: 'ca-app-pub-3940256099942544/6300978111', // Banner Android
+  ios: 'ca-app-pub-3940256099942544/2934735716' // Banner iOS
 };
 
 // Expo Go 환경 감지
@@ -22,8 +29,9 @@ export const getBannerAdUnitId = () => {
     const adUnitId = platformAdUnitId;
     
     console.log(`🎯 배너 광고 ID 가져오기: ${adUnitId}`);
-    console.log(`🔧 모드: 실서비스`);
+    console.log(`🔧 모드: 프로덕션`);
     console.log(`📱 플랫폼: ${Platform.OS}`);
+    console.log(`🆔 실제 광고 ID 사용 중`);
 
     return adUnitId;
   } catch (error) {

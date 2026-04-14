@@ -1,0 +1,69 @@
+{
+  "participantRewards": {
+    "immediateReward": 5,
+    "ladderGameRewards": [
+      {
+        "points": 15,
+        "probability": 0.7
+      },
+      {
+        "points": 50,
+        "probability": 0.2
+      },
+      {
+        "points": 100,
+        "probability": 0.05
+      },
+      {
+        "points": 200,
+        "probability": 0.03
+      },
+      {
+        "points": 300,
+        "probability": 0.02
+      }
+    ]
+  },
+  "questionCreatorRewards": [
+    {
+      "minParticipants": 0,
+      "maxParticipants": 10,
+      "exclusiveMax": true,
+      "reward": 10
+    },
+    {
+      "minParticipants": 11,
+      "maxParticipants": 20,
+      "exclusiveMax": true,
+      "reward": 50
+    },
+    {
+      "minParticipants": 20,
+      "maxParticipants": 100,
+      "exclusiveMax": true,
+      "reward": 100
+    },
+    {
+      "minParticipants": 100,
+      "maxParticipants": 300,
+      "exclusiveMax": true,
+      "reward": 200
+    },
+    {
+      "minParticipants": 300,
+      "maxParticipants": null,
+      "exclusiveMax": false,
+      "reward": 500
+    }
+  ],
+  "topQuestionReward": {
+    "reward": 5000,
+    "description": "하루 중 가장 많은 답변을 받은 질문의 생성자에게 추가 지급"
+  },
+  "dailyResetTime": {
+    "timezone": "Asia/Seoul",
+    "hour": 0,
+    "minute": 0
+  }
+}
+

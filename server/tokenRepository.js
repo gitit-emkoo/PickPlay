@@ -116,19 +116,86 @@ async function fetchSchedulerConfig() {
       return {
         isEnabled: true,
         scheduleTime: '20:15',
+        timeZone: 'Asia/Seoul',
         title: '오늘의 질문이 기다리고 있어요! 🎯',
-        body: '지금 참여하고 보상 받기! (20:15)'
+        body: '지금 참여하고 보상 받기!',
+        lastSentDate: null,
+        schedulerAudience: 'all',
+        schedulerTargetUids: '',
       };
     }
-    return doc.data();
+    const data = doc.data() || {};
+    return {
+      isEnabled: data.isEnabled !== false,
+      scheduleTime: data.scheduleTime || '20:15',
+      timeZone: data.timeZone || 'Asia/Seoul',
+      title: data.title || '오늘의 질문이 기다리고 있어요! 🎯',
+      body: data.body || '지금 참여하고 보상 받기!',
+      lastSentDate: data.lastSentDate || null,
+      schedulerAudience: data.schedulerAudience === 'test' ? 'test' : 'all',
+      schedulerTargetUids:
+        typeof data.schedulerTargetUids === 'string' ? data.schedulerTargetUids : '',
+    };
   } catch (error) {
     console.error('❌ 스케줄러 설정 조회 실패:', error);
     return {
       isEnabled: true,
       scheduleTime: '20:15',
+      timeZone: 'Asia/Seoul',
       title: '오늘의 질문이 기다리고 있어요! 🎯',
-      body: '지금 참여하고 보상 받기! (20:15)'
+      body: '지금 참여하고 보상 받기!',
+      lastSentDate: null,
+      schedulerAudience: 'all',
+      schedulerTargetUids: '',
     };
+  }
+}
+
+function getKstDateParts(now = new Date()) {
+  const kst = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+  const year = kst.getFullYear();
+  const month = String(kst.getMonth() + 1).padStart(2, '0');
+  const day = String(kst.getDate()).padStart(2, '0');
+  const hour = String(kst.getHours()).padStart(2, '0');
+  const minute = String(kst.getMinutes()).padStart(2, '0');
+  return {
+    dateKey: `${year}${month}${day}`,
+    hhmm: `${hour}:${minute}`,
+  };
+}
+
+function shouldSendNow(config, now = new Date()) {
+  if (!config?.isEnabled) {
+    return { ok: false, reason: 'disabled' };
+  }
+
+  const scheduleTime = (config.scheduleTime || '').trim();
+  const valid = /^([01]\d|2[0-3]):([0-5]\d)$/.test(scheduleTime);
+  if (!valid) {
+    return { ok: false, reason: 'invalid-schedule-time' };
+  }
+
+  const { dateKey, hhmm } = getKstDateParts(now);
+  if (config.lastSentDate === dateKey) {
+    return { ok: false, reason: 'already-sent-today' };
+  }
+  if (scheduleTime !== hhmm) {
+    return { ok: false, reason: `not-time-yet(${hhmm})` };
+  }
+  return { ok: true, reason: 'ok', dateKey };
+}
+
+async function markSchedulerSent(dateKey) {
+  try {
+    await db.collection('config').doc('pushScheduler').set(
+      {
+        lastSentDate: dateKey,
+        lastSentAt: new Date().toISOString(),
+      },
+      { merge: true },
+    );
+  } catch (error) {
+    console.error('❌ 스케줄러 lastSent 갱신 실패:', error);
   }
 }
 
@@ -153,7 +220,9 @@ module.exports = {
   fetchExpoTokensByPlatform,
   fetchExpoTokensByUids,
   fetchSchedulerConfig,
-  savePushLog
+  savePushLog,
+  shouldSendNow,
+  markSchedulerSent,
 };
 
 

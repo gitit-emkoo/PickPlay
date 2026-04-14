@@ -2,6 +2,7 @@
 export default { 
   // 메인 컬러
   primary: '#0060CD',      // 블루
+  primaryLight: '#E0F2FE',  // 라이트 블루
   secondary: '#4EA8FF',    // 오렌지
   
   // 배경색

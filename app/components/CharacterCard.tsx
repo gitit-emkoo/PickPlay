@@ -4,6 +4,7 @@ import LottieView from 'lottie-react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { UserData } from '../../src/types'; // Character 타입도 필요할 수 있음
 import colors from '../../src/styles/colors';
+import { getDispositionNumber } from '../../src/services/animaDispositionDescriptions';
 
 interface CharacterCardProps {
   userData: UserData | null;
@@ -47,6 +48,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({ userData }) => {
 
   const { characterId, adjective1, adjective2 } = userData;
   const character = characters.find((c: any) => c.character_id === characterId);
+  const dispositionNumber = getDispositionNumber(adjective1, adjective2);
   
   console.log(`[CharacterCard] 디버그 정보:`, {
     characterId: characterId,
@@ -113,6 +115,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({ userData }) => {
                     />
                     <Text style={styles.characterName}>{character.name}</Text>
                     <Text style={styles.adjectives}>{`${adjective1 || ''} ${adjective2 || ''}`.trim()}</Text>
+                    {!!dispositionNumber && <Text style={styles.dispositionNumber}>{dispositionNumber}</Text>}
                   </>
                 ) : (
                   <>
@@ -146,7 +149,7 @@ const CharacterCard: React.FC<CharacterCardProps> = ({ userData }) => {
                       애니마코드가 탄생했어!
                     </Text>
                     <Text style={styles.evolutionSubText}>
-                      이제 더 많은 선택으로 진화시켜봐!
+                      앞으로의 선택은 너의 다음 성향을 만들어 갈거야!
                     </Text>
                   </View>
                 </>
@@ -229,6 +232,13 @@ const styles = StyleSheet.create({
   adjectives: {
     fontSize: 14,
     color: '#666',
+    textAlign: 'center',
+  },
+  dispositionNumber: {
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
     textAlign: 'center',
   },
   backTitle: {

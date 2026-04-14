@@ -1,12 +1,13 @@
 {
   "cli": {
     "version": ">= 5.9.1",
-    "appVersionSource": "remote"
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "autoIncrement": true,
       "ios": {
         "buildConfiguration": "Debug",
         "credentialsSource": "remote",
@@ -16,16 +17,20 @@
         "buildType": "apk"
       },
       "env": {
-        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "EXPO_USE_COMMUNITY_AUTOLINKING": "0"
       }
     },
     "simple": {
       "distribution": "internal",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "credentialsSource": "remote"
       },
       "env": {
-        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true",
+        "NODE_ENV": "development",
+        "EXPO_USE_COMMUNITY_AUTOLINKING": "0"
       }
     },
     "preview": {
@@ -35,13 +40,17 @@
       }
     },
     "production": {
-      "autoIncrement": true,
+      "autoIncrement": false,
       "env": {
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
       },
       "ios": {
         "buildConfiguration": "Release",
         "cocoapods": "1.15.2"
+      },
+      "android": {
+        "buildType": "app-bundle",
+        "credentialsSource": "remote"
       }
     }
   },
