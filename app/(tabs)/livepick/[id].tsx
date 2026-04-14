@@ -472,7 +472,7 @@ export default function QuestionDetailScreen() {
       // 1. 참여 기록 생성
       await participateInLivePick(user.uid, question.id, selectedOption);
       
-      // 2. 기본 보상(10P) 지급
+      // 2. 기본 보상(5P) 지급
       await receiveBasicReward(user.uid, question.id);
 
       // 3. 참여 상태 업데이트
